@@ -12,7 +12,7 @@ def random_metamaterial():
     across all representations.
 
     Returns: tuple of ndarrays
-        The first entry in this tuple is a 1d numpy array where every pair
+        The first entry in this tuple is a 2d numpy array where every row pair
         of values is the normalized 2D position of its corresponding node on its
         corresponding unit cube face. The nodes appear in the following order.
             Node 1: A coordinate (x,y) on the z=0 plane.
