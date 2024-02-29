@@ -43,6 +43,7 @@ def random_metamaterial():
     og_face_adj_tensor = np.random.rand(NUM_NODES, NUM_NODES, NUM_NODES)
 
     # Accounts for each permutation of axes to make the adjacency tensor symmetric along all axes
+    # KNOWN BUG: FACES DO NOT NECESSARILY AGREE WITH EDGE PRESENCE
     face_adj_tensor = np.copy(og_face_adj_tensor)
     face_adj_tensor += np.transpose(og_face_adj_tensor, (0,2,1))
     face_adj_tensor += np.transpose(og_face_adj_tensor, (1,0,2))
