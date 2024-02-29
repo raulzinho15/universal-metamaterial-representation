@@ -76,7 +76,7 @@ def plot_metamaterial(filename, node_pos, edge_adj_mat, face_adj_tensor):
     
     # Sets up the 3d plot environment
     fig = plt.figure()
-    plot3d = fig.add_subplot(111, projection="3d")
+    plot3d = fig.add_subplot(projection="3d")
     plot3d.set_xlabel("x")
     plot3d.set_ylabel("y")
     plot3d.set_zlabel("z")
@@ -106,4 +106,6 @@ def plot_metamaterial(filename, node_pos, edge_adj_mat, face_adj_tensor):
                 x2 = y2 = z2 = 0.5
 
             plot3d.plot([x1, x2], [y1, y2], zs=[z1, z2], linewidth=5)
+
+            
     plt.savefig(filename)
