@@ -2,7 +2,7 @@ import numpy as np
 
 NODES_PER_FACE = 1
 CUBE_FACES = 6
-NUM_NODES = CUBE_FACES+1
+NUM_NODES = CUBE_FACES * NODES_PER_FACE + 1
 
 def random_metamaterial():
     """
@@ -51,4 +51,3 @@ def random_metamaterial():
     face_adj_tensor = (face_adj_tensor < 6*0.5).astype(float)
 
     return node_pos, edge_adj_mat, face_adj_tensor
-
