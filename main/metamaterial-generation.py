@@ -1,4 +1,5 @@
 import numpy as np
+import matplotlib.pyplot as plt
 
 NODES_PER_FACE = 1
 CUBE_FACES = 6
@@ -51,3 +52,58 @@ def random_metamaterial():
     face_adj_tensor = (face_adj_tensor < 6*0.5).astype(float)
 
     return node_pos, edge_adj_mat, face_adj_tensor
+
+
+def plot_metamaterial(filename, node_pos, edge_adj_mat, face_adj_tensor):
+    """
+    Plots the metamaterial with the given representation at the given filename.
+
+    filename: str
+        The name of the file at which the plot image will be saved.
+
+    node_pos: ndarray
+        The node position array as described in the specification of the
+        random_metamaterial() function.
+
+    edge_adj_mat: ndarray
+        The edge adjacency matrix array as described in the specification
+        of the random_metamaterial() function.
+
+    face_adj_tensor: ndarray
+        The face adjacency tensor array as described in the specification
+        of the random_metamaterial() function.
+    """
+    
+    # Sets up the 3d plot environment
+    fig = plt.figure()
+    plot3d = fig.add_subplot(111, projection="3d")
+    plot3d.set_xlabel("x")
+    plot3d.set_ylabel("y")
+    plot3d.set_zlabel("z")
+
+    # Plots each edge
+    for n1 in range(NUM_NODES):
+        for n2 in range(n1+1, NUM_NODES):
+
+            # Skips unconnected nodes
+            if not edge_adj_mat[n1, n2]:
+                continue
+
+            # Computes each n1 coordinate
+            if n1 != 6:
+                x1 = node_pos[n1, 0] if n1//2 != 2 else n1%2
+                y1 = node_pos[n1, 1] if n1//2 == 0 else n1%2 if n1//2 == 1 else node_pos[n1, 0]
+                z1 = node_pos[n1, 1] if n1//2 != 0 else n1%2
+            else:
+                x1 = y1 = z1 = 0.5
+
+            # Computes each n2 coordinate
+            if n2 != 6:
+                x2 = node_pos[n2, 0] if n2//2 != 2 else n2%2
+                y2 = node_pos[n2, 1] if n2//2 == 0 else n2%2 if n2//2 == 1 else node_pos[n2, 0]
+                z2 = node_pos[n2, 1] if n2//2 != 0 else n2%2
+            else:
+                x2 = y2 = z2 = 0.5
+
+            plot3d.plot([x1, x2], [y1, y2], zs=[z1, z2], linewidth=5)
+    plt.savefig(filename)
