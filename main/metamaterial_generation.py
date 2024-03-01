@@ -26,7 +26,8 @@ def random_metamaterial():
         The third entry in this tuple is a 1d numpy array face adjacency
         array where a 1 at the corresponding adjacency tensor's (i,j,k) index
         means that nodes i, j, and k are connected by a triangular face. All other
-        entries are 0.
+        entries are 0. The logic for extracting the face adjacencies can be found
+        in the have_face() function.
     """
     
     # Generates the flattened normalized [0,1) cube face node 2D positions.
@@ -176,3 +177,79 @@ def to_edge_adj_matrix(edge_adj):
     return np.array([[have_edge(n1, n2, edge_adj)
                     for n1 in range(NUM_NODES)]
                         for n2 in range(NUM_NODES)]).astype(int)
+
+
+def face_adj_index(node1, node2, node3):
+    """
+    Computes the index at which the three nodes' face adjacency is contained
+    in the face adjacency representation returned by random_metamaterial().
+
+    node1: int
+        The ID of the first node.
+
+    node2: int
+        The ID of the second node.
+
+    node3: int
+        The ID of the third node.
+
+    Returns: int
+        The index at which the given nodes' face adjacency is located.
+    """
+
+    # Sorts the nodes by ascending index size
+    node1, node2, node3 = sorted((node1, node2, node3))
+
+    # Computes the index at which the relevant window of face adjacencies is located
+    start3d = NUM_NODES * (NUM_NODES-1) * (NUM_NODES-2) // 6 - (NUM_NODES-node1) * (NUM_NODES-node1-1) * (NUM_NODES-node1-2) // 6
+    start2d = (node2-node1-1) * (2*NUM_NODES - node2 + node1 - 2) // 2 # Needs to be changed if rep changes
+    start1d = node3 - node2 - 1
+
+    return start3d + start2d + start1d
+
+
+def have_face(node1, node2, node3, face_adj):
+    """
+    Checks whether the three given nodes have a face between them
+    based on the given face adjacencies.
+
+    node1: int
+        The ID of the first node.
+
+    node2: int
+        The ID of the second node.
+
+    node3: int
+        The ID of the third node.
+
+    face_adj: ndarray
+        The face adjacencies as described in the specification of
+        the random_metamaterial() function.
+
+    Returns: bool
+        Whether there is a face between the three given nodes.
+    """
+
+    # Trivially excludes a face from identical nodes
+    if node1 == node2 or node2 == node3 or node1 == node3:
+        return False
+
+    return face_adj[face_adj_index(node1, node2, node3)] == 1
+
+def to_face_adj_tensor(face_adj):
+    """
+    Converts the given face adjacencies into an face adjacency tensor.
+
+    face_adj: ndarray
+        The face adjacencies as described in the specification of
+        the random_metamaterial() function.
+
+    Returns: ndarray
+        A face adjacency tensor, where the position (i,j,k) is 1 if and
+        only if there is a face connecting the i-th, j-th, and k-th
+        nodes. All other entries are 0.
+    """
+    return np.array([[[have_face(n1, n2, n3, face_adj)
+                    for n1 in range(NUM_NODES)]
+                        for n2 in range(NUM_NODES)]
+                            for n3 in range(NUM_NODES)]).astype(int)
