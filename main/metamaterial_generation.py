@@ -2,10 +2,6 @@ import numpy as np
 import matplotlib.pyplot as plt
 from rep_utils import *
 
-NODES_PER_FACE = 1
-CUBE_FACES = 6
-NUM_NODES = CUBE_FACES * NODES_PER_FACE + 1
-
 
 def random_metamaterial(edge_prob=0.5, face_prob=0.5, with_faces=True):
     """
@@ -121,7 +117,9 @@ def plot_metamaterial(filename, node_pos, edge_adj, face_adj):
     plt.savefig(filename)
 
     # Plays a rotation animation
-    for angle in range(0, 360*5):
+    for angle in range(0, 360*10):
         plot3d.view_init(30, angle)
         plt.draw()
         plt.pause(.002)
+
+plot_metamaterial("local_test/image.png", *random_metamaterial())
