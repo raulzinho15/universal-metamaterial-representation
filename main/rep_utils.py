@@ -2,11 +2,11 @@ import numpy as np
 import utils
 
 CUBE_FACES = 6
-NODES_PER_FACE = 1
+NODES_PER_FACE = 2
 CUBE_EDGES = 12
-NODES_PER_EDGE = 0
+NODES_PER_EDGE = 2
 CUBE_VERTICES = 8
-NODES_PER_VERTEX = 0
+NODES_PER_VERTEX = 1
 NUM_NODES = (CUBE_FACES * NODES_PER_FACE            # Cube face nodes
             + CUBE_EDGES * NODES_PER_EDGE           # Cube edge nodes
             + CUBE_VERTICES * NODES_PER_VERTEX + 1) # Cube vertex/center nodes
@@ -39,10 +39,15 @@ def get_node_x(node, node_pos):
         return (node//NODES_PER_FACE) % 2 # In a face parallel to the yz plane
     
     # Cube edge node
-    node -= NODES_PER_FACE * CUBE_FACES
-    if node // (4*NODES_PER_EDGE) == 2: # In an edge that runs along the x axis
-        return node_pos[NODES_PER_FACE * CUBE_FACES * 2 + node]
-    return (node // (2*NODES_PER_EDGE)) % 2 # In an edge that does not run along the x axis
+    if node < NODES_PER_FACE * CUBE_FACES + NODES_PER_EDGE * CUBE_EDGES:
+        node -= NODES_PER_FACE * CUBE_FACES # Offsets the node 
+        if node // (4*NODES_PER_EDGE) == 2: # In an edge that runs along the x axis
+            return node_pos[NODES_PER_FACE * CUBE_FACES * 2 + node]
+        return (node // (2*NODES_PER_EDGE)) % 2 # In an edge that does not run along the x axis
+    
+    # Cube vertex node
+    node -= NODES_PER_FACE * CUBE_FACES + NODES_PER_EDGE * CUBE_EDGES
+    return node//4
 
 
 def get_node_y(node, node_pos):
@@ -72,10 +77,15 @@ def get_node_y(node, node_pos):
         return (node//NODES_PER_FACE) % 2 # In a face parallel to the xz plane
     
     # Cube edge node
-    node -= NODES_PER_FACE * CUBE_FACES
-    if node // (4*NODES_PER_EDGE) == 1: # In an edge that runs along the y axis
-        return node_pos[NODES_PER_FACE * CUBE_FACES * 2 + node]
-    return (node // ((2 if node // (4*NODES_PER_EDGE) == 2 else 1) * NODES_PER_EDGE)) % 2 # In an edge that does not run along the y axis
+    if node < NODES_PER_FACE * CUBE_FACES + NODES_PER_EDGE * CUBE_EDGES:
+        node -= NODES_PER_FACE * CUBE_FACES # Offsets the node 
+        if node // (4*NODES_PER_EDGE) == 1: # In an edge that runs along the y axis
+            return node_pos[NODES_PER_FACE * CUBE_FACES * 2 + node]
+        return (node // ((2 if node // (4*NODES_PER_EDGE) == 2 else 1) * NODES_PER_EDGE)) % 2 # In an edge that does not run along the y axis
+    
+    # Cube vertex node
+    node -= NODES_PER_FACE * CUBE_FACES + NODES_PER_EDGE * CUBE_EDGES
+    return (node//2) % 2
 
 
 def get_node_z(node, node_pos):
@@ -105,10 +115,15 @@ def get_node_z(node, node_pos):
         return (node//NODES_PER_FACE) % 2 # In a face parallel to the xy plane
     
     # Cube edge node
-    node -= NODES_PER_FACE * CUBE_FACES
-    if node // (4*NODES_PER_EDGE) == 0: # In an edge that runs along the z axis
-        return node_pos[NODES_PER_FACE * CUBE_FACES * 2 + node]
-    return (node // NODES_PER_EDGE) % 2 # In an edge that does not run along the z axis
+    if node < NODES_PER_FACE * CUBE_FACES + NODES_PER_EDGE * CUBE_EDGES:
+        node -= NODES_PER_FACE * CUBE_FACES # Offsets the node 
+        if node // (4*NODES_PER_EDGE) == 0: # In an edge that runs along the z axis
+            return node_pos[NODES_PER_FACE * CUBE_FACES * 2 + node]
+        return (node // NODES_PER_EDGE) % 2 # In an edge that does not run along the z axis
+    
+    # Cube vertex node
+    node -= NODES_PER_FACE * CUBE_FACES + NODES_PER_EDGE * CUBE_EDGES
+    return node%2
 
 
 def edge_adj_index(node1, node2):
