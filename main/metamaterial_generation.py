@@ -6,15 +6,18 @@ from rep_utils import *
 def random_metamaterial(edge_prob=0.5, face_prob=0.5, with_faces=True):
     """
     Generates a random metamaterial's representation with its node positions,
-    edge relations, and face relations. The node at the center of the cube
-    is not explicitly included in the node position array since its position
-    is constant across all metamaterials, namely, (0.5, 0.5, 0.5).
+    edge relations, and face relations. Implicitly determinable node positions
+    are not explicitly included in the node position array since they are
+    constant across all metamaterials.
 
     Returns: tuple of ndarrays
         The first entry in this tuple is a 1d numpy array where every row pair
-        of values is the normalized 2D position of its corresponding node on its
+        or single value is the normalized position of its corresponding node on its
         corresponding unit cube face. The nodes appear in sequential order. The
-        logic for extracting nodes' positions can be found in get_node_x/y/z().
+        first NODES_PER_FACE * CUBE_FACES pairs correspond to the nodes at
+        the cube's faces. The next NODES_PER_EDGE * CUBE_EDGES values correspond
+        to the nodes at the cube's edges. The logic for extracting nodes' positions
+        can be found in get_node_x/y/z().
         
         The second entry in this tuple is a 1d numpy array edge adjacency
         array, where a 1 at the corresponding adjacency matrix's i-th row and
@@ -32,7 +35,10 @@ def random_metamaterial(edge_prob=0.5, face_prob=0.5, with_faces=True):
     # Generates the flattened normalized [0,1) cube face node 2D positions.
     # The i-th pair of values correspond to the non-trivial
     # coordinates for the i-th node in the graph.
-    node_pos = np.random.rand(NODES_PER_FACE * CUBE_FACES * 2)
+    node_pos = np.random.rand((
+        NODES_PER_FACE * CUBE_FACES * 2 # Cube face node position (2 non-redundant coords)
+        + NODES_PER_EDGE * CUBE_EDGES   # Cube edge node position (1 non-redundant coord)
+    ))
 
     # Generates the flattened edge adjacency matrix (without redundancy).
     # Is effectively the flattened upper triangle of an adjacency matrix
