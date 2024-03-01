@@ -1,6 +1,5 @@
 import numpy as np
 import matplotlib.pyplot as plt
-import utils
 from rep_utils import *
 
 NODES_PER_FACE = 1
