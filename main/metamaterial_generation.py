@@ -1,4 +1,5 @@
 import numpy as np
+import matplotlib.pyplot as plt
 
 NODES_PER_FACE = 1
 CUBE_FACES = 6
@@ -337,3 +338,69 @@ def random_metamaterial(with_faces=True):
                     face_adj[index] = 0
 
     return node_pos, edge_adj, face_adj
+
+def plot_metamaterial(filename, node_pos, edge_adj, face_adj):
+    """
+    Plots the metamaterial with the given representation at the given filename.
+
+    filename: str
+        The name of the file at which the plot image will be saved.
+
+    node_pos: ndarray
+        The node position array as described in the specification of the
+        random_metamaterial() function.
+
+    edge_adj: ndarray
+        The edge adjacency array as described in the specification of the
+        random_metamaterial() function.
+
+    face_adj: ndarray
+        The face adjacency array as described in the specification of the
+        random_metamaterial() function.
+    """
+    
+    # Sets up the 3d plot environment
+    fig = plt.figure()
+    plot3d = fig.add_subplot(projection="3d")
+    plot3d.set_xlabel("x")
+    plot3d.set_ylabel("y")
+    plot3d.set_zlabel("z")
+
+    # Plots each edge
+    for n1 in range(NUM_NODES):
+        for n2 in range(n1+1, NUM_NODES):
+
+            # Skips unconnected nodes
+            if not have_edge(n1, n2, edge_adj):
+                continue
+
+            # Computes the edge coordinates
+            x = [get_node_x(n1, node_pos), get_node_x(n2, node_pos)]
+            y = [get_node_y(n1, node_pos), get_node_y(n2, node_pos)]
+            z = [get_node_z(n1, node_pos), get_node_z(n2, node_pos)]
+
+            plot3d.plot(x, y, zs=z, linewidth=5)
+
+    # Plots each face
+    for n1 in range(NUM_NODES):
+        for n2 in range(n1+1, NUM_NODES):
+            for n3 in range(n2+1, NUM_NODES):
+
+                # Skips unconnected nodes
+                if not have_face(n1, n2, n3, face_adj):
+                    continue
+
+                # Computes the face coordinates
+                x = [get_node_x(n1, node_pos), get_node_x(n2, node_pos), get_node_x(n3, node_pos)]
+                y = [get_node_y(n1, node_pos), get_node_y(n2, node_pos), get_node_y(n3, node_pos)]
+                z = [get_node_z(n1, node_pos), get_node_z(n2, node_pos), get_node_z(n3, node_pos)]
+
+                plot3d.plot_trisurf(x, y, z)
+
+    plt.savefig(filename)
+
+    # Plays a rotation animation
+    for angle in range(0, 360*5):
+        plot3d.view_init(30, angle)
+        plt.draw()
+        plt.pause(.002)
