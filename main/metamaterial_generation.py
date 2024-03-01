@@ -7,9 +7,9 @@ NUM_NODES = CUBE_FACES * NODES_PER_FACE + 1
 def random_metamaterial():
     """
     Generates a random metamaterial's representation with its node positions,
-    edge relations, and face relations. The 7th node at the center of the cube
-    is not explicitly included in the node position array since it is constant
-    across all representations.
+    edge relations, and face relations. The node at the center of the cube
+    is not explicitly included in the node position array since its position
+    is constant across all metamaterials, namely, (0.5, 0.5, 0.5).
 
     Returns: tuple of ndarrays
         The first entry in this tuple is a 1d numpy array where every row pair
