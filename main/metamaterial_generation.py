@@ -323,6 +323,34 @@ def random_metamaterial(with_faces=True):
     else:
         face_adj = np.zeros(NUM_NODES * (NUM_NODES-1) * (NUM_NODES-2) // 6)
 
+    # Ensures the representation is of a non-self-intersecting metamaterial
+    face_adj = remove_invalid_faces(edge_adj, face_adj)
+
+    return node_pos, edge_adj, face_adj
+
+
+def remove_invalid_faces(edge_adj, face_adj):
+    """
+    Removes all the faces described in the face adjacency array whose
+    three edges are not encoded in the edge adjacency. Does not mutate
+    the original array.
+
+    edge_adj: ndarray
+        The edge adjacencies as described in the specification of
+        the random_metamaterial() function.
+
+    face_adj: ndarray
+        The face adjacencies as described in the specification of
+        the random_metamaterial() function.
+
+    Returns: ndarray
+        A new face adjacency array such that all three of a face's edges
+        are also encoded in edge_adj.
+    """
+
+    # Avoids mutation
+    face_adj = np.copy(face_adj)
+
     # Checks if every face validly has its corresponding 3 edges
     for n1 in range(NUM_NODES):
         for n2 in range(n1+1, NUM_NODES):
@@ -337,7 +365,8 @@ def random_metamaterial(with_faces=True):
                 if not (edge_adj[edge_adj_index(n1, n2)] and edge_adj[edge_adj_index(n1, n3)] and edge_adj[edge_adj_index(n2, n3)]):
                     face_adj[index] = 0
 
-    return node_pos, edge_adj, face_adj
+    return face_adj
+
 
 def plot_metamaterial(filename, node_pos, edge_adj, face_adj):
     """
