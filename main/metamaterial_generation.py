@@ -4,51 +4,6 @@ NODES_PER_FACE = 1
 CUBE_FACES = 6
 NUM_NODES = CUBE_FACES * NODES_PER_FACE + 1
 
-def random_metamaterial():
-    """
-    Generates a random metamaterial's representation with its node positions,
-    edge relations, and face relations. The node at the center of the cube
-    is not explicitly included in the node position array since its position
-    is constant across all metamaterials, namely, (0.5, 0.5, 0.5).
-
-    Returns: tuple of ndarrays
-        The first entry in this tuple is a 1d numpy array where every row pair
-        of values is the normalized 2D position of its corresponding node on its
-        corresponding unit cube face. The nodes appear in sequential order. The
-        logic for extracting nodes' positions can be found in get_node_x/y/z().
-        
-        The second entry in this tuple is a 1d numpy array edge adjacency
-        array where a 1 at the corresponding adjacency matrix's i-th row and
-        j-th column means that nodes i and j are connected by an edge. All other
-        entries are 0. The logic for extracting the edge adjacencies can be found
-        in the have_edge() function.
-        
-        The third entry in this tuple is a 1d numpy array face adjacency
-        array where a 1 at the corresponding adjacency tensor's (i,j,k) index
-        means that nodes i, j, and k are connected by a triangular face. All other
-        entries are 0. The logic for extracting the face adjacencies can be found
-        in the have_face() function.
-    """
-    
-    # Generates the flattened normalized [0,1) cube face node 2D positions.
-    # The i-th pair of values correspond to the non-trivial
-    # coordinates for the i-th node in the graph.
-    node_pos = np.random.rand(NODES_PER_FACE * CUBE_FACES * 2)
-
-    # Generates the flattened edge adjacency matrix (without redundancy).
-    # Is effectively the flattened upper triangle of an adjacency matrix
-    edge_adj = (np.random.rand(NUM_NODES * (NUM_NODES-1) // 2) < 0.5).astype(float)
-
-    # Generates the flattened face adjacency tensor (without redundancy)
-    # Is effectively the flattened tensor equivalent of the upper triangle
-    # of an adjacency matrix, but of the adjacency tensor.
-    # The "upper triangle" is a contiguous section of the tensor where no
-    # index repeats in any axis.
-    face_adj = (np.random.rand(NUM_NODES * (NUM_NODES-1) * (NUM_NODES-2) // 6) < 0.5).astype(float)
-
-    return node_pos, edge_adj, face_adj
-
-
 def get_node_x(node, node_pos):
     """
     Computes what the x coordinate of the node with the given ID is
@@ -229,9 +184,9 @@ def face_adj_index(node1, node2, node3):
     node1, node2, node3 = sorted((node1, node2, node3))
 
     # Computes the index at which the relevant window of face adjacencies is located
-    start3d = NUM_NODES * (NUM_NODES-1) * (NUM_NODES-2) // 6 - (NUM_NODES-node1) * (NUM_NODES-node1-1) * (NUM_NODES-node1-2) // 6
-    start2d = (NUM_NODES-node1-1) * (NUM_NODES-node1-2) // 2 - (NUM_NODES-node1-1 - (node2-node1-1)) * (NUM_NODES-node1-1 - (node2-node1-1) - 1) // 2
-    start1d = node3 - node2 - 1
+    offset3d = NUM_NODES * (NUM_NODES-1) * (NUM_NODES-2) // 6 - (NUM_NODES-node1) * (NUM_NODES-node1-1) * (NUM_NODES-node1-2) // 6
+    offset2d = (NUM_NODES-node1-1) * (NUM_NODES-node1-2) // 2 - (NUM_NODES-node1-1 - (node2-node1-1)) * (NUM_NODES-node1-1 - (node2-node1-1) - 1) // 2
+    offset1d = node3 - node2 - 1
 
     # The idea for offset3d comes from very similar logic as that of offset2d.
     # Namely, the number of entries at each depth along the tensor is a
@@ -251,7 +206,7 @@ def face_adj_index(node1, node2, node3):
     # the upper tetrahedron, the rows become shorter. Intuitively, offset1d
     # determines which column of the upper tetrahedron is being inspected.
 
-    return start3d + start2d + start1d
+    return offset3d + offset2d + offset1d
 
 
 def have_face(node1, node2, node3, face_adj):
@@ -320,3 +275,65 @@ def to_face_adj_rep(face_adj_tensor):
                 face_adj[face_adj_index(n1, n2, n3)] = face_adj_tensor[n1, n2, n3]
 
     return face_adj
+
+
+def random_metamaterial(with_faces=True):
+    """
+    Generates a random metamaterial's representation with its node positions,
+    edge relations, and face relations. The node at the center of the cube
+    is not explicitly included in the node position array since its position
+    is constant across all metamaterials, namely, (0.5, 0.5, 0.5).
+
+    Returns: tuple of ndarrays
+        The first entry in this tuple is a 1d numpy array where every row pair
+        of values is the normalized 2D position of its corresponding node on its
+        corresponding unit cube face. The nodes appear in sequential order. The
+        logic for extracting nodes' positions can be found in get_node_x/y/z().
+        
+        The second entry in this tuple is a 1d numpy array edge adjacency
+        array, where a 1 at the corresponding adjacency matrix's i-th row and
+        j-th column means that nodes i and j are connected by an edge. All other
+        entries are 0. The logic for extracting the edge adjacencies can be found
+        in the have_edge() function.
+        
+        The third entry in this tuple is a 1d numpy array face adjacency
+        array, where a 1 at the corresponding adjacency tensor's (i,j,k) index
+        means that nodes i, j, and k are connected by a triangular face. All other
+        entries are 0. The logic for extracting the face adjacencies can be found
+        in the have_face() function.
+    """
+    
+    # Generates the flattened normalized [0,1) cube face node 2D positions.
+    # The i-th pair of values correspond to the non-trivial
+    # coordinates for the i-th node in the graph.
+    node_pos = np.random.rand(NODES_PER_FACE * CUBE_FACES * 2)
+
+    # Generates the flattened edge adjacency matrix (without redundancy).
+    # Is effectively the flattened upper triangle of an adjacency matrix
+    edge_adj = (np.random.rand(NUM_NODES * (NUM_NODES-1) // 2) < 0.5).astype(float)
+
+    # Generates the flattened face adjacency tensor (without redundancy)
+    # Is effectively the flattened tensor equivalent of the upper triangle
+    # of an adjacency matrix, but of the adjacency tensor.
+    # The "upper tetrahedron" is a contiguous section of the tensor where no
+    # index repeats in any axis.
+    if with_faces:
+        face_adj = (np.random.rand(NUM_NODES * (NUM_NODES-1) * (NUM_NODES-2) // 6) < 0.5).astype(float)
+    else:
+        face_adj = np.zeros(NUM_NODES * (NUM_NODES-1) * (NUM_NODES-2) // 6)
+
+    # Checks if every face validly has its corresponding 3 edges
+    for n1 in range(NUM_NODES):
+        for n2 in range(n1+1, NUM_NODES):
+            for n3 in range(n2+1, NUM_NODES):
+
+                # Skips non-face edge triplets
+                index = face_adj_index(n1, n2, n3)
+                if not face_adj[index]:
+                    continue
+
+                # Removes the invalid face (i.e., a face with insufficient edges)
+                if not (edge_adj[edge_adj_index(n1, n2)] and edge_adj[edge_adj_index(n1, n3)] and edge_adj[edge_adj_index(n2, n3)]):
+                    face_adj[index] = 0
+
+    return node_pos, edge_adj, face_adj
