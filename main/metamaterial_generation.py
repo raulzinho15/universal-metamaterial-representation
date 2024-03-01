@@ -142,5 +142,3 @@ def plot_metamaterial(filename, node_pos, edge_adj, face_adj):
         plot3d.view_init(30, angle)
         plt.draw()
         plt.pause(.002)
-
-plot_metamaterial("local_test/image.png", *random_metamaterial())
