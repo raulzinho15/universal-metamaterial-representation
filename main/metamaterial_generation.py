@@ -1,5 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
+import utils
 
 NODES_PER_FACE = 1
 CUBE_FACES = 6
@@ -323,8 +324,10 @@ def random_metamaterial(with_faces=True):
     else:
         face_adj = np.zeros(NUM_NODES * (NUM_NODES-1) * (NUM_NODES-2) // 6)
 
-    # Ensures the representation is of a non-self-intersecting metamaterial
-    face_adj = remove_invalid_faces(edge_adj, face_adj)
+    # Ensures the representation is of a validly constructed metamaterial
+    face_adj = remove_invalid_faces(edge_adj, face_adj) # Removes faces without all edges in the rep
+    edge_adj = remove_invalid_edges(node_pos, edge_adj, face_adj) # Removes edges intersecting with faces
+    face_adj = remove_invalid_faces(edge_adj, face_adj) # Removes faces without all edges in the rep after edge removal
 
     return node_pos, edge_adj, face_adj
 
@@ -366,6 +369,66 @@ def remove_invalid_faces(edge_adj, face_adj):
                     face_adj[index] = 0
 
     return face_adj
+
+
+def remove_invalid_edges(node_pos, edge_adj, face_adj):
+    """
+    Removes all the edges described in the edge adjacency array which
+    intersect with faces described in the face adjacency array. Does
+    not mutate the original array.
+
+    node_pos: ndarray
+        The node positions as described in the specification of the
+        random_metamaterial() function.
+
+    edge_adj: ndarray
+        The edge adjacencies as described in the specification of
+        the random_metamaterial() function.
+
+    face_adj: ndarray
+        The face adjacencies as described in the specification of
+        the random_metamaterial() function.
+
+    Returns: ndarray
+        A new edge adjacency array such that no edges and faces in
+        the metamaterial intersect.
+    """
+    edge_adj = np.copy(edge_adj)    
+
+    # Runs through each possible face
+    for nf1 in range(NUM_NODES):
+        for nf2 in range(nf1+1, NUM_NODES):
+            for nf3 in range(nf2+1, NUM_NODES):
+
+                # Skips non-faces
+                if not face_adj[face_adj_index(nf1, nf2, nf3)]:
+                    continue
+
+                # Runs through each possible edge
+                face_nodes = (nf1, nf2, nf3)
+                for ne1 in range(NUM_NODES):
+
+                    # Skips node on the face
+                    if ne1 in face_nodes:
+                        continue
+
+                    for ne2 in range(ne1+1, NUM_NODES):
+
+                        # Skips node on the face
+                        if ne2 in face_nodes:
+                            continue
+
+                        # Skips non-edges
+                        index = edge_adj_index(ne1, ne2)
+                        if not edge_adj[index]:
+                            continue
+
+                        # Checks for intersection
+                        positions = [np.array([get_node_x(n, node_pos), get_node_y(n, node_pos), get_node_z(n, node_pos)])
+                                        for n in (nf1, nf2, nf3, ne1, ne2)]
+                        if utils.triangle_line_intersection(*positions):
+                            edge_adj[index] = 0
+    return edge_adj
 
 
 def plot_metamaterial(filename, node_pos, edge_adj, face_adj):
@@ -433,3 +496,5 @@ def plot_metamaterial(filename, node_pos, edge_adj, face_adj):
         plot3d.view_init(30, angle)
         plt.draw()
         plt.pause(.002)
+
+plot_metamaterial("local_test/valid_metamaterial.png", *random_metamaterial())
