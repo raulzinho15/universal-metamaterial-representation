@@ -28,8 +28,21 @@ def get_node_x(node, node_pos):
         The x coordinate of the node.
     """
 
-    # Needs to be adapted if node_pos rep changes
-    return 0.5 if node == NUM_NODES-1 else node_pos[node*2] if node//2 != 2 else node%2
+    # Cube center node
+    if node == NUM_NODES-1:
+        return 0.5
+    
+    # Cube face node
+    if node < NODES_PER_FACE * CUBE_FACES:
+        if node // (2*NODES_PER_FACE) != 2: # Not in a face parallel to the yz plane
+            return node_pos[node*2]
+        return (node//NODES_PER_FACE) % 2 # In a face parallel to the yz plane
+    
+    # Cube edge node
+    node -= NODES_PER_FACE * CUBE_FACES
+    if node // (4*NODES_PER_EDGE) == 2: # In an edge that runs along the x axis
+        return node_pos[NODES_PER_FACE * CUBE_FACES * 2 + node]
+    return (node // (2*NODES_PER_EDGE)) % 2 # In an edge that does not run along the x axis
 
 
 def get_node_y(node, node_pos):
@@ -48,8 +61,21 @@ def get_node_y(node, node_pos):
         The y coordinate of the node.
     """
 
-    # Needs to be adapted if node_pos rep changes
-    return 0.5 if node == NUM_NODES-1 else node_pos[node*2] if node//2 != 1 else node%2
+    # Cube center node
+    if node == NUM_NODES-1:
+        return 0.5
+    
+    # Cube face node
+    if node < NODES_PER_FACE * CUBE_FACES:
+        if node // (2*NODES_PER_FACE) != 1: # Not in a face parallel to the xz plane
+            return node_pos[node*2 + (1 if node // (2*NODES_PER_FACE) == 0 else 0)]
+        return (node//NODES_PER_FACE) % 2 # In a face parallel to the xz plane
+    
+    # Cube edge node
+    node -= NODES_PER_FACE * CUBE_FACES
+    if node // (4*NODES_PER_EDGE) == 1: # In an edge that runs along the y axis
+        return node_pos[NODES_PER_FACE * CUBE_FACES * 2 + node]
+    return (node // ((2 if node // (4*NODES_PER_EDGE) == 2 else 1) * NODES_PER_EDGE)) % 2 # In an edge that does not run along the y axis
 
 
 def get_node_z(node, node_pos):
@@ -68,8 +94,21 @@ def get_node_z(node, node_pos):
         The z coordinate of the node.
     """
 
-    # Needs to be adapted if node_pos rep changes
-    return 0.5 if node == NUM_NODES-1 else node_pos[node*2] if node//2 != 0 else node%2
+    # Cube center node
+    if node == NUM_NODES-1:
+        return 0.5
+    
+    # Cube face node
+    if node < NODES_PER_FACE * CUBE_FACES:
+        if node // (2*NODES_PER_FACE) != 0: # Not in a face parallel to the xy plane
+            return node_pos[node*2+1]
+        return (node//NODES_PER_FACE) % 2 # In a face parallel to the xy plane
+    
+    # Cube edge node
+    node -= NODES_PER_FACE * CUBE_FACES
+    if node // (4*NODES_PER_EDGE) == 0: # In an edge that runs along the z axis
+        return node_pos[NODES_PER_FACE * CUBE_FACES * 2 + node]
+    return (node // NODES_PER_EDGE) % 2 # In an edge that does not run along the z axis
 
 
 def edge_adj_index(node1, node2):

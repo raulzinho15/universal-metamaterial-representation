@@ -13,11 +13,26 @@ def random_metamaterial(edge_prob=0.5, face_prob=0.5, with_faces=True):
     Returns: tuple of ndarrays
         The first entry in this tuple is a 1d numpy array where every row pair
         or single value is the normalized position of its corresponding node on its
-        corresponding unit cube face. The nodes appear in sequential order. The
-        first NODES_PER_FACE * CUBE_FACES pairs correspond to the nodes at
-        the cube's faces. The next NODES_PER_EDGE * CUBE_EDGES values correspond
-        to the nodes at the cube's edges. The logic for extracting nodes' positions
-        can be found in get_node_x/y/z().
+        corresponding unit cube face/edge. The nodes appear in the following
+        sequential order.
+        
+        The first (NODES_PER_FACE * CUBE_FACES) 2D pairs correspond to the nodes at
+        the cube's faces. There are the same number of nodes on each cube face. The
+        order of cube faces in the array is z=0, z=1, y=0, y=1, x=0, x=1, where the
+        coordinates in the node position array appear in the order (x,y,z), and
+        exclude whichever dimension whose plane on which the node lies (hence 2D).
+        Co-face nodes are next to each other in the array.
+
+        The next (NODES_PER_EDGE * CUBE_EDGES) values correspond to the nodes at the
+        cube's edges. There are the same number of nodes on each edge. The order of edges
+        in the array is (x=0, y=0), (x=0, y=1), (x=1, y=0), (x=1, y=1), (x=0, z=0),
+        (x=0, z=1), (x=1, z=0), (x=1, z=1), (y=0, z=0), (y=0, z=1), (y=1, z=0), (y=1, z=1),
+        where the coordinate stored in this array is in the non-constant axis for that
+        node. Co-edge nodes are next to each other in the array.
+
+        The ordering of nodes in this array is the ordering that is logically used when
+        using the edge/face adjacency representations. The logic for extracting nodes'
+        positions can be found in the get_node_x/y/z() functions.
         
         The second entry in this tuple is a 1d numpy array edge adjacency
         array, where a 1 at the corresponding adjacency matrix's i-th row and
