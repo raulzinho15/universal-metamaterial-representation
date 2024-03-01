@@ -20,7 +20,8 @@ def random_metamaterial():
         The second entry in this tuple is a 1d numpy array edge adjacency
         array where a 1 at the corresponding adjacency matrix's i-th row and
         j-th column means that nodes i and j are connected by an edge. All other
-        entries are 0.
+        entries are 0. The logic for extracting the edge adjacencies can be found
+        in the have_edge() function.
         
         The third entry in this tuple is a 1d numpy array face adjacency
         array where a 1 at the corresponding adjacency tensor's (i,j,k) index
@@ -105,3 +106,73 @@ def get_node_z(node, node_pos):
 
     # Needs to be adapted if node_pos rep changes
     return 0.5 if node == NUM_NODES-1 else node_pos[node*2] if node//2 != 0 else node%2
+
+
+def edge_adj_index(node1, node2):
+    """
+    Computes the index at which the two nodes' edge adjacency is contained
+    in the edge adjacency representation returned by random_metamaterial().
+
+    node1: int
+        The ID of the first node.
+
+    node2: int
+        The ID of the second node.
+
+    Returns: int
+        The index at which the given nodes' edge adjacency is located.
+    """
+
+    # Sorts the nodes by ascending index size
+    node1, node2 = sorted((node1, node2))
+
+    # Computes the index at which the edge adjacency is in the flattened vector
+    # start2d = NUM_NODES * (NUM_NODES-1) // 2 - (NUM_NODES-node1) * (NUM_NODES-node1-1) // 2
+    start2d = node1 * (2*NUM_NODES - node1 - 1) // 2 # Needs to be changed if rep changes
+    start1d = node2 - node1 - 1
+
+    return start2d + start1d
+
+
+def have_edge(node1, node2, edge_adj):
+    """
+    Checks whether the two given nodes have an edge between them
+    based on the given edge adjacencies.
+
+    node1: int
+        The ID of the first node.
+
+    node2: int
+        The ID of the second node.
+
+    edge_adj: ndarray
+        The edge adjacencies as described in the specification of
+        the random_metamaterial() function.
+
+    Returns: bool
+        Whether there is an edge between the two given nodes.
+    """
+
+    # Trivially excludes an edge from identical nodes
+    if node1 == node2:
+        return False
+
+    return edge_adj[edge_adj_index(node1, node2)] == 1
+
+
+def to_edge_adj_matrix(edge_adj):
+    """
+    Converts the given edge adjacencies into an edge adjacency matrix.
+
+    edge_adj: ndarray
+        The edge adjacencies as described in the specification of
+        the random_metamaterial() function.
+
+    Returns: ndarray
+        An edge adjacency matrix, where the position (i,j) is 1 if and
+        only if there is an edge connecting the i-th and j-th nodes.
+        All other entries are 0.
+    """
+    return np.array([[have_edge(n1, n2, edge_adj)
+                    for n1 in range(NUM_NODES)]
+                        for n2 in range(NUM_NODES)]).astype(int)
