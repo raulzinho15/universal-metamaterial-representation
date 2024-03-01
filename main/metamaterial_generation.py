@@ -14,7 +14,8 @@ def random_metamaterial():
     Returns: tuple of ndarrays
         The first entry in this tuple is a 1d numpy array where every row pair
         of values is the normalized 2D position of its corresponding node on its
-        corresponding unit cube face. The nodes appear in sequential order.
+        corresponding unit cube face. The nodes appear in sequential order. The
+        logic for extracting nodes' positions can be found in get_node_x/y/z().
         
         The second entry in this tuple is a 1d numpy array edge adjacency
         array where a 1 at the corresponding adjacency matrix's i-th row and
@@ -44,3 +45,63 @@ def random_metamaterial():
     face_adj = (np.random.rand(NUM_NODES * (NUM_NODES-1) * (NUM_NODES-2) // 6) < 0.5).astype(float)
 
     return node_pos, edge_adj, face_adj
+
+
+def get_node_x(node, node_pos):
+    """
+    Computes what the x coordinate of the node with the given ID is
+    based on the given node positions.
+
+    node: int
+        The ID of the node.
+
+    node_pos: ndarray
+        The node positions as described in the specification of
+        the random_metamaterial() function.
+
+    Returns: float
+        The x coordinate of the node.
+    """
+
+    # Needs to be adapted if node_pos rep changes
+    return 0.5 if node == NUM_NODES-1 else node_pos[node*2] if node//2 != 2 else node%2
+
+
+def get_node_y(node, node_pos):
+    """
+    Computes what the y coordinate of the node with the given ID is
+    based on the given node positions.
+
+    node: int
+        The ID of the node.
+
+    node_pos: ndarray
+        The node positions as described in the specification of
+        the random_metamaterial() function.
+
+    Returns: float
+        The y coordinate of the node.
+    """
+
+    # Needs to be adapted if node_pos rep changes
+    return 0.5 if node == NUM_NODES-1 else node_pos[node*2] if node//2 != 1 else node%2
+
+
+def get_node_z(node, node_pos):
+    """
+    Computes what the z coordinate of the node with the given ID is
+    based on the given node positions.
+
+    node: int
+        The ID of the node.
+
+    node_pos: ndarray
+        The node positions as described in the specification of
+        the random_metamaterial() function.
+
+    Returns: float
+        The z coordinate of the node.
+    """
+
+    # Needs to be adapted if node_pos rep changes
+    return 0.5 if node == NUM_NODES-1 else node_pos[node*2] if node//2 != 0 else node%2
