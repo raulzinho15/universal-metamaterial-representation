@@ -2,16 +2,6 @@ import numpy as np
 import utils
 from rep_utils import *
 
-CUBE_FACES = 6
-NODES_PER_FACE = 1
-CUBE_EDGES = 12
-NODES_PER_EDGE = 1
-CUBE_VERTICES = 8
-NODES_PER_VERTEX = 1
-NUM_NODES = (CUBE_FACES * NODES_PER_FACE            # Cube face nodes
-            + CUBE_EDGES * NODES_PER_EDGE           # Cube edge nodes
-            + CUBE_VERTICES * NODES_PER_VERTEX + 1) # Cube vertex/center nodes
-
 class Metamaterial:
 
     def __init__(self, node_pos, edge_adj, face_adj):
