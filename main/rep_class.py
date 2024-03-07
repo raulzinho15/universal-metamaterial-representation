@@ -199,6 +199,51 @@ class Metamaterial:
         self.transforms.append(transform)
 
 
+    def mirror_x(self):
+        """
+        Mirrors each node across the yz plane going through the center of the
+        metamaterial (i.e., reflects the x coordinate). Does not mutate this
+        metamaterial.
+
+        Returns: Metamaterial
+            The metamaterial with the mirrored nodes.
+        """
+
+        material = self.copy()
+        material.apply_transform(lambda x,y,z: (1-x, y, z))
+        return material
+
+
+    def mirror_y(self):
+        """
+        Mirrors each node across the xz plane going through the center of the
+        metamaterial (i.e., reflects the y coordinate). Does not mutate this
+        metamaterial.
+
+        Returns: Metamaterial
+            The metamaterial with the mirrored nodes.
+        """
+
+        material = self.copy()
+        material.apply_transform(lambda x,y,z: (x, 1-y, z))
+        return material
+
+
+    def mirror_z(self):
+        """
+        Mirrors each node across the xy plane going through the center of the
+        metamaterial (i.e., reflects the z coordinate). Does not mutate this
+        metamaterial.
+
+        Returns: Metamaterial
+            The metamaterial with the mirrored nodes.
+        """
+
+        material = self.copy()
+        material.apply_transform(lambda x,y,z: (x, y, 1-z))
+        return material
+
+
     def have_edge(self, node1, node2):
         """
         Checks whether the two given nodes have an edge between them
