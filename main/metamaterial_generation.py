@@ -45,9 +45,9 @@ def random_metamaterial(edge_prob=0.5, face_prob=0.5, with_faces=True):
     metamaterial = Metamaterial(node_pos, edge_adj, face_adj)
 
     # Ensures the representation is of a validly constructed metamaterial
-    metamaterial.remove_invalid_faces() # Removes faces without all edges in the rep
-    metamaterial.remove_invalid_edges() # Removes edges intersecting with faces
-    metamaterial.remove_invalid_faces() # Removes faces without all edges in the rep after edge removal
+    # metamaterial.remove_invalid_faces() # Removes faces without all edges in the rep
+    # metamaterial.remove_invalid_edges() # Removes edges intersecting with faces
+    # metamaterial.remove_invalid_faces() # Removes faces without all edges in the rep after edge removal
 
     return metamaterial
 
@@ -60,7 +60,7 @@ def plot_metamaterial(filename, metamaterial):
         The name of the file at which the plot image will be saved.
 
     metamaterial: Metamaterial
-        The metamaterial to plot
+        The metamaterial to plot.
     """
     
     # Sets up the 3d plot environment
@@ -107,3 +107,10 @@ def plot_metamaterial(filename, metamaterial):
         plot3d.view_init(30, angle)
         plt.draw()
         plt.pause(.002)
+
+material1 = random_metamaterial()
+m1_pos = material1.get_node_positions()
+material2 = material1.copy()
+material2.apply_transform(lambda x,y,z: (1-x, y, z))
+m2_pos = material2.get_node_positions()
+print(np.concatenate((m1_pos, m2_pos), axis=1))

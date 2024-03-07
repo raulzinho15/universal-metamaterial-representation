@@ -54,7 +54,7 @@ class Metamaterial:
         self.face_adj = np.copy(face_adj)
 
         # Stores transforms
-        self.transform = lambda x,y,z: (x,y,z)
+        self.transforms = []
 
 
     def get_node_x(self, node):
@@ -169,7 +169,24 @@ class Metamaterial:
         Returns: 3-tuple of floats
             The 3D position of the given node.
         """
-        return self.transform(self.get_node_x(node), self.get_node_y(node), self.get_node_z(node))
+        position = (self.get_node_x(node), self.get_node_y(node), self.get_node_z(node))
+
+        # Applies each transform
+        for transform in self.transforms:
+            position = transform(*position)
+
+        return position
+    
+    def get_node_positions(self):
+        """
+        Computes the positions of all nodes in the metamaterial representation.
+
+        Returns: ndarray
+            The positions of all nodes, ordered as face nodes, edge nodes, vertex
+            nodes, and the center node.
+        """
+
+        return np.array([list(self.get_node_position(node)) for node in range(NUM_NODES)])
     
 
     def apply_transform(self, transform):
@@ -179,7 +196,7 @@ class Metamaterial:
         transform: function mapping 3-tuple of floats to 3-tuple of floats
             The 3D point transformation.
         """
-        self.transform = lambda x: transform(self.transform(x))
+        self.transforms.append(transform)
 
 
     def have_edge(self, node1, node2):
@@ -316,9 +333,17 @@ class Metamaterial:
                                 continue
 
                             # Checks for intersection
-                            positions = [np.array([self.get_node_x(n, self.node_pos),
-                                                   self.get_node_y(n, self.node_pos),
-                                                   self.get_node_z(n, self.node_pos)])
+                            positions = [np.array(list(self.get_node_positions(n)))
                                             for n in (nf1, nf2, nf3, ne1, ne2)]
                             if utils.triangle_line_intersection(*positions):
                                 self.edge_adj[index] = 0
+
+
+    def copy(self):
+        """
+        Creates a copy of the Metamaterial.
+
+        Returns: Metamaterial
+            A copy of this metamaterial
+        """
+        return Metamaterial(np.copy(self.node_pos), np.copy(self.edge_adj), np.copy(self.face_adj))
