@@ -5,7 +5,7 @@ from rep_utils import *
 from random import random
 
 
-def random_metamaterial(edge_prob=0.5, face_prob=0.5, with_faces=True):
+def random_metamaterial(edge_prob=0.5, face_prob=0.5, with_faces=True, validate=False):
     """
     Generates a random metamaterial's representation with its node positions,
     edge relations, and face relations. Implicitly determinable node positions
@@ -22,6 +22,9 @@ def random_metamaterial(edge_prob=0.5, face_prob=0.5, with_faces=True):
 
     with_faces: bool
         Whether the metamaterial will be generated with faces or not.
+
+    validate: bool
+        Whether to remove any invalid edges/faces from the generated metamaterial.
     
     Returns: Metamaterial
         A randomly generated metamaterial.
@@ -42,9 +45,10 @@ def random_metamaterial(edge_prob=0.5, face_prob=0.5, with_faces=True):
     metamaterial = Metamaterial(node_pos, edge_adj, face_adj)
 
     # Ensures the representation is of a validly constructed metamaterial
-    # metamaterial.remove_invalid_faces() # Removes faces without all edges in the rep
-    # metamaterial.remove_invalid_edges() # Removes edges intersecting with faces
-    # metamaterial.remove_invalid_faces() # Removes faces without all edges in the rep after edge removal
+    if validate:
+        metamaterial.remove_invalid_faces() # Removes faces without all edges in the rep
+        metamaterial.remove_invalid_edges() # Removes edges intersecting with faces
+        metamaterial.remove_invalid_faces() # Removes faces without all edges in the rep after edge removal
 
     return metamaterial
 
