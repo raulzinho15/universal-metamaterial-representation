@@ -1,10 +1,10 @@
 import torch
 from torch import nn
 from torch.utils.data import DataLoader
-from rep_utils import *
-from rep_class import *
+from representation.rep_utils import *
+from representation.rep_class import *
 from metamaterial_dataset import MetamaterialDataset
-from metamaterial_generation import random_metamaterial, plot_metamaterial
+from representation.metamaterial_generation import random_metamaterial, plot_metamaterial
 
 
 # Defines the autoencoder model
@@ -233,7 +233,7 @@ def interpolate(material1, material2, interps, path, validate=False):
 
         plot_metamaterial(f"{path}/metamaterial{ind}.png", material, animate=False)
 
-
+# Trains the model
 epochs = 200
 test_losses = []
 for t in range(epochs):
@@ -243,6 +243,7 @@ for t in range(epochs):
     torch.save(model.state_dict(), f"local_test/autoencoders/big_epoch{t}.pth")
 print("Done!")
 
+# Plots the test losses
 import matplotlib.pyplot as plt
 plt.figure()
 plt.plot([x for x in range(epochs)], test_losses)

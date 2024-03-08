@@ -1,6 +1,6 @@
 import torch
 from torch.utils.data import Dataset
-from metamaterial_generation import *
+from representation.metamaterial_generation import *
 
 class MetamaterialDataset(Dataset):
 
