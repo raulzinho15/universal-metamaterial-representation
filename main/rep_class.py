@@ -1,4 +1,5 @@
 import numpy as np
+import torch
 import utils
 from rep_utils import *
 
@@ -378,10 +379,18 @@ class Metamaterial:
                                 continue
 
                             # Checks for intersection
-                            positions = [np.array(list(self.get_node_positions(n)))
+                            positions = [np.array(list(self.get_node_position(n)))
                                             for n in (nf1, nf2, nf3, ne1, ne2)]
                             if utils.triangle_line_intersection(*positions):
                                 self.edge_adj[index] = 0
+
+
+    def flatten_rep(self):
+        """
+        Computes the flattened array representation of the metamaterial.
+        """
+        concatenation = np.concatenate((self.node_pos, self.edge_adj, self.face_adj))
+        return torch.from_numpy(concatenation).type(torch.float32)
 
 
     def copy(self):
@@ -391,4 +400,23 @@ class Metamaterial:
         Returns: Metamaterial
             A copy of this metamaterial
         """
-        return Metamaterial(np.copy(self.node_pos), np.copy(self.edge_adj), np.copy(self.face_adj))
+
+        material = Metamaterial(np.copy(self.node_pos), np.copy(self.edge_adj), np.copy(self.face_adj))
+        for transform in self.transforms:
+            material.apply_transform(transform)
+        return material
+    
+    def from_tensor(rep_tensor):
+        """
+        Creates a Metamaterial from the given PyTorch tensor.
+
+        rep_tensor: Tensor
+            A tensor with the representation arrays concatenated together.
+        """
+
+        numpy_rep = rep_tensor[0,:].detach().numpy()
+        return Metamaterial(
+            numpy_rep[:NODE_POS_SIZE],
+            numpy_rep[NODE_POS_SIZE:NODE_POS_SIZE+EDGE_ADJ_SIZE],
+            np.zeros(FACE_ADJ_SIZE))
+            # numpy_rep[NODE_POS_SIZE+EDGE_ADJ_SIZE:])

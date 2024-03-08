@@ -2,6 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from rep_class import *
 from rep_utils import *
+from random import random
 
 
 def random_metamaterial(edge_prob=0.5, face_prob=0.5, with_faces=True):
@@ -27,20 +28,16 @@ def random_metamaterial(edge_prob=0.5, face_prob=0.5, with_faces=True):
     """
     
     # Generates the node position representation array
-    node_pos = np.random.rand((
-        NODES_PER_FACE * CUBE_FACES * 2 # Cube face node position (2 non-redundant coords)
-        + NODES_PER_EDGE * CUBE_EDGES   # Cube edge node position (1 non-redundant coord)
-    ))
+    node_pos = np.random.rand(NODE_POS_SIZE)
 
     # Generates the edge adjacency representation array
-    edge_adj = (np.random.rand(NUM_NODES * (NUM_NODES-1) // 2) < edge_prob).astype(float)
-
+    edge_adj = (np.random.rand(EDGE_ADJ_SIZE) < edge_prob).astype(float)
     
     # Generates the face adjacency representation array
     if with_faces:
-        face_adj = (np.random.rand(NUM_NODES * (NUM_NODES-1) * (NUM_NODES-2) // 6) < face_prob).astype(float)
+        face_adj = (np.random.rand(FACE_ADJ_SIZE) < face_prob).astype(float)
     else:
-        face_adj = np.zeros(NUM_NODES * (NUM_NODES-1) * (NUM_NODES-2) // 6)
+        face_adj = np.zeros(FACE_ADJ_SIZE)
 
     metamaterial = Metamaterial(node_pos, edge_adj, face_adj)
 
@@ -51,8 +48,13 @@ def random_metamaterial(edge_prob=0.5, face_prob=0.5, with_faces=True):
 
     return metamaterial
 
+# Computes consistent colors for each edge
+colors = {}
+for n1 in range(NUM_NODES):
+    for n2 in range(n1+1, NUM_NODES):
+        colors[(n1, n2)] = tuple(random() for _ in range(3))
 
-def plot_metamaterial(filename, metamaterial):
+def plot_metamaterial(filename, metamaterial, animate=True):
     """
     Plots the metamaterial with the given representation at the given filename.
 
@@ -82,7 +84,7 @@ def plot_metamaterial(filename, metamaterial):
             x1, y1, z1 = metamaterial.get_node_position(n1)
             x2, y2, z2 = metamaterial.get_node_position(n2)
 
-            plot3d.plot([x1, x2], [y1, y2], zs=[z1, z2], linewidth=5)
+            plot3d.plot([x1, x2], [y1, y2], zs=[z1, z2], linewidth=5, color=colors[(n1, n2)])
 
     # Plots each face
     for n1 in range(NUM_NODES):
@@ -98,19 +100,15 @@ def plot_metamaterial(filename, metamaterial):
                 x2, y2, z2 = metamaterial.get_node_position(n2)
                 x3, y3, z3 = metamaterial.get_node_position(n3)
 
-                plot3d.plot_trisurf([x1, x2, x3], [y1, y2, y3], [z1, z2, z3])
+                plot3d.plot_trisurf([x1, x2, x3], [y1, y2, y3], [z1, z2, z3], alpha=0.4)
 
     plt.savefig(filename)
 
     # Plays a rotation animation
-    for angle in range(0, 360*10):
-        plot3d.view_init(30, angle)
-        plt.draw()
-        plt.pause(.002)
+    if animate:
+        for angle in range(0, 360*10):
+            plot3d.view_init(30, angle)
+            plt.draw()
+            plt.pause(.002)
 
-material1 = random_metamaterial()
-m1_pos = material1.get_node_positions()
-material2 = material1.copy()
-material2.apply_transform(lambda x,y,z: (1-x, y, z))
-m2_pos = material2.get_node_positions()
-print(np.concatenate((m1_pos, m2_pos), axis=1))
+    plt.close()

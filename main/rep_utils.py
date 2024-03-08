@@ -10,6 +10,11 @@ NUM_NODES = (CUBE_FACES * NODES_PER_FACE            # Cube face nodes
             + CUBE_EDGES * NODES_PER_EDGE           # Cube edge nodes
             + CUBE_VERTICES * NODES_PER_VERTEX + 1) # Cube vertex/center nodes
 
+NODE_POS_SIZE = (NODES_PER_FACE * CUBE_FACES * 2 # Cube face node position (2 non-redundant coords)
+                + NODES_PER_EDGE * CUBE_EDGES)   # Cube edge node position (1 non-redundant coord)
+EDGE_ADJ_SIZE = NUM_NODES * (NUM_NODES-1) // 2
+FACE_ADJ_SIZE = NUM_NODES * (NUM_NODES-1) * (NUM_NODES-2) // 6
+
 
 def edge_adj_index(node1, node2):
     """
