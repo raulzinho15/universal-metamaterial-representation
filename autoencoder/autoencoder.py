@@ -1,10 +1,12 @@
+import sys
+import pathlib
+sys.path.append(str(pathlib.Path(__file__).parents[1]))
+
 import torch
 from torch import nn
-from torch.utils.data import DataLoader
+
 from representation.rep_utils import *
 from representation.rep_class import *
-from metamaterial_dataset import MetamaterialDataset
-from representation.metamaterial_generation import random_metamaterial, plot_metamaterial
 
 
 # Defines the autoencoder model
@@ -123,20 +125,22 @@ class MetamaterialAutoencoder(nn.Module):
     # Defines a forward pass through the network
     def forward(self, x):
         return self.decoder(self.encoder(x))
-    
-# Sets up the model and its traning methods
-model = MetamaterialAutoencoder()
-optim = torch.optim.Adam(model.parameters(), lr=5e-4)
-loss_fn = nn.MSELoss()
 
-# Sets up the dataloaders
-train_data = DataLoader(MetamaterialDataset(150_000), batch_size=64, shuffle=True)
-test_data = DataLoader(MetamaterialDataset(10_000), batch_size=64)
-print("Data generated!")
-
-def train():
+def train(model, train_data, loss_fn, optim):
     """
-    Trains the autoencoder with the training data.
+    Trains the model with the given training data.
+
+    model: MetamaterialAutoencoder
+        The model to be trained.
+
+    train_data: DataLoader
+        The data from a MetamaterialDataset with which to train.
+
+    loss_fn:
+        The loss function to use in training.
+
+    optim:
+        The optimizer to use in training.
     """
     size = len(train_data.dataset)
     model.train()
@@ -159,9 +163,18 @@ def train():
             print(f"Loss: {loss:>7f} [{current}/{size}]")
     print()
 
-def test():
+def test(model, test_data, loss_fn):
     """
-    Tests the autoencoder with test data
+    Tests the autoencoder with the given test data.
+
+    model: MetamaterialAutoencoder
+        The model to be tested.
+
+    test_data: DataLoader
+        The data from a MetamaterialDataset with which to test.
+
+    loss_fn:
+        The loss function to use in testing.
     """
     model.eval()
     test_loss = 0
@@ -191,75 +204,3 @@ def load_model(filepath):
     model.load_state_dict(torch.load(filepath))
     model.eval()
     return model
-
-def interpolate(material1, material2, interps, path, validate=False):
-    """
-    Linearly interpolates between the two given materials.
-
-    material1: Metamaterial
-        The base material for interpolation.
-
-    material2: Metamaterial
-        The material to be interpolated into.
-
-    interps: int
-        The number of interpolations to compute. Includes the starting 
-        and ending metamaterial.
-
-    path: str
-        The path at which the intermediate metamaterials will be placed.
-
-    validate: bool
-        Whether to validate the interpolated metamaterials and remove
-        any invalid edges/faces.
-    """
-
-    # Computes the latent representation of the two metamaterials
-    m1_latent = model.encoder(material1.flatten_rep().reshape((1, NODE_POS_SIZE+EDGE_ADJ_SIZE+FACE_ADJ_SIZE)))
-    m2_latent = model.encoder(material2.flatten_rep().reshape((1, NODE_POS_SIZE+EDGE_ADJ_SIZE+FACE_ADJ_SIZE)))
-
-    # Runs through each interpolation
-    for ind, alpha in enumerate([x/interps for x in range(interps+1)]):
-
-        # Decodes the interpolated latent representation
-        decoding = model.decoder(m1_latent*(1-alpha) + m2_latent*alpha)
-        material = Metamaterial.from_tensor(decoding)
-
-        # Validates the decoded representation
-        if validate:
-            material.remove_invalid_faces() # Removes faces without all edges in the rep
-            material.remove_invalid_edges() # Removes edges intersecting with faces
-            material.remove_invalid_faces() # Removes faces without all edges in the rep after edge removal
-
-        plot_metamaterial(f"{path}/metamaterial{ind}.png", material, animate=False)
-
-# Trains the model
-epochs = 200
-test_losses = []
-for t in range(epochs):
-    print(f"Epoch {t+1}\n-------------------------------")
-    train()
-    test_losses.append(test())
-    torch.save(model.state_dict(), f"local_test/autoencoders/big_epoch{t}.pth")
-print("Done!")
-
-# Plots the test losses
-import matplotlib.pyplot as plt
-plt.figure()
-plt.plot([x for x in range(epochs)], test_losses)
-plt.xlabel("Epoch")
-plt.ylabel("Test Loss")
-plt.savefig("local_test/test_losses.png")
-print("Plotted Test Losses!")
-            
-# Loads the model & interpolates
-model = load_model("local_test/autoencoders/big_epoch180.pth")
-interpolate(random_metamaterial(edge_prob=0.4, with_faces=False), random_metamaterial(edge_prob=0.4, with_faces=False), 50, "local_test/interpolated_trusses")
-
-# # Visualize how good the model is doing
-# material1 = random_metamaterial()
-# decoding = model(material1.flatten_rep().reshape((1, NODE_POS_SIZE+EDGE_ADJ_SIZE+FACE_ADJ_SIZE)))[0,:].detach().numpy()
-# decoding[NODE_POS_SIZE:] = (decoding[NODE_POS_SIZE:] > 0.5).astype(float)
-# print(material1.flatten_rep().numpy())
-# print(decoding)
-# print(np.abs(material1.flatten_rep().numpy()-decoding))

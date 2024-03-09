@@ -182,3 +182,48 @@ def plot_metamaterial_grid(metamaterial, shape, filename="", save=False, animate
             plt.pause(.002)
 
     plt.close()
+
+
+def interpolate(model, material1, material2, interps, path, validate=False):
+    """
+    Linearly interpolates between the two given materials.
+
+    model: MetamaterialAutoencoder
+        The model to use to interpolate.
+
+    material1: Metamaterial
+        The base material for interpolation.
+
+    material2: Metamaterial
+        The material to be interpolated into.
+
+    interps: int
+        The number of interpolations to compute. Includes the starting 
+        and ending metamaterial.
+
+    path: str
+        The path at which the intermediate metamaterials will be placed.
+
+    validate: bool
+        Whether to validate the interpolated metamaterials and remove
+        any invalid edges/faces.
+    """
+
+    # Computes the latent representation of the two metamaterials
+    m1_latent = model.encoder(material1.flatten_rep().reshape((1, NODE_POS_SIZE+EDGE_ADJ_SIZE+FACE_ADJ_SIZE)))
+    m2_latent = model.encoder(material2.flatten_rep().reshape((1, NODE_POS_SIZE+EDGE_ADJ_SIZE+FACE_ADJ_SIZE)))
+
+    # Runs through each interpolation
+    for ind, alpha in enumerate([x/interps for x in range(interps+1)]):
+
+        # Decodes the interpolated latent representation
+        decoding = model.decoder(m1_latent*(1-alpha) + m2_latent*alpha)
+        material = Metamaterial.from_tensor(decoding)
+
+        # Validates the decoded representation
+        if validate:
+            material.remove_invalid_faces() # Removes faces without all edges in the rep
+            material.remove_invalid_edges() # Removes edges intersecting with faces
+            material.remove_invalid_faces() # Removes faces without all edges in the rep after edge removal
+
+        plot_metamaterial(f"{path}/metamaterial{ind}.png", material, animate=False)
