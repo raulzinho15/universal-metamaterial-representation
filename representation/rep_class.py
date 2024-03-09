@@ -418,8 +418,12 @@ class Metamaterial:
         material.mirror_x = self.mirror_x
         material.mirror_y = self.mirror_y
         material.mirror_z = self.mirror_z
-        for transform in self.transforms:
-            material.apply_transform(transform)
+
+        # Copies the translate transforms
+        material.translate_x = self.translate_x
+        material.translate_y = self.translate_y
+        material.translate_z = self.translate_z
+
         return material
     
     def from_tensor(rep_tensor):

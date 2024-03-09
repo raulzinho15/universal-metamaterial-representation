@@ -1,8 +1,9 @@
 import numpy as np
 import matplotlib.pyplot as plt
-from rep_class import *
-from rep_utils import *
 from random import random
+
+from representation.rep_class import *
+from representation.rep_utils import *
 
 
 def random_metamaterial(edge_prob=0.5, face_prob=0.5, with_faces=True, validate=False):
@@ -58,23 +59,34 @@ for n1 in range(NUM_NODES):
     for n2 in range(n1+1, NUM_NODES):
         colors[(n1, n2)] = tuple(random() for _ in range(3))
 
-def plot_metamaterial(filename, metamaterial, animate=True):
+def plot_metamaterial(metamaterial, subplot=None, filename="", animate=False, save=False):
     """
     Plots the metamaterial with the given representation at the given filename.
+
+    metamaterial: Metamaterial
+        The metamaterial to plot.
+
+    subplot:
+        The subplot into which the 3D figures will be drawn.
 
     filename: str
         The name of the file at which the plot image will be saved.
 
-    metamaterial: Metamaterial
-        The metamaterial to plot.
+    animate: bool
+        Whether the rotating animation will be played.
+
+    save: bool
+        Whether the plot will be saved as an image file.
     """
     
     # Sets up the 3d plot environment
-    fig = plt.figure()
-    plot3d = fig.add_subplot(projection="3d")
-    plot3d.set_xlabel("x")
-    plot3d.set_ylabel("y")
-    plot3d.set_zlabel("z")
+    close = False
+    if not subplot:
+        close = True
+        subplot = plt.figure().add_subplot(projection="3d")
+        subplot.set_xlabel("x")
+        subplot.set_ylabel("y")
+        subplot.set_zlabel("z")
 
     # Plots each edge
     for n1 in range(NUM_NODES):
@@ -88,7 +100,7 @@ def plot_metamaterial(filename, metamaterial, animate=True):
             x1, y1, z1 = metamaterial.get_node_position(n1)
             x2, y2, z2 = metamaterial.get_node_position(n2)
 
-            plot3d.plot([x1, x2], [y1, y2], zs=[z1, z2], linewidth=5, color=colors[(n1, n2)])
+            subplot.plot([x1, x2], [y1, y2], zs=[z1, z2], linewidth=5, color=colors[(n1, n2)])
 
     # Plots each face
     for n1 in range(NUM_NODES):
@@ -104,14 +116,68 @@ def plot_metamaterial(filename, metamaterial, animate=True):
                 x2, y2, z2 = metamaterial.get_node_position(n2)
                 x3, y3, z3 = metamaterial.get_node_position(n3)
 
-                plot3d.plot_trisurf([x1, x2, x3], [y1, y2, y3], [z1, z2, z3], alpha=0.4)
+                subplot.plot_trisurf([x1, x2, x3], [y1, y2, y3], [z1, z2, z3], alpha=0.4)
 
-    plt.savefig(filename)
+    if save:
+        plt.savefig(filename)
 
     # Plays a rotation animation
     if animate:
         for angle in range(0, 360*10):
-            plot3d.view_init(30, angle)
+            subplot.view_init(30, angle)
+            plt.draw()
+            plt.pause(.002)
+
+    if close:
+        plt.close()
+
+
+def plot_metamaterial_grid(metamaterial, shape, filename="", save=False, animate=False):
+    
+    # Stores the metamaterials to be plotted
+    materials = [metamaterial]
+
+    # Computes the metamaterials along the x axis
+    new_materials = []
+    for dx in range(0, shape[0]):
+        mirror = dx % 2 == 1
+        new_materials += [material.mirror(x=mirror).translate(dx=dx) for material in materials]
+    materials = new_materials
+
+    # Computes the metamaterials along the y axis
+    new_materials = []
+    for dy in range(0, shape[1]):
+        mirror = dy % 2 == 1
+        new_materials += [material.mirror(y=mirror).translate(dy=dy) for material in materials]
+    materials = new_materials
+
+    # Computes the metamaterials along the z axis
+    new_materials = []
+    for dz in range(0, shape[2]):
+        mirror = dz % 2 == 1
+        new_materials += [material.mirror(z=mirror).translate(dz=dz) for material in materials]
+    materials = new_materials
+
+    # Prepares the subplot
+    fig = plt.figure()
+    subplot = fig.add_subplot(projection="3d")
+    subplot.set_xlabel("x")
+    subplot.set_ylabel("y")
+    subplot.set_zlabel("z")
+
+    # Plots each metamaterial
+    for material in materials:
+        # print(material.get_node_positions())
+        # print(material.transforms[-1])
+        plot_metamaterial(material, subplot=subplot)
+
+    if save:
+        plt.savefig(filename)
+
+    # Plays a rotation animation
+    if animate:
+        for angle in range(0, 360*10):
+            subplot.view_init(30, angle)
             plt.draw()
             plt.pause(.002)
 
