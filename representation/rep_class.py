@@ -1,7 +1,7 @@
 import numpy as np
 import torch
-import utils
-from rep_utils import *
+from representation.utils import triangle_line_intersection
+from representation.rep_utils import *
 
 class Metamaterial:
 
@@ -54,20 +54,27 @@ class Metamaterial:
         self.edge_adj = np.copy(edge_adj)
         self.face_adj = np.copy(face_adj)
 
-        # Stores transforms
-        self.transforms = []
+        # Stores mirror transforms
+        self.mirror_x = False
+        self.mirror_y = False
+        self.mirror_z = False
+
+        # Stores translation transforms
+        self.translate_x = 0
+        self.translate_y = 0
+        self.translate_z = 0
 
 
-    def get_node_x(self, node):
+    def __get_node_x(self, node):
         """
-        Computes what the x coordinate of the node with the given ID is
+        Computes what the untransformed x coordinate of the node with the given ID is
         based on the given node positions.
 
         node: int
             The ID of the node.
 
         Returns: float
-            The x coordinate of the node.
+            The x coordinate of the node, untransformed.
         """
 
         # Cube center node
@@ -92,10 +99,10 @@ class Metamaterial:
         return node//4
 
 
-    def get_node_y(self, node):
+    def __get_node_y(self, node):
         """
-        Computes what the y coordinate of the node with the given ID is
-        based on the given node positions.
+        Computes what the y untransformed coordinate of the node with the given ID is
+        based on the given node positions, untransformed.
 
         node: int
             The ID of the node.
@@ -126,9 +133,9 @@ class Metamaterial:
         return (node//2) % 2
 
 
-    def get_node_z(self, node):
+    def __get_node_z(self, node):
         """
-        Computes what the z coordinate of the node with the given ID is
+        Computes what the z untransformed coordinate of the node with the given ID is
         based on the given node positions.
 
         node: int
@@ -170,14 +177,14 @@ class Metamaterial:
         Returns: 3-tuple of floats
             The 3D position of the given node.
         """
-        position = (self.get_node_x(node), self.get_node_y(node), self.get_node_z(node))
+        x, y, z = self.__get_node_x(node), self.__get_node_y(node), self.__get_node_z(node)
+        return (
+            self.translate_x + (1-x if self.mirror_x else x),
+            self.translate_y + (1-y if self.mirror_y else y),
+            self.translate_z + (1-z if self.mirror_z else z)
+        )
 
-        # Applies each transform
-        for transform in self.transforms:
-            position = transform(*position)
 
-        return position
-    
     def get_node_positions(self):
         """
         Computes the positions of all nodes in the metamaterial representation.
@@ -190,58 +197,61 @@ class Metamaterial:
         return np.array([list(self.get_node_position(node)) for node in range(NUM_NODES)])
     
 
-    def apply_transform(self, transform):
+    def mirror(self, x=False, y=False, z=False):
         """
-        Applies the given transform to the metamaterial nodes.
+        Mirrors each node across a chosen plane going through the center of the
+        metamaterial. Does not mutate this metamaterial.
 
-        transform: function mapping 3-tuple of floats to 3-tuple of floats
-            The 3D point transformation.
-        """
-        self.transforms.append(transform)
+        x: bool
+            Whether the x coordinates will be mirrored.
 
+        y: bool
+            Whether the y coordinates will be mirrored.
 
-    def mirror_x(self):
-        """
-        Mirrors each node across the yz plane going through the center of the
-        metamaterial (i.e., reflects the x coordinate). Does not mutate this
-        metamaterial.
+        z: bool
+            Whether the z coordinates will be mirrored.
 
         Returns: Metamaterial
-            The metamaterial with the mirrored nodes.
+            A copy of this metamaterial with the mirrored nodes.
         """
 
+        # Creates copy for mirroring
         material = self.copy()
-        material.apply_transform(lambda x,y,z: (1-x, y, z))
+
+        # Mirrors the coordinates
+        material.mirror_x = not material.mirror_x if x else material.mirror_x
+        material.mirror_y = not material.mirror_y if y else material.mirror_y
+        material.mirror_z = not material.mirror_z if z else material.mirror_z
+
         return material
+    
 
-
-    def mirror_y(self):
+    def translate(self, dx=0,dy=0,dz=0):
         """
-        Mirrors each node across the xz plane going through the center of the
-        metamaterial (i.e., reflects the y coordinate). Does not mutate this
-        metamaterial.
+        Translates each node by the given displacement. Does not mutate
+        this metamaterial.
+
+        dx: int
+            The amount by which the x coordinate will be translated.
+
+        dy: int
+            The amount by which the y coordinate will be translated.
+
+        dz: int
+            The amount by which the z coordinate will be translated.
 
         Returns: Metamaterial
-            The metamaterial with the mirrored nodes.
+            A copy of this metamaterial with the translated nodes.
         """
 
+        # Creates copy for translating
         material = self.copy()
-        material.apply_transform(lambda x,y,z: (x, 1-y, z))
-        return material
 
+        # Translates the coordinates
+        material.translate_x += dx
+        material.translate_y += dy
+        material.translate_z += dz
 
-    def mirror_z(self):
-        """
-        Mirrors each node across the xy plane going through the center of the
-        metamaterial (i.e., reflects the z coordinate). Does not mutate this
-        metamaterial.
-
-        Returns: Metamaterial
-            The metamaterial with the mirrored nodes.
-        """
-
-        material = self.copy()
-        material.apply_transform(lambda x,y,z: (x, y, 1-z))
         return material
 
 
@@ -381,7 +391,7 @@ class Metamaterial:
                             # Checks for intersection
                             positions = [np.array(list(self.get_node_position(n)))
                                             for n in (nf1, nf2, nf3, ne1, ne2)]
-                            if utils.triangle_line_intersection(*positions):
+                            if triangle_line_intersection(*positions):
                                 self.edge_adj[index] = 0
 
 
@@ -401,7 +411,13 @@ class Metamaterial:
             A copy of this metamaterial
         """
 
+        # Copies the representation arrays
         material = Metamaterial(np.copy(self.node_pos), np.copy(self.edge_adj), np.copy(self.face_adj))
+
+        # Copies the mirror transforms
+        material.mirror_x = self.mirror_x
+        material.mirror_y = self.mirror_y
+        material.mirror_z = self.mirror_z
         for transform in self.transforms:
             material.apply_transform(transform)
         return material
