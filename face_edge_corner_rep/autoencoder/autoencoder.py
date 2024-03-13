@@ -1,7 +1,3 @@
-import sys
-import pathlib
-sys.path.append(str(pathlib.Path(__file__).parents[1]))
-
 import torch
 from torch import nn
 
