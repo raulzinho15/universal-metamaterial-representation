@@ -5,14 +5,17 @@ from representation.metamaterial_generation import *
 class MetamaterialDataset(Dataset):
 
     # Initializes the dataset
-    def __init__(self, size):
+    def __init__(self, class_size):
         super().__init__()
+        probs = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
 
         # Generates the random metamaterial data
-        self.metamaterials = [
-            random_metamaterial().flatten_rep()[:NODE_POS_SIZE+EDGE_ADJ_SIZE]
-                for _ in range(size)
-        ]
+        self.metamaterials = []
+        for edge_prob in probs:
+            self.metamaterials += [
+                random_metamaterial(edge_prob=edge_prob).flatten_rep()
+                    for _ in range(class_size)
+            ]
         
 
     # The length of the dataset

@@ -20,51 +20,72 @@ class MetamaterialAutoencoder(nn.Module):
     def __init__(self):
         super().__init__()
 
-        # Node position sizes
-        node_layer_size = 300
-        self.node_latent_size = 300
-
-        # Node position encoder
-        self.node_pos_encoder_stack = nn.Sequential(
-            nn.Linear(NODE_POS_SIZE, node_layer_size),
+        # Encoder
+        input_size = NODE_POS_SIZE+EDGE_ADJ_SIZE+FACE_ADJ_SIZE
+        hidden_layer_size = input_size*2
+        self.latent_size = hidden_layer_size
+        self.encoder_stack = nn.Sequential(
+            nn.Linear(input_size, hidden_layer_size),
             nn.ReLU(),
-            nn.Linear(node_layer_size, node_layer_size),
+            nn.Linear(hidden_layer_size, hidden_layer_size),
             nn.ReLU(),
-            nn.Linear(node_layer_size, self.node_latent_size),
+            nn.Linear(hidden_layer_size, self.latent_size),
         )
 
-        # Node position decoder
-        self.node_pos_decoder_stack = nn.Sequential(
-            nn.Linear(self.node_latent_size, node_layer_size),
+        # Decoder
+        self.decoder_stack = nn.Sequential(
+            nn.Linear(self.latent_size, hidden_layer_size),
             nn.ReLU(),
-            nn.Linear(node_layer_size, node_layer_size),
+            nn.Linear(hidden_layer_size, hidden_layer_size),
             nn.ReLU(),
-            nn.Linear(node_layer_size, NODE_POS_SIZE),
-            nn.Sigmoid()
+            nn.Linear(hidden_layer_size, input_size),
         )
 
-        # Edge adjacency sizes
-        edge_layer_size = 500
-        self.edge_latent_size = 500
+        # # Node position sizes
+        # node_layer_size = 100
+        # self.node_latent_size = 100
 
-        # Edge adjacency encoder
-        self.edge_adj_encoder_stack = nn.Sequential(
-            nn.Linear(EDGE_ADJ_SIZE, edge_layer_size),
-            nn.ReLU(),
-            nn.Linear(edge_layer_size, edge_layer_size),
-            nn.ReLU(),
-            nn.Linear(edge_layer_size, self.edge_latent_size),
-        )
+        # # Node position encoder
+        # self.node_pos_encoder_stack = nn.Sequential(
+        #     nn.Linear(NODE_POS_SIZE, node_layer_size),
+        #     nn.ReLU(),
+        #     nn.Linear(node_layer_size, node_layer_size),
+        #     nn.ReLU(),
+        #     nn.Linear(node_layer_size, self.node_latent_size),
+        # )
 
-        # Edge Adjacency decoder
-        self.edge_adj_decoder_stack = nn.Sequential(
-            nn.Linear(self.edge_latent_size, edge_layer_size),
-            nn.ReLU(),
-            nn.Linear(edge_layer_size, edge_layer_size),
-            nn.ReLU(),
-            nn.Linear(edge_layer_size, EDGE_ADJ_SIZE),
-            nn.Sigmoid()
-        )
+        # # Node position decoder
+        # self.node_pos_decoder_stack = nn.Sequential(
+        #     nn.Linear(self.node_latent_size, node_layer_size),
+        #     nn.ReLU(),
+        #     nn.Linear(node_layer_size, node_layer_size),
+        #     nn.ReLU(),
+        #     nn.Linear(node_layer_size, NODE_POS_SIZE),
+        #     nn.Sigmoid()
+        # )
+
+        # # Edge adjacency sizes
+        # edge_layer_size = 400
+        # self.edge_latent_size = 400
+
+        # # Edge adjacency encoder
+        # self.edge_adj_encoder_stack = nn.Sequential(
+        #     nn.Linear(EDGE_ADJ_SIZE, edge_layer_size),
+        #     nn.ReLU(),
+        #     nn.Linear(edge_layer_size, edge_layer_size),
+        #     nn.ReLU(),
+        #     nn.Linear(edge_layer_size, self.edge_latent_size),
+        # )
+
+        # # Edge adjacency decoder
+        # self.edge_adj_decoder_stack = nn.Sequential(
+        #     nn.Linear(self.edge_latent_size, edge_layer_size),
+        #     nn.ReLU(),
+        #     nn.Linear(edge_layer_size, edge_layer_size),
+        #     nn.ReLU(),
+        #     nn.Linear(edge_layer_size, EDGE_ADJ_SIZE),
+        #     nn.Sigmoid()
+        # )
 
         # # Face adjacency encoder
         # self.face_adj_encoder_stack = nn.Sequential(
@@ -90,6 +111,7 @@ class MetamaterialAutoencoder(nn.Module):
         """
         Runs the network's encoder on the input.
         """
+        return self.encoder_stack(x)
 
         # Prepares the individual representation arrays
         node_pos = x[:,:NODE_POS_SIZE]
@@ -108,6 +130,7 @@ class MetamaterialAutoencoder(nn.Module):
         """
         Runs the network's decoder on the input.
         """
+        return self.decoder_stack(x)
 
         # Prepares the individual representation arrays
         node_pos = x[:,:self.node_latent_size]
