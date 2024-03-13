@@ -3,9 +3,9 @@ import numpy as np
 CUBE_FACES = 6
 NODES_PER_FACE = 1
 CUBE_EDGES = 12
-NODES_PER_EDGE = 1
+NODES_PER_EDGE = 0
 CUBE_VERTICES = 8
-NODES_PER_VERTEX = 1
+NODES_PER_VERTEX = 0
 NUM_NODES = (CUBE_FACES * NODES_PER_FACE            # Cube face nodes
             + CUBE_EDGES * NODES_PER_EDGE           # Cube edge nodes
             + CUBE_VERTICES * NODES_PER_VERTEX + 1) # Cube vertex/center nodes

@@ -395,11 +395,13 @@ class Metamaterial:
                                 self.edge_adj[index] = 0
 
 
-    def flatten_rep(self):
+    def flatten_rep(self, pad_dim=False):
         """
         Computes the flattened array representation of the metamaterial.
         """
         concatenation = np.concatenate((self.node_pos, self.edge_adj, self.face_adj))
+        if pad_dim:
+            concatenation = concatenation.reshape((1, concatenation.shape[0]))
         return torch.from_numpy(concatenation).type(torch.float32)
 
 
@@ -435,6 +437,7 @@ class Metamaterial:
         """
 
         numpy_rep = rep_tensor[0,:].detach().numpy()
+        numpy_rep[NODE_POS_SIZE:] = (numpy_rep[NODE_POS_SIZE:] > 0.5).astype(float)
         return Metamaterial(
             numpy_rep[:NODE_POS_SIZE],
             numpy_rep[NODE_POS_SIZE:NODE_POS_SIZE+EDGE_ADJ_SIZE],

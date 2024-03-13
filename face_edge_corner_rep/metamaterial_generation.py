@@ -1,6 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from random import random
+from torch import Tensor
 
 from representation.rep_class import *
 from representation.rep_utils import *
@@ -54,10 +55,17 @@ def random_metamaterial(edge_prob=0.5, face_prob=0.5, with_faces=True, validate=
     return metamaterial
 
 # Computes consistent colors for each edge
-colors = {}
+edge_colors = {}
 for n1 in range(NUM_NODES):
     for n2 in range(n1+1, NUM_NODES):
-        colors[(n1, n2)] = tuple(random() for _ in range(3))
+        edge_colors[(n1, n2)] = tuple(random() for _ in range(3))
+
+# Computes consistent colors for each face
+face_colors = {}
+for n1 in range(NUM_NODES):
+    for n2 in range(n1+1, NUM_NODES):
+        for n3 in range(n2+1, NUM_NODES):
+            face_colors[(n1, n2, n3)] = tuple(random() for _ in range(3))
 
 def plot_metamaterial(metamaterial, subplot=None, filename="", animate=False, save=False):
     """
@@ -67,7 +75,8 @@ def plot_metamaterial(metamaterial, subplot=None, filename="", animate=False, sa
         The metamaterial to plot.
 
     subplot:
-        The subplot into which the 3D figures will be drawn.
+        The subplot into which the 3D figures will be drawn. If None, a local
+        one will be created.
 
     filename: str
         The name of the file at which the plot image will be saved.
@@ -100,7 +109,7 @@ def plot_metamaterial(metamaterial, subplot=None, filename="", animate=False, sa
             x1, y1, z1 = metamaterial.get_node_position(n1)
             x2, y2, z2 = metamaterial.get_node_position(n2)
 
-            subplot.plot([x1, x2], [y1, y2], zs=[z1, z2], linewidth=5, color=colors[(n1, n2)])
+            subplot.plot([x1, x2], [y1, y2], zs=[z1, z2], linewidth=5, color=edge_colors[(n1, n2)])
 
     # Plots each face
     for n1 in range(NUM_NODES):
@@ -116,7 +125,7 @@ def plot_metamaterial(metamaterial, subplot=None, filename="", animate=False, sa
                 x2, y2, z2 = metamaterial.get_node_position(n2)
                 x3, y3, z3 = metamaterial.get_node_position(n3)
 
-                subplot.plot_trisurf([x1, x2, x3], [y1, y2, y3], [z1, z2, z3], alpha=0.4)
+                subplot.plot_trisurf([x1, x2, x3], [y1, y2, y3], [z1, z2, z3], alpha=0.4, color=face_colors[(n1, n2, n3)])
 
     if save:
         plt.savefig(filename)
@@ -167,8 +176,6 @@ def plot_metamaterial_grid(metamaterial, shape, filename="", save=False, animate
 
     # Plots each metamaterial
     for material in materials:
-        # print(material.get_node_positions())
-        # print(material.transforms[-1])
         plot_metamaterial(material, subplot=subplot)
 
     if save:
@@ -218,7 +225,8 @@ def interpolate(model, material1, material2, interps, path, validate=False):
 
         # Decodes the interpolated latent representation
         decoding = model.decoder(m1_latent*(1-alpha) + m2_latent*alpha)
-        material = Metamaterial.from_tensor(decoding)
+        material = Metamaterial.from_tensor(torch.cat((decoding, torch.zeros(1,FACE_ADJ_SIZE)), dim=1))
+        print(material.edge_adj.sum())
 
         # Validates the decoded representation
         if validate:
@@ -226,4 +234,4 @@ def interpolate(model, material1, material2, interps, path, validate=False):
             material.remove_invalid_edges() # Removes edges intersecting with faces
             material.remove_invalid_faces() # Removes faces without all edges in the rep after edge removal
 
-        plot_metamaterial(f"{path}/metamaterial{ind}.png", material, animate=False)
+        plot_metamaterial(material, filename=f"{path}/metamaterial{ind}.png", save=True)
