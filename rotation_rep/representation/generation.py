@@ -122,7 +122,7 @@ def plot_metamaterial(metamaterial: Metamaterial, subplot=None, filename="", ani
         for n2 in range(n1+1, NUM_NODES):
 
             # Skips unconnected nodes
-            if not metamaterial.have_edge(n1, n2):
+            if not metamaterial.has_edge(n1, n2):
                 continue
 
             # Computes the edge coordinates
@@ -137,7 +137,7 @@ def plot_metamaterial(metamaterial: Metamaterial, subplot=None, filename="", ani
             for n3 in range(n2+1, NUM_NODES):
 
                 # Skips unconnected nodes
-                if not metamaterial.have_face(n1, n2, n3):
+                if not metamaterial.has_face(n1, n2, n3):
                     continue
 
                 # Computes the face coordinates

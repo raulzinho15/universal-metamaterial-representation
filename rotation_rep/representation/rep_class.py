@@ -150,7 +150,7 @@ class Metamaterial:
         return material
 
 
-    def have_edge(self, node1, node2):
+    def has_edge(self, node1, node2):
         """
         Checks whether the two given nodes have an edge between them
         based on the edge adjacencies.
@@ -181,12 +181,12 @@ class Metamaterial:
             only if there is an edge connecting the i-th and j-th nodes.
             All other entries are 0.
         """
-        return np.array([[self.have_edge(n1, n2)
+        return np.array([[self.has_edge(n1, n2)
                         for n1 in range(NUM_NODES)]
                             for n2 in range(NUM_NODES)]).astype(float)
 
 
-    def have_face(self, node1, node2, node3):
+    def has_face(self, node1, node2, node3):
         """
         Checks whether the three given nodes have a face between them
         based on the face adjacencies.
@@ -220,7 +220,7 @@ class Metamaterial:
             nodes. All other entries are 0.
         """
 
-        return np.array([[[self.have_face(n1, n2, n3)
+        return np.array([[[self.has_face(n1, n2, n3)
                         for n1 in range(NUM_NODES)]
                             for n2 in range(NUM_NODES)]
                                 for n3 in range(NUM_NODES)]).astype(float)
@@ -288,6 +288,40 @@ class Metamaterial:
                                             for n in (nf1, nf2, nf3, ne1, ne2)]
                             if triangle_line_intersection(*positions):
                                 self.edge_adj[index] = 0
+
+
+    def remove_edges_from_overlaps(self):
+        """
+        Removes edges from the representation that overlap with a face.
+        Mutates the material.
+        """
+
+        # Goes through each face
+        for n1 in range(NUM_NODES):
+            for n2 in range(n1+1, NUM_NODES):
+                for n3 in range(n2+1, NUM_NODES):
+
+                    # Removes the edge-face overlap
+                    if self.has_face(n1, n2, n3):
+                        self.edge_adj[edge_adj_index(n1,n2)] = 0
+                        self.edge_adj[edge_adj_index(n1,n3)] = 0
+                        self.edge_adj[edge_adj_index(n2,n3)] = 0
+
+
+    def remove_faces_from_overlaps(self):
+        """
+        Removes faces from the representation that overlap with an edge.
+        Mutates the material.
+        """
+
+        # Goes through each face
+        for n1 in range(NUM_NODES):
+            for n2 in range(n1+1, NUM_NODES):
+                for n3 in range(n2+1, NUM_NODES):
+
+                    # Removes the edge-face overlap
+                    if self.has_edge(n1, n2) or self.has_edge(n1, n3) or self.has_edge(n2, n3):
+                        self.face_adj[face_adj_index(n1, n2, n3)] = 0
 
 
     def sort_rep(self):
