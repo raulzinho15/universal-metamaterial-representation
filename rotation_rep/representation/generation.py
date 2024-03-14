@@ -145,7 +145,7 @@ def plot_metamaterial(metamaterial: Metamaterial, subplot=None, filename="", ani
                 x2, y2, z2 = metamaterial.get_node_position(n2)
                 x3, y3, z3 = metamaterial.get_node_position(n3)
 
-                subplot.plot_trisurf([x1, x2, x3], [y1, y2, y3], [z1, z2, z3], alpha=1, color=face_colors[(n1,n2,n3)], triangles=[[0,1,2]])
+                subplot.plot_trisurf([x1, x2, x3], [y1, y2, y3], [z1, z2, z3], alpha=0.4, color=face_colors[(n1, n2, n3)], triangles=[[0,1,2]])
 
     if filename:
         plt.savefig(filename)
