@@ -145,7 +145,7 @@ def plot_metamaterial(metamaterial: Metamaterial, subplot=None, filename="", ani
                 x2, y2, z2 = metamaterial.get_node_position(n2)
                 x3, y3, z3 = metamaterial.get_node_position(n3)
 
-                subplot.plot_trisurf([x1, x2, x3], [y1, y2, y3], [z1, z2, z3], alpha=0.4, color=face_colors[(n1, n2, n3)], triangles=[[0,1,2]])
+                subplot.plot_trisurf([x1, x2, x3], [y1, y2, y3], [z1, z2, z3], alpha=1, color=face_colors[(n1,n2,n3)], triangles=[[0,1,2]])
 
     if filename:
         plt.savefig(filename)
@@ -161,7 +161,7 @@ def plot_metamaterial(metamaterial: Metamaterial, subplot=None, filename="", ani
         plt.close()
 
 
-def plot_metamaterial_grid(metamaterial, shape, filename="", save=False, animate=False):
+def plot_metamaterial_grid(metamaterial, shape, filename="", animate=False):
     
     # Stores the metamaterials to be plotted
     materials = [metamaterial]
@@ -198,7 +198,7 @@ def plot_metamaterial_grid(metamaterial, shape, filename="", save=False, animate
     for material in materials:
         plot_metamaterial(material, subplot=subplot)
 
-    if save:
+    if filename:
         plt.savefig(filename)
 
     # Plays a rotation animation
@@ -211,7 +211,7 @@ def plot_metamaterial_grid(metamaterial, shape, filename="", save=False, animate
     plt.close()
 
 
-def interpolate(model, material1, material2, interps, path, validate=False):
+def interpolate(model, material1, material2, interps, path, validate=False, shape=(1,1,1)):
     """
     Linearly interpolates between the two given materials.
 
@@ -244,8 +244,13 @@ def interpolate(model, material1, material2, interps, path, validate=False):
     for ind, alpha in enumerate([x/interps for x in range(interps+1)]):
 
         # Decodes the interpolated latent representation
-        decoding = model.decoder(m1_latent*(1-alpha) + m2_latent*alpha)
-        material = Metamaterial.from_tensor(torch.cat((decoding, torch.zeros(FACE_ADJ_SIZE))))
+        if 0 < ind < interps:
+            decoding = model.decoder(m1_latent*(1-alpha) + m2_latent*alpha)
+            material = Metamaterial.from_tensor(torch.cat((decoding, torch.zeros(FACE_ADJ_SIZE))))
+        elif ind == 0:
+            material = material1
+        else:
+            material = material2
 
         # Validates the decoded representation
         if validate:
@@ -253,4 +258,4 @@ def interpolate(model, material1, material2, interps, path, validate=False):
             material.remove_invalid_edges() # Removes edges intersecting with faces
             material.remove_invalid_faces() # Removes faces without all edges in the rep after edge removal
 
-        plot_metamaterial(material, filename=f"{path}/metamaterial{ind}.png")
+        plot_metamaterial_grid(material, shape=shape, filename=f"{path}/metamaterial{ind}.png")
