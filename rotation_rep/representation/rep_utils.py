@@ -34,7 +34,8 @@ def euclidian_to_spherical(x, y, z):
     if np.abs(np.sin(theta)) < 1e-4:
         phi = 0
     else:
-        phi = np.arctan2(y/np.sin(theta)/mag, x/np.sin(theta)/mag) + np.pi
+        phi = np.arctan2(y/np.sin(theta)/mag, x/np.sin(theta)/mag)
+        phi = phi if phi >= 0 else phi+2*np.pi
 
     return theta/np.pi, phi/(2*np.pi)
 
