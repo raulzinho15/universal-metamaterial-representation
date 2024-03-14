@@ -324,6 +324,40 @@ class Metamaterial:
                         self.face_adj[face_adj_index(n1, n2, n3)] = 0
 
 
+    def reorder_nodes(self, node_order):
+        """
+        Reorders the nodes in the metamaterial.
+
+        node_order: list or tuple
+            The new ordering of the nodes, where the node with index value
+            i at the j-th index of node_order will now be the node at
+            index j of the metamaterial.
+
+        Returns: Metamaterial
+            The metamaterial with the reordered nodes.
+        """
+        
+        # Stores the reordered node positions
+        reordered_node_pos = np.array(
+            [self.node_pos[2*node_order[i]:2*node_order[i]+2] for i in range(self.node_pos.shape[0]//2)]
+        ).reshape(self.node_pos.shape[0])
+
+        # Stores the reordered edge adjacencies
+        reordered_edge_adj = np.zeros(EDGE_ADJ_SIZE)
+        for n1 in range(NUM_NODES):
+            for n2 in range(n1+1, NUM_NODES):
+                reordered_edge_adj[edge_adj_index(n1, n2)] = self.edge_adj[edge_adj_index(node_order[n1], node_order[n2])]
+
+        # Stores the reordered face adjacencies
+        reordered_face_adj = np.zeros(FACE_ADJ_SIZE)
+        for n1 in range(NUM_NODES):
+            for n2 in range(n1+1, NUM_NODES):
+                for n3 in range(n2+1, NUM_NODES):
+                    reordered_face_adj[face_adj_index(n1, n2, n3)] = self.face_adj[face_adj_index(node_order[n1], node_order[n2], node_order[n3])]
+
+        return Metamaterial(reordered_node_pos, reordered_edge_adj, reordered_face_adj)
+
+
     def sort_rep(self):
         """
         Sorts the nodes by the product of the two rep angles.
@@ -339,25 +373,7 @@ class Metamaterial:
         )
         sorted_node_indices.append(NUM_NODES-1) # Includes the center node as last node
 
-        # Stores the sorted node positions
-        sorted_node_pos = np.array(
-            [self.node_pos[2*sorted_node_indices[i]:2*sorted_node_indices[i]+2] for i in range(self.node_pos.shape[0]//2)]
-        ).reshape(self.node_pos.shape[0])
-
-        # Stores the sorted edge adjacencies
-        sorted_edge_adj = np.zeros(EDGE_ADJ_SIZE)
-        for n1 in range(NUM_NODES):
-            for n2 in range(n1+1, NUM_NODES):
-                sorted_edge_adj[edge_adj_index(n1, n2)] = self.edge_adj[edge_adj_index(sorted_node_indices[n1], sorted_node_indices[n2])]
-
-        # Stores the sorted face adjacencies
-        sorted_face_adj = np.zeros(FACE_ADJ_SIZE)
-        for n1 in range(NUM_NODES):
-            for n2 in range(n1+1, NUM_NODES):
-                for n3 in range(n2+1, NUM_NODES):
-                    sorted_face_adj[face_adj_index(n1, n2, n3)] = self.face_adj[face_adj_index(sorted_node_indices[n1], sorted_node_indices[n2], sorted_node_indices[n3])]
-
-        return Metamaterial(sorted_node_pos, sorted_edge_adj, sorted_face_adj)
+        return self.reorder_nodes(sorted_node_indices)
 
 
     def flatten_rep(self):
