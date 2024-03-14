@@ -62,6 +62,11 @@ def random_metamaterial(edge_prob=0.5, face_prob=0.5, grid_spacing=None, with_fa
 
     return metamaterial
 
+# Computes consistent colors for each node
+node_colors = {}
+for n1 in range(NUM_NODES):
+    node_colors[n1] = tuple(random() for _ in range(3))
+
 # Computes consistent colors for each edge
 edge_colors = {}
 for n1 in range(NUM_NODES):
@@ -75,7 +80,7 @@ for n1 in range(NUM_NODES):
         for n3 in range(n2+1, NUM_NODES):
             face_colors[(n1, n2, n3)] = tuple(random() for _ in range(3))
 
-def plot_metamaterial(metamaterial, subplot=None, filename="", animate=False, save=False):
+def plot_metamaterial(metamaterial: Metamaterial, subplot=None, filename="", animate=False, plot_nodes=False):
     """
     Plots the metamaterial with the given representation at the given filename.
 
@@ -87,13 +92,14 @@ def plot_metamaterial(metamaterial, subplot=None, filename="", animate=False, sa
         one will be created.
 
     filename: str
-        The name of the file at which the plot image will be saved.
+        The name of the file at which the plot image will be saved. If not
+        specified, the file will not be saved.
 
     animate: bool
         Whether the rotating animation will be played.
 
-    save: bool
-        Whether the plot will be saved as an image file.
+    plot_nodes: bool
+        Whether the nodes will be visually plotted.
     """
     
     # Sets up the 3d plot environment
@@ -104,6 +110,12 @@ def plot_metamaterial(metamaterial, subplot=None, filename="", animate=False, sa
         subplot.set_xlabel("x")
         subplot.set_ylabel("y")
         subplot.set_zlabel("z")
+
+    # Plots each node
+    if plot_nodes:
+        for node in range(NUM_NODES):
+            x,y,z = metamaterial.get_node_position(node)
+            subplot.plot([x+0.1,x-0.1], [y+0.1, y-0.1], zs=[z+0.1, z-0.1], linewidth=5, color=node_colors[node])
 
     # Plots each edge
     for n1 in range(NUM_NODES):
@@ -135,7 +147,7 @@ def plot_metamaterial(metamaterial, subplot=None, filename="", animate=False, sa
 
                 subplot.plot_trisurf([x1, x2, x3], [y1, y2, y3], [z1, z2, z3], alpha=0.4, color=face_colors[(n1, n2, n3)], triangles=[[0,1,2]])
 
-    if save:
+    if filename:
         plt.savefig(filename)
 
     # Plays a rotation animation
@@ -241,4 +253,4 @@ def interpolate(model, material1, material2, interps, path, validate=False):
             material.remove_invalid_edges() # Removes edges intersecting with faces
             material.remove_invalid_faces() # Removes faces without all edges in the rep after edge removal
 
-        plot_metamaterial(material, filename=f"{path}/metamaterial{ind}.png", save=True)
+        plot_metamaterial(material, filename=f"{path}/metamaterial{ind}.png")
