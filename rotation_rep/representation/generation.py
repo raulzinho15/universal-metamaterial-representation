@@ -236,6 +236,9 @@ def interpolate(model, material1, material2, interps, path, validate=False, shap
         any invalid edges/faces.
     """
 
+    # Reorders the nodes to minimize movement during interpolation
+    # reordering = 
+
     # Computes the latent representation of the two metamaterials
     m1_latent = model.encoder(material1.flatten_rep())
     m2_latent = model.encoder(material2.flatten_rep())
@@ -259,3 +262,38 @@ def interpolate(model, material1, material2, interps, path, validate=False, shap
             material.remove_invalid_faces() # Removes faces without all edges in the rep after edge removal
 
         plot_metamaterial_grid(material, shape=shape, filename=f"{path}/metamaterial{ind}.png")
+        plot_metamaterial_grid(material, shape=shape, filename=f"{path}/metamaterial{interps*2-ind}.png")
+
+
+def align_nodes(mat1: Metamaterial, mat2: Metamaterial, nodes1, nodes2):
+    """
+        Aligns the two metamaterials in such a way that minimizes the collective
+        distance of their nodes. Does not mutate the metamaterials.
+
+        mat1: Metamaterial
+            The first metamaterial for alignment.
+
+        mat2: Metamaterial
+            The second metamaterial for alignment.
+
+        nodes1: int
+            The number of nodes from mat1 (from index 0) that will be compared
+            in the matching. Must be <= NUM_NODES and <= nodes2.
+
+        nodes2: int
+            The number of nodes from mat2 (from index 0) that will be compared
+            in the matching. Must be <= NUM_NODES and >= nodes1.
+
+        Returns: tuple of Metamaterials
+            The aligned pair of metamaterials.
+    """
+
+    # Stores the reordering and includes leftover nodes
+    reordering = mat1.best_node_match(mat2, nodes1, nodes2)
+    reordering += [i for i in range(NUM_NODES) if i not in reordering]
+
+    # (Forcefully) aligns the closest nodes 
+    mat2 = mat2.reorder_nodes(reordering)
+    mat1.node_pos[2*nodes1:] = mat2.node_pos[2*nodes1:]
+
+    return mat1, mat2

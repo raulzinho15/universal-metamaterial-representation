@@ -92,6 +92,20 @@ class Metamaterial:
         return np.array([list(self.get_node_position(node)) for node in range(NUM_NODES)])
     
 
+    def angle_score(self, node):
+        """
+        Computes the angle score of the given node.
+
+        node: int
+            The node whose angle score will be calculated.
+
+        Returns: float
+            The angle score.
+        """
+
+        return self.node_pos[2*node] * self.node_pos[2*node+1]
+    
+
     def mirror(self, x=False, y=False, z=False):
         """
         Mirrors each node across a chosen plane going through the center of the
@@ -326,21 +340,19 @@ class Metamaterial:
 
     def reorder_nodes(self, node_order):
         """
-        Reorders the nodes in the metamaterial.
+        Reorders the nodes in the metamaterial. Does not mutate this metamaterial.
 
         node_order: list or tuple
-            The new ordering of the nodes, where the node with index value
-            i at the j-th index of node_order will now be the node at
-            index j of the metamaterial.
+            The new ordering of the nodes, where for each node_order[i] = j,
+            the j-th current node of the metamaterial will become the i-th
+            node of the reordered metamaterial.
 
         Returns: Metamaterial
             The metamaterial with the reordered nodes.
         """
         
         # Stores the reordered node positions
-        reordered_node_pos = np.array(
-            [self.node_pos[2*node_order[i]:2*node_order[i]+2] for i in range(self.node_pos.shape[0]//2)]
-        ).reshape(self.node_pos.shape[0])
+        reordered_node_pos = np.array([self.node_pos[2*node_order[i]:2*node_order[i]+2] for i in range(self.node_pos.shape[0]//2)]).reshape(self.node_pos.shape[0])
 
         # Stores the reordered edge adjacencies
         reordered_edge_adj = np.zeros(EDGE_ADJ_SIZE)
@@ -360,7 +372,7 @@ class Metamaterial:
 
     def sort_rep(self):
         """
-        Sorts the nodes by the product of the two rep angles.
+        Sorts the nodes in increasing order by the product of the two rep angles.
 
         Returns: Metamaterial
             The sorted metamaterial representation.
@@ -369,11 +381,71 @@ class Metamaterial:
         # Stores the sorted node IDs
         sorted_node_indices = sorted(
             [i for i in range(self.node_pos.shape[0]//2)],
-                key=lambda x: self.node_pos[2*x]*self.node_pos[2*x+1]
+                key=lambda node: self.angle_score(node)
         )
         sorted_node_indices.append(NUM_NODES-1) # Includes the center node as last node
 
         return self.reorder_nodes(sorted_node_indices)
+
+
+    def best_node_match(self, mat2, nodes1, nodes2):
+        """
+        Computes the best matching between the first nodes of the given materials.
+
+        mat2: Metamaterial
+            The second metamaterial for the best node matching. Assumed to have at
+            least as many nodes to match as this metamaterial.
+
+        nodes1: int
+            The number of nodes from mat1 (from index 0) that will be compared
+            in the matching. Must be <= NUM_NODES and <= nodes2.
+
+        nodes2: int
+            The number of nodes from mat2 (from index 0) that will be compared
+            in the matching. Must be <= NUM_NODES and >= nodes1.
+
+        Returns: list
+            The best matching of each selected node in this metamaterial to nodes
+            in mat2. For each output[i] = j, it means mat1's node i should map to
+            mat2's node j. Thus, if this list is used to reorder a metamaterial,
+            it should be used on mat2's reorder_nodes() function, not mat1's.
+        """
+
+        # Stores arrays for the function
+        pair = [-1] * nodes1 # The node mapping to it
+
+        # Computes each this node's preferred matches
+        score = lambda n1: (lambda n2: np.abs(self.angle_score(n1) - mat2.angle_score(n2)))
+        favorites = [sorted([j for j in range(nodes2)], key=score(i)) for i in range(nodes1)]
+
+        # Runs through a matching algorithm
+        while -1 in pair:
+            for node in range(nodes1):
+
+                # Only tries to make a match if this node does not already have one
+                if pair[node] == -1:
+                    for favorite in favorites[node]:
+
+                        # Checks if this node can replace the old one
+                        if favorite in pair:
+
+                            # Checks if this is worse
+                            fav_ind = pair.index(favorite)
+                            if score(node)(favorite) >= score(fav_ind)(favorite):
+                                continue
+
+                            # Removes the old node
+                            pair[fav_ind] = -1
+
+                        # Stores this as the new pair
+                        pair[node] = favorite
+                        break
+
+        # Reverses the pairings to ensure mat1 maps to mat2 nodes
+        # fixed_pair = [0] * nodes1
+        # for node in range(nodes1):
+        #     fixed_pair[pair[node]] = node
+        return pair
 
 
     def flatten_rep(self):
