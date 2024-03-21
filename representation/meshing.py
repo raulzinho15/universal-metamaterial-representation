@@ -225,7 +225,7 @@ def generate_metamaterials_zigzag_meshes(metamaterials: list[Metamaterial], shap
         dx = i%square_side if dz % 2 == 0 else (square_side-i-1)%square_side
 
         # Meshes the material
-        material = material.translate(dx=dx*1.2*max(shape), dz=dz*1.2*max(shape))
+        material = material.translate(dx=(dx-square_side//2)*1.5*max(shape), dz=(dz-square_side//2)*1.5*max(shape))
         next_vertices, next_faces = generate_metamaterial_grid_mesh(material, shape)
         vertices.extend(next_vertices)
         faces.extend([tuple(map(lambda x: x+vertex_count, face)) for face in next_faces])
