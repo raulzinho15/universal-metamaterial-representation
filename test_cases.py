@@ -83,7 +83,7 @@ expected = 5
 actual = edge_adj_index(0,6)
 assert expected == actual, f"Got {actual}, but expected {expected}."
 print(".", end="")
-expected = 20
+expected = EDGE_ADJ_SIZE-1
 actual = edge_adj_index(5,6)
 assert expected == actual, f"Got {actual}, but expected {expected}."
 print(".", end="")
@@ -106,7 +106,7 @@ expected = 4
 actual = face_adj_index(0,1,6)
 assert expected == actual, f"Got {actual}, but expected {expected}."
 print(".", end="")
-expected = 34
+expected = FACE_ADJ_SIZE-1
 actual = face_adj_index(4,5,6)
 assert expected == actual, f"Got {actual}, but expected {expected}."
 print(".", end="")
