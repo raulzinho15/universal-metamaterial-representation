@@ -145,7 +145,7 @@ def plot_metamaterial(metamaterial: Metamaterial, subplot=None, filename="", ani
                 x2, y2, z2 = metamaterial.get_node_position(n2)
                 x3, y3, z3 = metamaterial.get_node_position(n3)
 
-                subplot.plot_trisurf([x1, x2, x3], [y1, y2, y3], [z1, z2, z3], alpha=0.4, color=face_colors[(n1, n2, n3)], triangles=[[0,1,2]])
+                subplot.plot_trisurf([x1, x2, x3], [y1, y2, y3], [z1, z2, z3], alpha=0.8, color='y', triangles=[[0,1,2]])
 
     if filename:
         plt.savefig(filename)
@@ -161,31 +161,70 @@ def plot_metamaterial(metamaterial: Metamaterial, subplot=None, filename="", ani
         plt.close()
 
 
-def plot_metamaterial_grid(metamaterial, shape, filename="", animate=False):
+def metamaterial_grid(metamaterial, shape):
+    """
+    Produces a grid of mirrored metamaterials.
+
+    metamaterial: Metamaterial
+        The metamaterial to be gridded.
+
+    shape: tuple of ints
+        The amount in the x, y, and z directions to grid the metamaterial.
+        If no gridding (i.e., just the metamaterial by itself), the input
+        should be (1,1,1).
+
+    Returns: list of Metamaterials
+        The list of the metamaterials in the grid of the given shape.
+    """
     
     # Stores the metamaterials to be plotted
     materials = [metamaterial]
 
     # Computes the metamaterials along the x axis
     new_materials = []
-    for dx in range(0, shape[0]):
+    for dx in range(shape[0]):
         mirror = dx % 2 == 1
         new_materials += [material.mirror(x=mirror).translate(dx=dx) for material in materials]
     materials = new_materials
 
     # Computes the metamaterials along the y axis
     new_materials = []
-    for dy in range(0, shape[1]):
+    for dy in range(shape[1]):
         mirror = dy % 2 == 1
         new_materials += [material.mirror(y=mirror).translate(dy=dy) for material in materials]
     materials = new_materials
 
     # Computes the metamaterials along the z axis
     new_materials = []
-    for dz in range(0, shape[2]):
+    for dz in range(shape[2]):
         mirror = dz % 2 == 1
         new_materials += [material.mirror(z=mirror).translate(dz=dz) for material in materials]
-    materials = new_materials
+
+    return new_materials
+
+
+def plot_metamaterial_grid(metamaterial, shape, filename="", animate=False):
+    """
+    Plots the metamaterial grid of the given shape at the given filename.
+
+    metamaterial: Metamaterial
+        The metamaterial to plot.
+
+    shape: tuple of ints
+        The amount in the x, y, and z directions to grid the metamaterial.
+        If no gridding (i.e., just the metamaterial by itself), the input
+        should be (1,1,1).
+
+    filename: str
+        The name of the file at which the plot image will be saved. If not
+        specified, the file will not be saved.
+
+    animate: bool
+        Whether the rotating animation will be played.
+    """
+
+    # Stores the gridded metamaterials to be plotted
+    materials = metamaterial_grid(metamaterial, shape)
 
     # Prepares the subplot
     fig = plt.figure()
@@ -211,11 +250,11 @@ def plot_metamaterial_grid(metamaterial, shape, filename="", animate=False):
     plt.close()
 
 
-def interpolate(model, material1, material2, interps, path, validate=False, shape=(1,1,1)):
+def interpolate(model, material1: Metamaterial, material2: Metamaterial, interps, validate=False):
     """
-    Linearly interpolates between the two given materials.
+    Generates the linear interpolation of the two materials.
 
-    model: MetamaterialAutoencoder
+    model: Metamaterial
         The model to use to interpolate.
 
     material1: Metamaterial
@@ -225,8 +264,57 @@ def interpolate(model, material1, material2, interps, path, validate=False, shap
         The material to be interpolated into.
 
     interps: int
-        The number of interpolations to compute. Includes the starting 
-        and ending metamaterial.
+        The number of interpolations to compute after the starting metamaterial.
+
+    validate: bool
+        Whether to validate the interpolated metamaterials and remove
+        any invalid edges/faces.
+
+    Returns: list[Metamaterial]
+        The list of interpolated metamaterials.
+    """
+
+    # Computes the latent representation of the two metamaterials
+    m1_latent = model.encoder(material1.flatten_rep(pad_dim=True))
+    m2_latent = model.encoder(material2.flatten_rep(pad_dim=True))
+
+    # Runs through each interpolation
+    materials = []
+    for ind, alpha in enumerate([x/interps for x in range(interps+1)]):
+
+        # Decodes the interpolated latent representation
+        if ind == 0:
+            materials.append(material1)
+        elif ind == interps:
+            materials.append(material2)
+        else:
+            decoding = model.decoder(m1_latent*(1-alpha) + m2_latent*alpha)
+            materials.append(Metamaterial.from_tensor(decoding))
+
+        # Validates the decoded representation
+        if validate:
+            materials[-1].remove_invalid_faces() # Removes faces without all edges in the rep
+            materials[-1].remove_invalid_edges() # Removes edges intersecting with faces
+            materials[-1].remove_invalid_faces() # Removes faces without all edges in the rep after edge removal
+
+    return materials
+
+
+def plot_interpolation(model, material1: Metamaterial, material2: Metamaterial, interps, path, validate=False, shape=(1,1,1)):
+    """
+    Plots the interpolation between the two given materials.
+
+    model: Metamaterial
+        The model to use to interpolate.
+
+    material1: Metamaterial
+        The base material for interpolation.
+
+    material2: Metamaterial
+        The material to be interpolated into.
+
+    interps: int
+        The number of interpolations to compute after the starting metamaterial.
 
     path: str
         The path at which the intermediate metamaterials will be placed.
@@ -234,33 +322,12 @@ def interpolate(model, material1, material2, interps, path, validate=False, shap
     validate: bool
         Whether to validate the interpolated metamaterials and remove
         any invalid edges/faces.
+
+    shape: tuple
+        The gridded shape of the plotting. If (1,1,1), it is just the metamaterial by itself.
     """
 
-    # Reorders the nodes to minimize movement during interpolation
-    # reordering = 
-
-    # Computes the latent representation of the two metamaterials
-    m1_latent = model.encoder(material1.flatten_rep())
-    m2_latent = model.encoder(material2.flatten_rep())
-
-    # Runs through each interpolation
-    for ind, alpha in enumerate([x/interps for x in range(interps+1)]):
-
-        # Decodes the interpolated latent representation
-        if 0 < ind < interps:
-            decoding = model.decoder(m1_latent*(1-alpha) + m2_latent*alpha)
-            material = Metamaterial.from_tensor(torch.cat((decoding, torch.zeros(FACE_ADJ_SIZE))))
-        elif ind == 0:
-            material = material1
-        else:
-            material = material2
-
-        # Validates the decoded representation
-        if validate:
-            material.remove_invalid_faces() # Removes faces without all edges in the rep
-            material.remove_invalid_edges() # Removes edges intersecting with faces
-            material.remove_invalid_faces() # Removes faces without all edges in the rep after edge removal
-
+    for ind, material in enumerate(interpolate(model, material1, material2, interps, validate=validate)):
         plot_metamaterial_grid(material, shape=shape, filename=f"{path}/metamaterial{ind}.png")
         plot_metamaterial_grid(material, shape=shape, filename=f"{path}/metamaterial{interps*2-ind}.png")
 

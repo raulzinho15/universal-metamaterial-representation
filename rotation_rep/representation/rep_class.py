@@ -48,6 +48,9 @@ class Metamaterial:
         self.translate_y = 0
         self.translate_z = 0
 
+        # Stores already-computed node positions on the cube for computation speed-up
+        self.cube_pos = {}
+
 
     def get_node_position(self, node):
         """
@@ -56,7 +59,7 @@ class Metamaterial:
         node: int
             The ID of the node whose position will be returned.
 
-        Returns: 3-tuple of floats
+        Returns: ndarray
             The 3D position of the given node.
         """
 
@@ -64,20 +67,23 @@ class Metamaterial:
         if node == NUM_NODES-1:
             x,y,z = (0.5,0.5,0.5)
 
+        elif node in self.cube_pos:
+            return self.cube_pos[node]
+
         # Computes the position of a non-center node
         else:
             theta, phi = self.node_pos[node*2:(node+1)*2]
             theta, phi = theta*np.pi, phi*2*np.pi
-            pos = spherical_to_euclidian(theta, phi)
-            pos /= np.max(np.abs(pos))
-            x, y, z = (pos + np.ones(3)) / 2
+            # biases = [0.8,0.5,0.8,0.8]
+            x,y,z = project_onto_cube(*spherical_to_euclidian(theta, phi))#, grid_lines=3, bias_cutoff=biases[node])
 
         # Returns the transformed position
-        return (
+        self.cube_pos[node] = np.array([
             self.translate_x + (1-x if self.mirror_x else x),
             self.translate_y + (1-y if self.mirror_y else y),
             self.translate_z + (1-z if self.mirror_z else z)
-        )
+        ])
+        return self.cube_pos[node]
 
 
     def get_node_positions(self):
@@ -448,12 +454,17 @@ class Metamaterial:
         return pair
 
 
-    def flatten_rep(self):
+    def flatten_rep(self, pad_dim=False):
         """
         Computes the flattened array representation of the metamaterial.
+
+        pad_dim: bool
+            Whether an extra dimension will be added for padding to act as a batch of 1.
         """
         concatenation = np.concatenate((self.node_pos, self.edge_adj, self.face_adj))
-        return torch.from_numpy(concatenation).type(torch.float32)#[:NODE_POS_SIZE+EDGE_ADJ_SIZE]
+        if pad_dim:
+            concatenation = concatenation.reshape((1,concatenation.shape[0]))
+        return torch.from_numpy(concatenation).type(torch.float32)
 
 
     def copy(self):
@@ -487,10 +498,9 @@ class Metamaterial:
             A tensor with the representation arrays concatenated together.
         """
 
-        numpy_rep = rep_tensor.detach().numpy()
+        numpy_rep = rep_tensor.detach().numpy().reshape(NODE_POS_SIZE+EDGE_ADJ_SIZE+FACE_ADJ_SIZE)
         numpy_rep[NODE_POS_SIZE:] = (numpy_rep[NODE_POS_SIZE:] > 0.5).astype(float)
         return Metamaterial(
             numpy_rep[:NODE_POS_SIZE],
             numpy_rep[NODE_POS_SIZE:NODE_POS_SIZE+EDGE_ADJ_SIZE],
-            # np.zeros(FACE_ADJ_SIZE))
             numpy_rep[NODE_POS_SIZE+EDGE_ADJ_SIZE:])

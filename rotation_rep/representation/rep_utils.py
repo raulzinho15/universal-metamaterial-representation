@@ -40,7 +40,7 @@ def euclidian_to_spherical(x, y, z):
     return theta/np.pi, phi/(2*np.pi)
 
 
-def spherical_to_euclidian(theta, phi):
+def spherical_to_euclidian(theta, phi, biased=True):
     """
     Converts the given spherical coordinates into Euclidian coordinates.
     Assumes a radius of 1.
@@ -63,6 +63,59 @@ def spherical_to_euclidian(theta, phi):
     z = np.cos(theta)
 
     return np.array([x,y,z])
+
+
+def project_onto_cube(x, y, z, grid_lines=0, verbose=False, bias_cutoff=1):
+    """
+    Projects the given coordinates onto the surface of the unit cube
+    centered at (0.5, 0.5, 0.5).
+
+    x: float
+        The x-coordinate to project.
+
+    y: float
+        The y-coordinate to project.
+
+    z: float
+        The z-coordinate to project.
+
+    grid_lines: int
+        How many grid lines to bias the points toward. If is 0, no biasing
+        will occur. Must be at least 2 for biasing.
+
+    bias_cutoff: float
+        The cutoff of how proportionally far from the grid center a node must
+        be before it is biased.
+
+    Returns: ndarray
+        The points projected onto the surface of the unit cube.
+    """
+
+    # Projects onto the cube
+    pos = np.array([x,y,z])
+    pos /= np.max(np.abs(pos))
+    pos = (pos + np.ones(3)) / 2
+
+    # Biases the points toward the grid lines
+    if grid_lines:
+
+        # Gets the distance of the node from the center of a grid square
+        grid_lines -= 1
+        dr = (pos*grid_lines) % 1
+        
+        # Computes whether the node is in the bias threshold
+        cutoffs = np.abs(dr - 0.5) <= (0.5 * bias_cutoff)
+
+        # Computes the biased position of the node
+        scaled_pos_int = (pos*grid_lines)//1
+        normalized_grid_dist = (dr - (1-bias_cutoff)/2)/bias_cutoff
+        pos = cutoffs * (scaled_pos_int + normalized_grid_dist) + (1-cutoffs) * np.round(pos * grid_lines, decimals=0)
+        pos /= grid_lines
+
+    if verbose:
+        print(pos)
+        print()
+    return pos
 
 
 def edge_adj_index(node1, node2):

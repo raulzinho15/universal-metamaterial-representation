@@ -9,80 +9,34 @@ from rotation_rep.representation.rep_class import *
 class MetamaterialAE(nn.Module):
     """
     A class for handling computations involving
-    the metamaterial variational autoencoder.
+    the metamaterial autoencoder.
     """
 
     # Initializes the structure of the NN
     def __init__(self):
         super().__init__()
 
-        # Node position sizes
-        self.node_input_size = NODE_POS_SIZE
-        self.node_hidden_size = NODE_POS_SIZE*2
-        self.node_latent_size = NODE_POS_SIZE*2
+        # Sizes
+        self.input_size = NODE_POS_SIZE + EDGE_ADJ_SIZE + FACE_ADJ_SIZE
+        self.hidden_size = self.input_size*2
+        self.latent_size = self.input_size*2
 
-        # Node position encoder
-        self.node_encoder_stack = nn.Sequential(
-            nn.Linear(self.node_input_size, self.node_hidden_size),
+        # Encoder
+        self.encoder_stack = nn.Sequential(
+            nn.Linear(self.input_size, self.hidden_size),
             nn.ReLU(),
-            nn.Linear(self.node_hidden_size, self.node_hidden_size),
+            nn.Linear(self.hidden_size, self.hidden_size),
             nn.ReLU(),
-            nn.Linear(self.node_hidden_size, self.node_latent_size),
+            nn.Linear(self.hidden_size, self.latent_size),
         )
 
-        # Node position decoder
-        self.node_decoder_stack = nn.Sequential(
-            nn.Linear(self.node_latent_size, self.node_hidden_size),
+        # Decoder
+        self.decoder_stack = nn.Sequential(
+            nn.Linear(self.latent_size, self.hidden_size),
             nn.ReLU(),
-            nn.Linear(self.node_hidden_size, self.node_hidden_size),
+            nn.Linear(self.hidden_size, self.hidden_size),
             nn.ReLU(),
-            nn.Linear(self.node_hidden_size, self.node_input_size),
-        )
-
-        # Edge adjacency sizes
-        self.edge_input_size = EDGE_ADJ_SIZE
-        self.edge_hidden_size = EDGE_ADJ_SIZE*2
-        self.edge_latent_size = EDGE_ADJ_SIZE*2
-
-        # Edge adjacency encoder
-        self.edge_encoder_stack = nn.Sequential(
-            nn.Linear(self.edge_input_size, self.edge_hidden_size),
-            nn.ReLU(),
-            nn.Linear(self.edge_hidden_size, self.edge_hidden_size),
-            nn.ReLU(),
-            nn.Linear(self.edge_hidden_size, self.edge_latent_size),
-        )
-
-        # Edge adjacency decoder
-        self.edge_decoder_stack = nn.Sequential(
-            nn.Linear(self.edge_latent_size, self.edge_hidden_size),
-            nn.ReLU(),
-            nn.Linear(self.edge_hidden_size, self.edge_hidden_size),
-            nn.ReLU(),
-            nn.Linear(self.edge_hidden_size, self.edge_input_size),
-        )
-
-        # Face adjacency sizes
-        self.face_input_size = FACE_ADJ_SIZE
-        self.face_hidden_size = FACE_ADJ_SIZE*2
-        self.face_latent_size = FACE_ADJ_SIZE*2
-
-        # Face adjacency encoder
-        self.face_encoder_stack = nn.Sequential(
-            nn.Linear(self.face_input_size, self.face_hidden_size),
-            nn.ReLU(),
-            nn.Linear(self.face_hidden_size, self.face_hidden_size),
-            nn.ReLU(),
-            nn.Linear(self.face_hidden_size, self.face_latent_size),
-        )
-
-        # Face adjacency decoder
-        self.face_decoder_stack = nn.Sequential(
-            nn.Linear(self.face_latent_size, self.face_hidden_size),
-            nn.ReLU(),
-            nn.Linear(self.face_hidden_size, self.face_hidden_size),
-            nn.ReLU(),
-            nn.Linear(self.face_hidden_size, self.face_input_size),
+            nn.Linear(self.hidden_size, self.input_size),
         )
 
 
@@ -90,36 +44,14 @@ class MetamaterialAE(nn.Module):
         """
         Runs the network's encoder on the input.
         """
-
-        # Separates the components
-        node_pos = x[:,:self.node_input_size]
-        edge_adj = x[:,self.node_input_size:self.node_input_size+self.edge_input_size]
-        face_adj = x[:,self.node_input_size+self.edge_input_size:]
-
-        # Passes through the encoding layers
-        node_encoding = self.node_encoder_stack(node_pos)
-        edge_encoding = self.edge_encoder_stack(edge_adj)
-        face_encoding = self.face_encoder_stack(face_adj)
-
-        return torch.cat((node_encoding, edge_encoding, face_encoding), dim=1)
+        return self.encoder_stack(x)
     
 
     def decoder(self, z):
         """
         Runs the network's decoder on the input.
         """
-
-        # Separates the components
-        node_pos = z[:,:self.node_latent_size]
-        edge_adj = z[:,self.node_latent_size:self.node_latent_size+self.edge_latent_size]
-        face_adj = z[:,self.node_latent_size+self.edge_latent_size:]
-
-        # Passes through the decoding layers
-        node_decoding = self.node_decoder_stack(node_pos)
-        edge_decoding = self.edge_decoder_stack(edge_adj)
-        face_decoding = self.face_decoder_stack(face_adj)
-
-        return torch.cat((node_decoding, edge_decoding, face_decoding), dim=1)
+        return self.decoder_stack(z)
 
 
     # Defines a forward pass through the network
