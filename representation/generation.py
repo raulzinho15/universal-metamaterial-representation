@@ -6,7 +6,7 @@ from representation.rep_class import *
 from representation.rep_utils import *
 
 
-def random_metamaterial(edge_prob=0.5, face_prob=0.5, grid_spacing=None, with_faces=True, validate=False):
+def random_metamaterial(edge_prob=0.5, face_prob=0.5, grid_spacing=None, with_faces=True, connected=False, cyclic=False, validate=False):
     """
     Generates a random metamaterial's representation with its node positions,
     edge relations, and face relations. Implicitly determinable node positions
@@ -28,6 +28,12 @@ def random_metamaterial(edge_prob=0.5, face_prob=0.5, grid_spacing=None, with_fa
 
     with_faces: bool
         Whether the metamaterial will be generated with faces or not.
+
+    connected: bool
+        Whether the metamaterial will be connected (no floating edge islands).
+
+    cyclic: bool
+        Whether the metamaterial will have no hanging connected edges.
 
     validate: bool
         Whether to remove any invalid edges/faces from the generated metamaterial.
@@ -54,6 +60,9 @@ def random_metamaterial(edge_prob=0.5, face_prob=0.5, grid_spacing=None, with_fa
 
     metamaterial = Metamaterial(node_pos, edge_adj, face_adj)
 
+    if connected:
+        metamaterial.remove_edge_disconnections()
+
     # Ensures the representation is of a validly constructed metamaterial
     if validate:
         metamaterial.remove_invalid_faces() # Removes faces without all edges in the rep
@@ -62,23 +71,25 @@ def random_metamaterial(edge_prob=0.5, face_prob=0.5, grid_spacing=None, with_fa
 
     return metamaterial
 
+
 # Computes consistent colors for each node
-node_colors = {}
+NODE_COLORS = {}
 for n1 in range(NUM_NODES):
-    node_colors[n1] = tuple(random() for _ in range(3))
+    NODE_COLORS[n1] = tuple(random() for _ in range(3))
 
 # Computes consistent colors for each edge
-edge_colors = {}
+EDGE_COLORS = {}
 for n1 in range(NUM_NODES):
     for n2 in range(n1+1, NUM_NODES):
-        edge_colors[(n1, n2)] = tuple(random() for _ in range(3))
+        EDGE_COLORS[(n1, n2)] = tuple(random() for _ in range(3))
 
 # Computes consistent colors for each face
-face_colors = {}
+FACE_COLORS = {}
 for n1 in range(NUM_NODES):
     for n2 in range(n1+1, NUM_NODES):
         for n3 in range(n2+1, NUM_NODES):
-            face_colors[(n1, n2, n3)] = tuple(random() for _ in range(3))
+            FACE_COLORS[(n1, n2, n3)] = tuple(random() for _ in range(3))
+
 
 def plot_metamaterial(metamaterial: Metamaterial, subplot=None, filename="", animate=False, plot_nodes=False):
     """
@@ -115,7 +126,7 @@ def plot_metamaterial(metamaterial: Metamaterial, subplot=None, filename="", ani
     if plot_nodes:
         for node in range(NUM_NODES):
             x,y,z = metamaterial.get_node_position(node)
-            subplot.plot([x+0.1,x-0.1], [y+0.1, y-0.1], zs=[z+0.1, z-0.1], linewidth=5, color=node_colors[node])
+            subplot.plot([x+0.1,x-0.1], [y+0.1, y-0.1], zs=[z+0.1, z-0.1], linewidth=5, color=NODE_COLORS[node])
 
     # Plots each edge
     for n1 in range(NUM_NODES):
@@ -129,7 +140,7 @@ def plot_metamaterial(metamaterial: Metamaterial, subplot=None, filename="", ani
             x1, y1, z1 = metamaterial.get_node_position(n1)
             x2, y2, z2 = metamaterial.get_node_position(n2)
 
-            subplot.plot([x1, x2], [y1, y2], zs=[z1, z2], linewidth=5, color=edge_colors[(n1, n2)])
+            subplot.plot([x1, x2], [y1, y2], zs=[z1, z2], linewidth=5, color=EDGE_COLORS[(n1, n2)])
 
     # Plots each face
     for n1 in range(NUM_NODES):

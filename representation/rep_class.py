@@ -344,6 +344,85 @@ class Metamaterial:
                         self.face_adj[face_adj_index(n1, n2, n3)] = 0
 
 
+    def nodes_edge_connected_to(self, node):
+        """
+        Finds the nodes that are connected to the given node by edges.
+
+        node: int
+            The node ID of the node whose connected nodes will be found.
+
+        Returns: list of ints
+            The list of all nodes connected to the given node, including
+            itself.
+        """
+
+        # Stores the values for BFS
+        queue = [node]
+        seen = set([node])
+
+        # Runs BFS while there are still more nodes to be visited
+        while queue:
+            current = queue.pop(0)
+
+            # Runs through all adjacent nodes
+            for n in range(NUM_NODES):
+
+                # Skips seen nodes
+                if n in seen:
+                    continue
+
+                # Queues the node if adjacent
+                if self.has_edge(current, n):
+                    queue.append(n)
+                    seen.add(n)
+
+        return list(seen)
+
+
+    def remove_edge_disconnections(self):
+        """
+        Removes the disconnections from the metamaterial, keeping a
+        connected component with the largest number of nodes. Mutates the
+        metamaterial.
+        """
+        
+        # Stores the nodes that have yet to be checked
+        nodes_left = [i for i in range(NUM_NODES)]
+
+        # Runs through each connected component
+        sizes = {}
+        while nodes_left:
+
+            # Finds the connected nodes
+            current = nodes_left[0]
+            connected_nodes = self.nodes_edge_connected_to(current)
+
+            # Removes all the connected nodes from the nodes left to check
+            for node in connected_nodes:
+                nodes_left.remove(node)
+
+            # Stores the number of nodes in the connected component
+            sizes[current] = len(connected_nodes)
+
+        # Finds all nodes in a largest connected component
+        max_component = max(sizes, key=lambda x:sizes[x])
+        nodes = set(self.nodes_edge_connected_to(max_component))
+
+        # Computes the nodes whose edges must be removed
+        nodes_to_remove = [i for i in range(NUM_NODES) if i not in nodes]
+
+        # Removes the edges from each of these nodes
+        for n1 in nodes_to_remove:
+            for n2 in range(NUM_NODES):
+
+                # Skips self
+                if n1 == n2:
+                    continue
+
+                # Removes edge
+                self.edge_adj[edge_adj_index(n1, n2)] = 0
+
+
     def reorder_nodes(self, node_order):
         """
         Reorders the nodes in the metamaterial. Does not mutate this metamaterial.
@@ -503,4 +582,5 @@ class Metamaterial:
         return Metamaterial(
             numpy_rep[:NODE_POS_SIZE],
             numpy_rep[NODE_POS_SIZE:NODE_POS_SIZE+EDGE_ADJ_SIZE],
-            numpy_rep[NODE_POS_SIZE+EDGE_ADJ_SIZE:])
+            numpy_rep[NODE_POS_SIZE+EDGE_ADJ_SIZE:]
+        )
