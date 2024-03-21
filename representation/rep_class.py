@@ -23,14 +23,14 @@ class Metamaterial:
             array, where a 1 at the corresponding adjacency matrix's i-th row and
             j-th column means that nodes i and j are connected by an edge. All other
             entries are 0. The logic for extracting the edge adjacencies can be found
-            in the have_edge() function.
+            in the edge_adj_index() function.
         
         face_adj: ndarray
             The third entry in this tuple is a 1d numpy array face adjacency
             array, where a 1 at the corresponding adjacency tensor's (i,j,k) index
             means that nodes i, j, and k are connected by a triangular face. All other
             entries are 0. The logic for extracting the face adjacencies can be found
-            in the have_face() function.
+            in the face_adj_index() function.
         """
 
         # Stores the rep arrays

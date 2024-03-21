@@ -24,6 +24,7 @@ def euclidian_to_spherical(x, y, z):
     Returns: ndarray
         The first entry is the angle off the z-axis, normalized to [0,1].
         The second entry is the angle on the xy plane, normalized to [0,1].
+        If the input coordinate is too close to (0,0,0), returns (0,0).
     """
 
     # Computes the spherical coordinates
@@ -40,7 +41,7 @@ def euclidian_to_spherical(x, y, z):
     return theta/np.pi, phi/(2*np.pi)
 
 
-def spherical_to_euclidian(theta, phi, biased=True):
+def spherical_to_euclidian(theta, phi):
     """
     Converts the given spherical coordinates into Euclidian coordinates.
     Assumes a radius of 1.
@@ -65,7 +66,7 @@ def spherical_to_euclidian(theta, phi, biased=True):
     return np.array([x,y,z])
 
 
-def project_onto_cube(x, y, z, grid_lines=0, verbose=False, bias_cutoff=1):
+def project_onto_cube(x, y, z, grid_lines=0, bias_cutoff=1):
     """
     Projects the given coordinates onto the surface of the unit cube
     centered at (0.5, 0.5, 0.5).
@@ -112,9 +113,6 @@ def project_onto_cube(x, y, z, grid_lines=0, verbose=False, bias_cutoff=1):
         pos = cutoffs * (scaled_pos_int + normalized_grid_dist) + (1-cutoffs) * np.round(pos * grid_lines, decimals=0)
         pos /= grid_lines
 
-    if verbose:
-        print(pos)
-        print()
     return pos
 
 
@@ -124,10 +122,10 @@ def edge_adj_index(node1, node2):
     in the edge adjacency representation array.
 
     node1: int
-        The ID of the first node.
+        The ID of the first node. Must not be equal to node2. Must be < NUM_NODES.
 
     node2: int
-        The ID of the second node.
+        The ID of the second node. Must not be equal to node1. Must be < NUM_NODES.
 
     Returns: int
         The index at which the given nodes' edge adjacency is located in the
@@ -163,6 +161,9 @@ def to_edge_adj_rep(edge_adj_matrix):
     edge_adj_matrix: ndarray
         A matrix where the entry at index (i,j) is 1 if the nodes with
         IDs i and j have an edge between them, or 0 otherwise.
+
+    Returns: ndarray
+        The edge adjacency array as described in the Metamaterial initializer.
     """
 
     # Prepares the rep array
@@ -176,19 +177,49 @@ def to_edge_adj_rep(edge_adj_matrix):
     return edge_adj
 
 
+def to_edge_adj_matrix(edge_adj):
+    """
+    Converts the given edge adjacency representation into an edge adjacency
+    matrix.
+
+    edge_adj: ndarray
+        The edge adjacency array as described in the Metamaterial initializer.
+
+    Returns: ndarray
+        A matrix where the entry at index (i,j) is 1 if the nodes with
+        IDs i and j have an edge between them, or 0 otherwise.
+    """
+
+    # Prepares the adjacency matrix
+    edge_adj_matrix = np.zeros((NUM_NODES, NUM_NODES))
+
+    # Stores each edge adjacency from the rep
+    for n1 in range(NUM_NODES):
+        for n2 in range(NUM_NODES):
+
+            # Gets the edge adjacency from the rep
+            if n1 != n2:
+                edge_adj_matrix[n1, n2] = edge_adj[edge_adj_index(n1, n2)]
+
+    return edge_adj_matrix
+
+
 def face_adj_index(node1, node2, node3):
     """
     Computes the index at which the three nodes' face adjacency is contained
     in the face adjacency representation array.
 
     node1: int
-        The ID of the first node.
+        The ID of the first node. Must not be equal to node2 or node3.
+        Must be < NUM_NODES.
 
     node2: int
-        The ID of the second node.
+        The ID of the second node. Must not be equal to node2 or node3.
+        Must be < NUM_NODES.
 
     node3: int
-        The ID of the third node.
+        The ID of the third node. Must not be equal to node2 or node3.
+        Must be < NUM_NODES.
 
     Returns: int
         The index at which the given nodes' face adjacency is located.
@@ -231,6 +262,9 @@ def to_face_adj_rep(face_adj_tensor):
     face_adj_tensor: ndarray
         A 3D tensor where the entry at index (i,j,k) is 1 if the nodes with
         IDs i, j, and k have a triangular face between them, or 0 otherwise.
+
+    Returns: ndarray
+        The face adjacency array as described in the Metamaterial initializer.
     """
 
     # Prepares the rep array
@@ -240,7 +274,34 @@ def to_face_adj_rep(face_adj_tensor):
     for n1 in range(NUM_NODES):
         for n2 in range(n1+1, NUM_NODES):
             for n3 in range(n2+1, NUM_NODES):
-                # print(n1, n2, n3)
                 face_adj[face_adj_index(n1, n2, n3)] = face_adj_tensor[n1, n2, n3]
 
     return face_adj
+
+
+def to_face_adj_tensor(face_adj):
+    """
+    Converts the given face adjacency representation into a face adjacency
+    tensor.
+
+    face_adj: ndarray
+        The face adjacency array as described in the Metamaterial initializer.
+
+    Returns: ndarray
+        A 3D tensor where the entry at index (i,j,k) is 1 if the nodes with
+        IDs i, j, and k have a triangular face between them, or 0 otherwise.
+    """
+
+    # Prepares the adjacency tensor
+    face_adj_matrix = np.zeros((NUM_NODES, NUM_NODES, NUM_NODES))
+
+    # Stores each face adjacency from the rep
+    for n1 in range(NUM_NODES):
+        for n2 in range(NUM_NODES):
+            for n3 in range(NUM_NODES):
+
+                # Gets the face adjacency from the rep
+                if not (n1 == n2 or n1 == n3 or n2 == n3):
+                    face_adj_matrix[n1, n2, n3] = face_adj[face_adj_index(n1, n2, n3)]
+
+    return face_adj_matrix
