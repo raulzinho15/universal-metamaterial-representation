@@ -344,9 +344,9 @@ class Metamaterial:
                         self.face_adj[face_adj_index(n1, n2, n3)] = 0
 
 
-    def nodes_edge_connected_to(self, node):
+    def nodes_connected_to(self, node):
         """
-        Finds the nodes that are connected to the given node by edges.
+        Finds the nodes that are connected to the given node by edges/faces.
 
         node: int
             The node ID of the node whose connected nodes will be found.
@@ -371,15 +371,29 @@ class Metamaterial:
                 if n in seen:
                     continue
 
-                # Queues the node if adjacent
+                # Queues the node if adjacent via an edge
                 if self.has_edge(current, n):
                     queue.append(n)
                     seen.add(n)
+                    continue
+
+                # Handles face adjacencies
+                for n1 in range(NUM_NODES):
+
+                    # Skips seen nodes
+                    if n1 == current or n1 == n:
+                        continue
+
+                    # Queues the node if adjacent via an face
+                    if self.has_face(current, n, n1):
+                        queue.append(n)
+                        seen.add(n)
+                        break
 
         return list(seen)
 
 
-    def remove_edge_disconnections(self):
+    def remove_disconnections(self):
         """
         Removes the disconnections from the metamaterial, keeping a
         connected component with the largest number of nodes. Mutates the
@@ -395,7 +409,7 @@ class Metamaterial:
 
             # Finds the connected nodes
             current = nodes_left[0]
-            connected_nodes = self.nodes_edge_connected_to(current)
+            connected_nodes = self.nodes_connected_to(current)
 
             # Removes all the connected nodes from the nodes left to check
             for node in connected_nodes:
@@ -406,7 +420,7 @@ class Metamaterial:
 
         # Finds all nodes in a largest connected component
         max_component = max(sizes, key=lambda x:sizes[x])
-        nodes = set(self.nodes_edge_connected_to(max_component))
+        nodes = set(self.nodes_connected_to(max_component))
 
         # Computes the nodes whose edges must be removed
         nodes_to_remove = [i for i in range(NUM_NODES) if i not in nodes]

@@ -6,7 +6,7 @@ from representation.rep_class import *
 from representation.rep_utils import *
 
 
-def random_metamaterial(edge_prob=0.5, face_prob=0.5, grid_spacing=None, with_faces=True, connected=False, cyclic=False, validate=False):
+def random_metamaterial(edge_prob=0.5, face_prob=0.5, grid_spacing=None, connected=False, cyclic=False, validate=False):
     """
     Generates a random metamaterial's representation with its node positions,
     edge relations, and face relations. Implicitly determinable node positions
@@ -25,9 +25,6 @@ def random_metamaterial(edge_prob=0.5, face_prob=0.5, grid_spacing=None, with_fa
         If an int, will only place nodes at random points along an evenly-spaced grid
         of the unit cube, where the number of grid spaces along each dimension
         is this value. Minimum of 1. If None, chooses random node positions.
-
-    with_faces: bool
-        Whether the metamaterial will be generated with faces or not.
 
     connected: bool
         Whether the metamaterial will be connected (no floating edge islands).
@@ -53,15 +50,12 @@ def random_metamaterial(edge_prob=0.5, face_prob=0.5, grid_spacing=None, with_fa
     edge_adj = (np.random.rand(EDGE_ADJ_SIZE) < edge_prob).astype(float)
     
     # Generates the face adjacency representation array
-    if with_faces:
-        face_adj = (np.random.rand(FACE_ADJ_SIZE) < face_prob).astype(float)
-    else:
-        face_adj = np.zeros(FACE_ADJ_SIZE)
+    face_adj = (np.random.rand(FACE_ADJ_SIZE) < face_prob).astype(float)
 
     metamaterial = Metamaterial(node_pos, edge_adj, face_adj)
 
     if connected:
-        metamaterial.remove_edge_disconnections()
+        metamaterial.remove_disconnections()
 
     # Ensures the representation is of a validly constructed metamaterial
     if validate:

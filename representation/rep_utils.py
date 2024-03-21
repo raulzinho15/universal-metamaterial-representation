@@ -1,6 +1,6 @@
 import numpy as np
 
-NUM_NODES = 6 + 1 # Non-center nodes plus the single center node
+NUM_NODES = 12 + 1 # Non-center nodes plus the single center node
 
 NODE_POS_SIZE = (NUM_NODES-1)*2
 EDGE_ADJ_SIZE = NUM_NODES * (NUM_NODES-1) // 2

@@ -208,7 +208,18 @@ def generate_metamaterial_grid_mesh(metamaterial: Metamaterial, shape):
     return vertices, faces
 
 
-def generate_metamaterials_zigzag_meshes(metamaterials: list[Metamaterial], shape):
+def generate_metamaterials_zigzag_meshes(metamaterials: list[Metamaterial], shape=(1,1,1)):
+    """
+    Generates meshes for the given metamaterials with the given shape in a
+    zigzag pattern.
+
+    metamaterials: list[Metamaterial]
+        The metamaterials of which meshes will be generated.
+
+    shape: tuple of ints
+        The gridding to be done on the metamaterials. If (1,1,1), then only
+        one of each metamaterial will be meshed.
+    """
     
     # Finds the best square
     square_side = math.ceil(len(metamaterials)**0.5)
