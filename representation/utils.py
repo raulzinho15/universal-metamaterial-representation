@@ -38,7 +38,10 @@ def triangle_line_intersection(tri1, tri2, tri3, line1, line2):
     # Sets up & solves the linear system
     A = np.concatenate([tri1-tri2, tri1-tri3, lineD], axis=1)
     b = np.reshape(tri1-line0, (3,))
-    bgt = np.linalg.solve(A, b)
+    try:
+        bgt = np.linalg.solve(A, b)
+    except np.linalg.LinAlgError:
+        return False
 
     # Checks for intersection
     beta, gamma, t = bgt[0], bgt[1], bgt[2]
