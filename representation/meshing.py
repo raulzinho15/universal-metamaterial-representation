@@ -1,6 +1,6 @@
 import math
-from rotation_rep.representation.rep_class import *
-from rotation_rep.representation.generation import *
+from representation.rep_class import *
+from representation.generation import *
 
 THICKNESS = 0.02
 VERTICES_PER_EDGE = 8

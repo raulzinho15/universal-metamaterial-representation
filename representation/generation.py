@@ -2,8 +2,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 from random import random, choice
 
-from rotation_rep.representation.rep_class import *
-from rotation_rep.representation.rep_utils import *
+from representation.rep_class import *
+from representation.rep_utils import *
 
 
 def random_metamaterial(edge_prob=0.5, face_prob=0.5, grid_spacing=None, with_faces=True, validate=False):

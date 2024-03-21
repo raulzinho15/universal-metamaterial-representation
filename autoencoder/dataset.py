@@ -1,5 +1,5 @@
 from torch.utils.data import Dataset
-from rotation_rep.representation.generation import *
+from representation.generation import *
 
 class MetamaterialDataset(Dataset):
 

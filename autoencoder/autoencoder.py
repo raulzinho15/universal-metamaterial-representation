@@ -1,8 +1,8 @@
 import torch
 from torch import nn
 
-from rotation_rep.representation.rep_utils import *
-from rotation_rep.representation.rep_class import *
+from representation.rep_utils import *
+from representation.rep_class import *
 
 
 # Defines the autoencoder model

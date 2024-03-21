@@ -1,7 +1,7 @@
 import numpy as np
 import torch
-from rotation_rep.representation.utils import triangle_line_intersection
-from rotation_rep.representation.rep_utils import *
+from representation.utils import triangle_line_intersection
+from representation.rep_utils import *
 
 class Metamaterial:
 
