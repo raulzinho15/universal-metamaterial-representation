@@ -160,3 +160,5 @@ cython_debug/
 #.idea/
 
 local_test
+face_edge_corner_rep
+high_memory_rep
