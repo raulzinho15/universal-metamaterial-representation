@@ -1,6 +1,6 @@
 import numpy as np
 
-NUM_NODES = 12 + 1 # Non-center nodes plus the single center node
+NUM_NODES = 4 + 1 # Non-center nodes plus the single center node
 
 NODE_POS_SIZE = (NUM_NODES-1)*2
 EDGE_ADJ_SIZE = NUM_NODES * (NUM_NODES-1) // 2
@@ -30,7 +30,7 @@ def euclidian_to_spherical(x, y, z):
     # Computes the spherical coordinates
     mag = np.sqrt(x**2 + y**2 + z**2)
     if mag < 1e-4:
-        return 0,0
+        return np.zeros(2)
     theta = np.arccos(z/mag)
     if np.abs(np.sin(theta)) < 1e-4:
         phi = 0
@@ -38,7 +38,7 @@ def euclidian_to_spherical(x, y, z):
         phi = np.arctan2(y/np.sin(theta)/mag, x/np.sin(theta)/mag)
         phi = phi if phi >= 0 else phi+2*np.pi
 
-    return theta/np.pi, phi/(2*np.pi)
+    return np.array([theta/np.pi, phi/(2*np.pi)])
 
 
 def spherical_to_euclidian(theta, phi):

@@ -4,6 +4,7 @@ from random import random, choice
 
 from representation.rep_class import *
 from representation.rep_utils import *
+from autoencoder.autoencoder import *
 
 
 def random_metamaterial(edge_prob=0.5, face_prob=0.5, grid_spacing=None, connected=False, cyclic=False, validate=False):
@@ -30,7 +31,7 @@ def random_metamaterial(edge_prob=0.5, face_prob=0.5, grid_spacing=None, connect
         Whether the metamaterial will be connected (no floating edge islands).
 
     cyclic: bool
-        Whether the metamaterial will have no hanging connected edges.
+        Whether the metamaterial will have no hanging connected edges/faces.
 
     validate: bool
         Whether to remove any invalid edges/faces from the generated metamaterial.
@@ -46,15 +47,20 @@ def random_metamaterial(edge_prob=0.5, face_prob=0.5, grid_spacing=None, connect
         nums = [2*x/grid_spacing-1 for x in range(grid_spacing+1)]
         node_pos = np.array([euclidian_to_spherical(choice(nums),choice(nums),choice(nums)) for _ in range(NUM_NODES-1)]).reshape(NODE_POS_SIZE)
 
-    # Generates the edge adjacency representation array
-    edge_adj = (np.random.rand(EDGE_ADJ_SIZE) < edge_prob).astype(float)
+    # Generates the edge/face adjacency representation array
+    edge_adj = np.zeros(EDGE_ADJ_SIZE)
+    face_adj = np.zeros(FACE_ADJ_SIZE)
+    while not edge_adj.any() and not face_adj.any():
+        edge_adj = (np.random.rand(EDGE_ADJ_SIZE) < edge_prob).astype(float)
+        face_adj = (np.random.rand(FACE_ADJ_SIZE) < face_prob).astype(float)
     
-    # Generates the face adjacency representation array
-    face_adj = (np.random.rand(FACE_ADJ_SIZE) < face_prob).astype(float)
-
     metamaterial = Metamaterial(node_pos, edge_adj, face_adj)
 
-    if connected:
+    if cyclic:
+        metamaterial.remove_disconnections()
+        metamaterial.remove_acycles()
+
+    elif connected:
         metamaterial.remove_disconnections()
 
     # Ensures the representation is of a validly constructed metamaterial
@@ -255,11 +261,11 @@ def plot_metamaterial_grid(metamaterial, shape, filename="", animate=False):
     plt.close()
 
 
-def interpolate(model, material1: Metamaterial, material2: Metamaterial, interps, validate=False):
+def interpolate(model: MetamaterialAE, material1: Metamaterial, material2: Metamaterial, interps, validate=False, func="linear"):
     """
     Generates the linear interpolation of the two materials.
 
-    model: Metamaterial
+    model: MetamaterialAE
         The model to use to interpolate.
 
     material1: Metamaterial
@@ -274,6 +280,10 @@ def interpolate(model, material1: Metamaterial, material2: Metamaterial, interps
     validate: bool
         Whether to validate the interpolated metamaterials and remove
         any invalid edges/faces.
+
+    func: str
+        The function to use for interpolation. If "linear" then uses linear interpolation.
+        If "spherical" then uses spherical integration. By default, uses linear.
 
     Returns: list[Metamaterial]
         The list of interpolated metamaterials.
@@ -293,7 +303,14 @@ def interpolate(model, material1: Metamaterial, material2: Metamaterial, interps
         elif ind == interps:
             materials.append(material2)
         else:
-            decoding = model.decoder(m1_latent*(1-alpha) + m2_latent*alpha)
+
+            # Interpolates according to the given function
+            if func == "spherical":
+                omega = torch.acos(torch.sum(m1_latent * m2_latent) / (torch.norm(m1_latent, p=2) * torch.norm(m2_latent, p=2))).item()
+                decoding = model.decoder((np.sin((1-alpha) * omega) * m1_latent + np.sin(alpha * omega) * m2_latent) / np.sin(omega))
+            else:
+                decoding = model.decoder(m1_latent*(1-alpha) + m2_latent*alpha)
+
             materials.append(Metamaterial.from_tensor(decoding))
 
         # Validates the decoded representation
@@ -305,7 +322,7 @@ def interpolate(model, material1: Metamaterial, material2: Metamaterial, interps
     return materials
 
 
-def plot_interpolation(model, material1: Metamaterial, material2: Metamaterial, interps, path, validate=False, shape=(1,1,1)):
+def plot_interpolation(model, material1: Metamaterial, material2: Metamaterial, interps, path, validate=False, shape=(1,1,1), func="linear"):
     """
     Plots the interpolation between the two given materials.
 
@@ -330,11 +347,15 @@ def plot_interpolation(model, material1: Metamaterial, material2: Metamaterial, 
 
     shape: tuple
         The gridded shape of the plotting. If (1,1,1), it is just the metamaterial by itself.
+
+    func: str
+        The function to use for interpolation. If "linear" then uses linear interpolation.
+        If "spherical" then uses spherical integration. By default, uses linear.
     """
 
-    for ind, material in enumerate(interpolate(model, material1, material2, interps, validate=validate)):
+    for ind, material in enumerate(interpolate(model, material1, material2, interps, validate=validate, func=func)):
         plot_metamaterial_grid(material, shape=shape, filename=f"{path}/metamaterial{ind}.png")
-        plot_metamaterial_grid(material, shape=shape, filename=f"{path}/metamaterial{interps*2-ind}.png")
+        # plot_metamaterial_grid(material, shape=shape, filename=f"{path}/metamaterial{interps*2-ind}.png")
 
 
 def align_nodes(mat1: Metamaterial, mat2: Metamaterial, nodes1, nodes2):

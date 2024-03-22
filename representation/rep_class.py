@@ -229,6 +229,27 @@ class Metamaterial:
             return False
 
         return self.face_adj[face_adj_index(node1, node2, node3)] == 1
+    
+
+    def has_some_face(self, node1, node2):
+        """
+        Checks whether there exists some face between the two nodes.
+
+        node1: int
+            The node ID of the first node.
+
+        node2: int
+            The node ID of the second node.
+        """
+
+        # Checks for a face
+        for node3 in range(NUM_NODES):
+            if self.has_face(node1, node2, node3):
+                return True
+            
+        # No faces were found
+        return False
+
 
     def get_face_adj_tensor(self):
         """
@@ -371,24 +392,11 @@ class Metamaterial:
                 if n in seen:
                     continue
 
-                # Queues the node if adjacent via an edge
-                if self.has_edge(current, n):
+                # Queues the node if adjacent
+                if self.has_edge(current, n) or self.has_some_face(current, n):
                     queue.append(n)
                     seen.add(n)
                     continue
-
-                # Handles face adjacencies
-                for n1 in range(NUM_NODES):
-
-                    # Skips seen nodes
-                    if n1 == current or n1 == n:
-                        continue
-
-                    # Queues the node if adjacent via an face
-                    if self.has_face(current, n, n1):
-                        queue.append(n)
-                        seen.add(n)
-                        break
 
         return list(seen)
 
@@ -435,6 +443,88 @@ class Metamaterial:
 
                 # Removes edge
                 self.edge_adj[edge_adj_index(n1, n2)] = 0
+
+
+    def remove_acycles(self):
+        """
+        Removes the non-connected components of the material. Assumes
+        all nodes are reachable from each other.
+
+        NOT WORKING.
+        """
+
+        # Stores the cyclic nodes
+        cyclic = set()
+
+        # Defines a DFS algorithm for finding the cyclic nodes
+        def dfs(node, visited: set, path: tuple):
+
+            # Stores the node as it pertains to the algorithm
+            visited.add(node)
+            path = path + (node,)
+
+            # Runs through every adjacent node
+            for neighbor in range(NUM_NODES):
+
+                # Skips non-neighbor
+                if not (self.has_edge(node, neighbor) or self.has_some_face(node, neighbor)):
+                    continue
+
+                # Marks as cyclic when cycle is found
+                if neighbor in path and neighbor not in visited:
+                    for n in path[path.index(neighbor):]:
+                        cyclic.add(n)
+
+                # Searches the neighbor if not already searched
+                if neighbor not in visited:
+                    dfs(neighbor, visited, path)
+
+            # For backtracking
+            path = path[:-1]
+
+        # Computes a node that is connected
+        start_node = None
+        for n1 in range(NUM_NODES):
+            for n2 in range(n1+1, NUM_NODES):
+
+                # Checks for an edge connection
+                if self.has_edge(n1, n2):
+                    start_node = n1
+                    break
+                        
+                # Checks for a face connection
+                for n3 in range(n2+1, NUM_NODES):
+                    if self.has_face(n1, n2, n3):
+                        start_node = n1
+                        break
+
+                # Exits if node was found
+                if start_node is not None:
+                    break
+
+            # Exits if node was found
+            if start_node is not None:
+                break
+
+        # Checks for cycles
+        if start_node is None:
+            return
+        dfs(start_node, set(), tuple())
+
+        print("Cycles:", cyclic)
+
+        # Disconnects any separate cycles
+        for node in self.nodes_connected_to(start_node):
+
+            # Removes if acyclic
+            if node not in cyclic:
+                for n2 in range(NUM_NODES):
+                    
+                    # Skips self
+                    if node == n2:
+                        continue
+
+                    self.edge_adj[edge_adj_index(node, n2)] = 0
 
 
     def reorder_nodes(self, node_order):

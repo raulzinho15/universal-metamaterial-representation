@@ -19,7 +19,7 @@ class MetamaterialAE(nn.Module):
         # Sizes
         self.input_size = NODE_POS_SIZE + EDGE_ADJ_SIZE + FACE_ADJ_SIZE
         self.hidden_size = self.input_size*2
-        self.latent_size = self.input_size*2
+        self.latent_size = self.input_size//2
 
         # Encoder
         self.encoder_stack = nn.Sequential(
@@ -58,7 +58,8 @@ class MetamaterialAE(nn.Module):
     def forward(self, x):
         return self.decoder(self.encoder(x))
 
-def train(model, train_data, loss_fn, optim, verbose=True):
+
+def train(model: MetamaterialAE, train_data, loss_fn, optim, verbose=True):
     """
     Trains the model with the given training data.
 
@@ -98,6 +99,7 @@ def train(model, train_data, loss_fn, optim, verbose=True):
             print(f"Loss: {loss:>7f} [{current}/{size}]")
     print()
 
+
 def test(model, test_data, loss_fn):
     """
     Tests the autoencoder with the given test data.
@@ -124,6 +126,7 @@ def test(model, test_data, loss_fn):
     print(f"Test Avg Loss: {test_loss:>8f} \n")
 
     return test_loss
+
 
 def load_model(filepath):
     """
