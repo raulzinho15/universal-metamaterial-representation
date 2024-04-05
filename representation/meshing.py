@@ -11,7 +11,7 @@ def generate_edge_mesh(material: Metamaterial, node1, node2):
     Generates the vertices and faces for an edge of the metamaterial.
     
     material: Metamaterial
-        The metamaterial with the edge
+        The metamaterial whose edge will be meshed.
 
     node1: int
         The node ID for one of the nodes defining the edge.
@@ -69,7 +69,7 @@ def generate_face_mesh(material: Metamaterial, node1, node2, node3):
     Generates the vertices and faces for a face of the metamaterial.
     
     material: Metamaterial
-        The metamaterial with the edge
+        The metamaterial whose face will be meshed.
 
     node1: int
         The node ID for one of the nodes defining the face.
