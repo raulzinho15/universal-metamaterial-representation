@@ -20,11 +20,19 @@ class MetamaterialDataset(Dataset):
 
                 self.metamaterials += [
                     random_metamaterial(edge_prob=edge_prob, face_prob=face_prob, connected=True).flatten_rep()
-                        for _ in range(per_class*3//5)
+                        for _ in range(per_class*3//10)
+                ]
+                self.metamaterials += [
+                    random_metamaterial(edge_prob=edge_prob, face_prob=face_prob, wavy_edges=True, connected=True).flatten_rep()
+                        for _ in range(per_class*3//10)
                 ]
                 self.metamaterials += [
                     random_metamaterial(edge_prob=edge_prob, face_prob=face_prob, grid_spacing=2, connected=True).flatten_rep()
-                        for _ in range(per_class*2//5)
+                        for _ in range(per_class*2//10)
+                ]
+                self.metamaterials += [
+                    random_metamaterial(edge_prob=edge_prob, face_prob=face_prob, grid_spacing=2, wavy_edges=True, connected=True).flatten_rep()
+                        for _ in range(per_class*2//10)
                 ]
                 print(f"Generated metamaterials with (edge,face) probability: ({edge_prob},{face_prob})")
         

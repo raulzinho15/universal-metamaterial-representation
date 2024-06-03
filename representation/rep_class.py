@@ -5,7 +5,7 @@ from representation.rep_utils import *
 
 class Metamaterial:
 
-    def __init__(self, node_pos, edge_adj, face_adj):
+    def __init__(self, node_pos, edge_adj, edge_params, face_adj, face_params):
         """
         Initializes a metamaterial representation with the given
         representation arrays.
@@ -19,24 +19,38 @@ class Metamaterial:
             extracting nodes' positions can be found in get_node_positions().
         
         edge_adj: ndarray
-            The second entry in this tuple is a 1d numpy array edge adjacency
+            A 1d numpy array edge adjacency
             array, where a 1 at the corresponding adjacency matrix's i-th row and
             j-th column means that nodes i and j are connected by an edge. All other
             entries are 0. The logic for extracting the edge adjacencies can be found
             in the edge_adj_index() function.
+
+        edge_params: ndarray
+            A 1d numpy array with (scaled) coefficients for Bezier curves, where
+            groups of 2 coefficients will be associated with the edge in the
+            corresponding position. Specifically, the non-node 2 coefficients
+            of the Bezier curve will be set to those values.
         
         face_adj: ndarray
-            The third entry in this tuple is a 1d numpy array face adjacency
+            A 1d numpy array face adjacency
             array, where a 1 at the corresponding adjacency tensor's (i,j,k) index
             means that nodes i, j, and k are connected by a triangular face. All other
             entries are 0. The logic for extracting the face adjacencies can be found
             in the face_adj_index() function.
+
+        face_params: ndarray
+            A 1d numpy array with (scaled) coefficients for Bezier triangle, where
+            groups of 1 coefficient will be associated with the edge in the
+            corresponding position. Specifically, the non-edge 1 coefficient
+            of the Bezier curve will be set to those values.
         """
 
         # Stores the rep arrays
         self.node_pos = np.copy(node_pos)
         self.edge_adj = np.copy(edge_adj)
+        self.edge_params = np.copy(edge_params)
         self.face_adj = np.copy(face_adj)
+        self.face_params = np.copy(face_params)
 
         # Stores mirror transforms
         self.mirror_x = False
@@ -204,6 +218,51 @@ class Metamaterial:
         return np.array([[self.has_edge(n1, n2)
                         for n1 in range(NUM_NODES)]
                             for n2 in range(NUM_NODES)]).astype(float)
+    
+
+    def compute_edge_points(self, node1, node2):
+        """
+        Computes the coordinates of the points that make up an edge.
+
+        node1: int
+            The node ID of the first node of the edge.
+
+        node2: int
+            The node ID of the second node of the edge.
+
+        Returns: function or None
+            A function giving the coordinate of the edge point for a given t
+            along on the Bezier curve. If no edge exists, returns None.
+        """
+
+        # Checks for edge existence
+        if not self.has_edge(node1, node2):
+            return None
+        
+        # Computes the Bezier function
+        index = edge_adj_index(node1, node2)*EDGE_BEZIER_PARAMS
+        def bezier(t):
+            t /= EDGE_SEGMENTS
+            return self.edge_params[index] * t * (1-t)**2 + self.edge_params[index+1] * (1-t) * t**2
+
+        # Computes the origin
+        origin = self.get_node_position(NUM_NODES-1)
+
+        # Computes values for computing the coordinate system
+        node1, node2 = sorted((node1, node2))
+        node1_pos = self.get_node_position(node1)
+        node2_pos = self.get_node_position(node2)
+        origin_to_node1 = node1_pos - origin
+        origin_to_node2 = node2_pos - origin
+
+        # Computer the coordinate system for the edge
+        x_axis = (node2_pos - node1_pos) / EDGE_SEGMENTS # Normalized since t will range from [0,EDGE_SEGMENTS]
+        y_axis = origin_to_node1 + origin_to_node2
+        y_axis /= np.linalg.norm(y_axis)
+
+        # Computes the edge points in the transformed axes
+        # return node1_pos + np.array([x_axis * t + y_axis * bezier(t) for t in range(EDGE_SEGMENTS+1)])
+        return lambda t: node1_pos + x_axis * t + y_axis * bezier(t)
 
 
     def has_face(self, node1, node2, node3):
@@ -265,6 +324,75 @@ class Metamaterial:
                         for n1 in range(NUM_NODES)]
                             for n2 in range(NUM_NODES)]
                                 for n3 in range(NUM_NODES)]).astype(float)
+    
+
+    def compute_face_points(self, node1, node2, node3):
+        """
+        Computes the coordinates of the points that make up a face.
+
+        node1: int
+            The node ID of the first node of the face.
+
+        node2: int
+            The node ID of the second node of the face.
+
+        node3: int
+            The node ID of the third node of the face.
+
+        Returns: function or None
+            A function giving the coordinate of the face point for a given s,t
+            along on the Bezier triangle. If no face exists, returns None.
+        """
+
+        # Checks for face existence
+        if not self.has_face(node1, node2, node3):
+            return None
+
+        # Computes the origin
+        origin = self.get_node_position(NUM_NODES-1)
+
+        # Computes values for computing the coordinate system
+        node1, node2, node3 = sorted((node1, node2, node3))
+        node1_pos = self.get_node_position(node1)
+        node2_pos = self.get_node_position(node2)
+        node3_pos = self.get_node_position(node3)
+        
+        # Computes values for the Bezier function
+        face_ind = face_adj_index(node1, node2, node3)*FACE_BEZIER_PARAMS
+        edge1_ind = edge_adj_index(node1, node2)*EDGE_BEZIER_PARAMS
+        edge2_ind = edge_adj_index(node1, node3)*EDGE_BEZIER_PARAMS
+        edge3_ind = edge_adj_index(node2, node3)*EDGE_BEZIER_PARAMS
+
+        # Computes the Bezier function
+        def bezier(s, t):
+            curve = 0
+            s /= EDGE_SEGMENTS
+            t /= EDGE_SEGMENTS
+            u = 1 - s - t
+
+            # Computes the curve output due to edges
+            curve += self.edge_params[edge1_ind] * t * s**2 + self.edge_params[edge1_ind+1] * s * t**2
+            curve += self.edge_params[edge2_ind] * u * s**2 + self.edge_params[edge2_ind+1] * s * u**2
+            curve += self.edge_params[edge3_ind] * u * t**2 + self.edge_params[edge3_ind+1] * t * u**2
+
+            # Computes the curve output due to face
+            curve += self.face_params[face_ind] * s * t * u
+
+            return curve
+
+        # Computer the coordinate system for the edge
+        x_axis = (node2_pos - node1_pos) / EDGE_SEGMENTS # Normalized since t will range from [0,EDGE_SEGMENTS]
+        z_axis = (node3_pos - node1_pos) / EDGE_SEGMENTS # Normalized since s will range from [0,EDGE_SEGMENTS]
+        y_axis = np.cross(x_axis, z_axis)
+        y_axis /= np.linalg.norm(y_axis)
+        if np.dot(y_axis, node1_pos - origin) < 0: # Correctly orients y-axis
+            y_axis *= -1
+
+        # Computes the edge points in the transformed axes
+        # return node1_pos + np.array([x_axis * s + z_axis * t + y_axis * bezier(s, t)
+        #                                 for s in range(EDGE_SEGMENTS+1)
+        #                                     for t in range(EDGE_SEGMENTS+1-s)])
+        return lambda s,t: node1_pos + x_axis * s + z_axis * t + y_axis * bezier(s, t)
 
 
     def remove_invalid_faces(self):
@@ -511,8 +639,6 @@ class Metamaterial:
             return
         dfs(start_node, set(), tuple())
 
-        print("Cycles:", cyclic)
-
         # Disconnects any separate cycles
         for node in self.nodes_connected_to(start_node):
 
@@ -549,6 +675,14 @@ class Metamaterial:
             for n2 in range(n1+1, NUM_NODES):
                 reordered_edge_adj[edge_adj_index(n1, n2)] = self.edge_adj[edge_adj_index(node_order[n1], node_order[n2])]
 
+        # Stores the reordered edge parameters
+        reordered_edge_params = np.zeros(EDGE_PARAMS_SIZE)
+        for n1 in range(NUM_NODES):
+            for n2 in range(n1+1, NUM_NODES):
+                reordered_index = edge_adj_index(n1, n2)*EDGE_BEZIER_PARAMS
+                old_index = edge_adj_index(node_order[n1], node_order[n2])*EDGE_BEZIER_PARAMS
+                reordered_edge_params[reordered_index:reordered_index+EDGE_BEZIER_PARAMS] = self.edge_params[old_index:old_index+EDGE_BEZIER_PARAMS]
+
         # Stores the reordered face adjacencies
         reordered_face_adj = np.zeros(FACE_ADJ_SIZE)
         for n1 in range(NUM_NODES):
@@ -556,7 +690,16 @@ class Metamaterial:
                 for n3 in range(n2+1, NUM_NODES):
                     reordered_face_adj[face_adj_index(n1, n2, n3)] = self.face_adj[face_adj_index(node_order[n1], node_order[n2], node_order[n3])]
 
-        return Metamaterial(reordered_node_pos, reordered_edge_adj, reordered_face_adj)
+        # Stores the reordered face parameters
+        reordered_face_params = np.zeros(FACE_PARAMS_SIZE)
+        for n1 in range(NUM_NODES):
+            for n2 in range(n1+1, NUM_NODES):
+                for n3 in range(n2+1, NUM_NODES):
+                    reordered_index = face_adj_index(n1, n2, n3)*FACE_BEZIER_PARAMS
+                    old_index = face_adj_index(node_order[n1], node_order[n2], node_order[n3])*FACE_BEZIER_PARAMS
+                    reordered_face_params[reordered_index:reordered_index+FACE_BEZIER_PARAMS] = self.face_params[old_index:old_index+FACE_BEZIER_PARAMS]
+
+        return Metamaterial(reordered_node_pos, reordered_edge_adj, reordered_edge_params, reordered_face_adj, reordered_face_params)
 
 
     def sort_rep(self):
@@ -644,7 +787,7 @@ class Metamaterial:
         pad_dim: bool
             Whether an extra dimension will be added for padding to act as a batch of 1.
         """
-        concatenation = np.concatenate((self.node_pos, self.edge_adj, self.face_adj))
+        concatenation = np.concatenate((self.node_pos, self.edge_adj, self.edge_params, self.face_adj, self.face_params))
         if pad_dim:
             concatenation = concatenation.reshape((1,concatenation.shape[0]))
         return torch.from_numpy(concatenation).type(torch.float32)
@@ -659,7 +802,7 @@ class Metamaterial:
         """
 
         # Copies the representation arrays
-        material = Metamaterial(self.node_pos, self.edge_adj, self.face_adj)
+        material = Metamaterial(self.node_pos, self.edge_adj, self.edge_params, self.face_adj, self.face_params)
 
         # Copies the mirror transforms
         material.mirror_x = self.mirror_x
@@ -681,10 +824,13 @@ class Metamaterial:
             A tensor with the representation arrays concatenated together.
         """
 
-        numpy_rep = rep_tensor.detach().numpy().reshape(NODE_POS_SIZE+EDGE_ADJ_SIZE+FACE_ADJ_SIZE)
-        numpy_rep[NODE_POS_SIZE:] = (numpy_rep[NODE_POS_SIZE:] > 0.5).astype(float)
-        return Metamaterial(
-            numpy_rep[:NODE_POS_SIZE],
-            numpy_rep[NODE_POS_SIZE:NODE_POS_SIZE+EDGE_ADJ_SIZE],
-            numpy_rep[NODE_POS_SIZE+EDGE_ADJ_SIZE:]
-        )
+        numpy_rep = rep_tensor.detach().numpy().reshape(NODE_POS_SIZE+EDGE_ADJ_SIZE+EDGE_PARAMS_SIZE+FACE_ADJ_SIZE+FACE_PARAMS_SIZE)
+
+        # Stores the individual parts of the rep
+        node_pos = numpy_rep[ : NODE_POS_SIZE]
+        edge_adj = (numpy_rep[NODE_POS_SIZE : NODE_POS_SIZE + EDGE_ADJ_SIZE] > 0.48).astype(float)
+        edge_params = numpy_rep[NODE_POS_SIZE + EDGE_ADJ_SIZE : NODE_POS_SIZE + EDGE_ADJ_SIZE + EDGE_PARAMS_SIZE]
+        face_adj = (numpy_rep[NODE_POS_SIZE + EDGE_ADJ_SIZE + EDGE_PARAMS_SIZE : NODE_POS_SIZE + EDGE_ADJ_SIZE + EDGE_PARAMS_SIZE + FACE_ADJ_SIZE] > 0.48).astype(float)
+        face_params = numpy_rep[NODE_POS_SIZE + EDGE_ADJ_SIZE + EDGE_PARAMS_SIZE + FACE_ADJ_SIZE : ]
+
+        return Metamaterial(node_pos, edge_adj, edge_params, face_adj, face_params)

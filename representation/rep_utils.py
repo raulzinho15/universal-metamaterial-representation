@@ -1,16 +1,20 @@
 import numpy as np
 
-NUM_NODES = 4 + 1 # Non-center nodes plus the single center node
+NUM_NODES = 12 + 1 # Non-center nodes plus the single center node
 
 NODE_POS_SIZE = (NUM_NODES-1)*2
 EDGE_ADJ_SIZE = NUM_NODES * (NUM_NODES-1) // 2
+EDGE_BEZIER_PARAMS = 2
+EDGE_PARAMS_SIZE = EDGE_ADJ_SIZE*EDGE_BEZIER_PARAMS
+EDGE_SEGMENTS = 32
 FACE_ADJ_SIZE = NUM_NODES * (NUM_NODES-1) * (NUM_NODES-2) // 6
+FACE_BEZIER_PARAMS = 1
+FACE_PARAMS_SIZE = FACE_ADJ_SIZE*FACE_BEZIER_PARAMS
 
 
 def euclidian_to_spherical(x, y, z):
     """
     Converts the given x,y,z triplet into spherical coordinates.
-    Assumes a radius of 1.
 
     x: float
         The x-coordinate to be converted.
@@ -305,3 +309,52 @@ def to_face_adj_tensor(face_adj):
                     face_adj_matrix[n1, n2, n3] = face_adj[face_adj_index(n1, n2, n3)]
 
     return face_adj_matrix
+
+BUMP_FUNCTION = lambda x: (np.exp(-1e-1 / (1 - (x/(EDGE_SEGMENTS//2)-1)**2)) if x != 0 and x != EDGE_SEGMENTS else 0)
+BUMP_FUNCTION_BASE = lambda x: (np.exp(-1e-1 / (1 - (2*x-1)**2)) if 1-1e-4 > x > 1e-4 else 0)
+EDGE_DAMPER = np.array([BUMP_FUNCTION(x) for x in range(EDGE_SEGMENTS+1)]) / BUMP_FUNCTION(EDGE_SEGMENTS//2)
+FACE_DAMPER = np.array([[BUMP_FUNCTION(x)*BUMP_FUNCTION(y) for y in range(EDGE_SEGMENTS+1)] for x in range(EDGE_SEGMENTS+1)]) / (BUMP_FUNCTION(EDGE_SEGMENTS//2)**2)
+# DAMPER = [1 - (x/(EDGE_SEGMENTS//2)-1)**8 for x in range(EDGE_SEGMENTS+1)]
+
+def edge_values():
+    """
+    Yields each x-coordinate (uniformly distributed in [0,1]) and
+    damp value for as many damp values as there exist in the EDGE_DAMPER
+    array.
+    """
+    for x in range(EDGE_SEGMENTS+1):
+        yield x/EDGE_SEGMENTS, EDGE_DAMPER[x]
+
+def face_values():
+    """
+    Yields each x/y-coordinate (uniformly distributed in [0,1]) and
+    damp value for as many damp values as there exist in the FACE_DAMPER
+    array.
+    """
+    for x in range(EDGE_SEGMENTS+1):
+        for y in range(EDGE_SEGMENTS+1):
+            if x + y > EDGE_SEGMENTS:
+                break
+            yield x/EDGE_SEGMENTS, y/EDGE_SEGMENTS, FACE_DAMPER[x,y]
+
+
+def compute_edge_params(edge_points):
+    """
+    Computes the least-squares best edge parameters to match
+    the given edge points with dampening.
+
+    edge_points: ndarray
+        The y points on the edge, where x is assumed to uniformly
+        range in [0,1] with as many entries as there are in the
+        DAMPER array. No damping should be applied to them.
+
+    Returns: ndarray
+        The edge parameters that best fit the given edge points.
+        Constructed as described in the Metamaterial initializer.
+    """
+
+    # Computes the input values (with dampening) for each corresponding edge point
+    X = np.array([damp * np.array([x**i for i in range(EDGE_BEZIER_PARAMS)]) for x,damp in edge_values()])
+
+    # Computes the parameters to be used for most closely generating the edge points
+    return np.linalg.inv(X.T @ X) @ X.T @ edge_points

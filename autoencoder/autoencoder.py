@@ -17,9 +17,9 @@ class MetamaterialAE(nn.Module):
         super().__init__()
 
         # Sizes
-        self.input_size = NODE_POS_SIZE + EDGE_ADJ_SIZE + FACE_ADJ_SIZE
+        self.input_size = NODE_POS_SIZE + EDGE_ADJ_SIZE + EDGE_PARAMS_SIZE + FACE_ADJ_SIZE + FACE_PARAMS_SIZE
         self.hidden_size = self.input_size*2
-        self.latent_size = self.input_size//2
+        self.latent_size = self.input_size*2
 
         # Encoder
         self.encoder_stack = nn.Sequential(

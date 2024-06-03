@@ -4,7 +4,61 @@ from representation.generation import *
 
 THICKNESS = 0.02
 VERTICES_PER_EDGE = 8
-VERTICES_PER_FACE = 6
+VERTICES_PER_FACE = 3
+
+def generate_edge_segment_mesh(point1, point2):
+    """
+    Generates the vertices and faces for an edge segment.
+    
+    point1: ndarray
+        The position of the start of the edge.
+    
+    point2: ndarray
+        The position of the end of the edge.
+
+    Returns: (list of tuples of floats, list of tuples of ints)
+        The first entry is a list of the vertex (x,y,z) coordinates.
+        The second is a list containing each face's corresponding vertices,
+        where the vertex numbers correspond to the index of the vertex in
+        the first entry.
+    """
+
+    # Computes the edge direction
+    edge_dir = point1 - point2
+    edge_len = np.linalg.norm(edge_dir)
+    edge_dir /= edge_len
+
+    # Computes a random vector to be used for orthogonal vector generation
+    rand_vec = np.array([1,0,0])
+    if np.linalg.norm(np.cross(rand_vec, edge_dir)) < 0.1:
+        rand_vec = np.array([0,1,0])
+        
+    # Computes two co-orthogonal vectors orthogonal to the edge direction
+    basis1 = np.cross(edge_dir, rand_vec)
+    basis2 = np.cross(edge_dir, basis1)
+
+    # Computes the face 1 (around node1) vertices
+    face1_vertices = [
+        point1 + basis1*THICKNESS + basis2*THICKNESS,
+        point1 + basis1*THICKNESS - basis2*THICKNESS,
+        point1 - basis1*THICKNESS - basis2*THICKNESS,
+        point1 - basis1*THICKNESS + basis2*THICKNESS,
+    ]
+
+    # Computes the face 2 (around node2) vertices
+    face2_vertices = [
+        point2 + basis1*THICKNESS + basis2*THICKNESS,
+        point2 + basis1*THICKNESS - basis2*THICKNESS,
+        point2 - basis1*THICKNESS - basis2*THICKNESS,
+        point2 - basis1*THICKNESS + basis2*THICKNESS,
+    ]
+
+    return (
+        [tuple(vertex) for vertex in face1_vertices] + [tuple(vertex) for vertex in face2_vertices], # Vertex coordinates
+        [(0,1,2,3), (4,5,6,7)] + [(i, (i+1)%4, (i+1)%4+4, i+4) for i in range(4)] # Face vertex indices
+    )
+
+
 
 def generate_edge_mesh(material: Metamaterial, node1, node2):
     """
@@ -26,42 +80,25 @@ def generate_edge_mesh(material: Metamaterial, node1, node2):
         the first entry.
     """
 
-    # Computes the edge direction
-    node_pos1 = material.get_node_position(node1)
-    node_pos2 = material.get_node_position(node2)
-    edge_dir = node_pos1 - node_pos2
-    edge_len = np.linalg.norm(edge_dir)
-    edge_dir /= edge_len
+    # Computes the points along the edge
+    edge_points = material.compute_edge_points(node1, node2)
 
-    # Computes a random vector to be used for orthogonal vector generation
-    rand_vec = np.array([1,0,0])
-    if np.linalg.norm(np.cross(rand_vec, edge_dir)) < 0.1:
-        rand_vec = np.array([0,1,0])
-        
-    # Computes two co-orthogonal vectors orthogonal to the edge direction
-    basis1 = np.cross(edge_dir, rand_vec)
-    basis2 = np.cross(edge_dir, basis1)
+    # Stores values for the function
+    vertices = []
+    faces = []
 
-    # Computes the face 1 (around node1) vertices
-    face1_vertices = [
-        node_pos1 + basis1*THICKNESS + basis2*THICKNESS,
-        node_pos1 + basis1*THICKNESS - basis2*THICKNESS,
-        node_pos1 - basis1*THICKNESS - basis2*THICKNESS,
-        node_pos1 - basis1*THICKNESS + basis2*THICKNESS,
-    ]
+    # Runs through each edge segment
+    for edge in range(EDGE_SEGMENTS):
+        vertex_list, face_list = generate_edge_segment_mesh(edge_points(edge), edge_points(edge+1))
 
-    # Computes the face 2 (around node2) vertices
-    face2_vertices = [
-        node_pos2 + basis1*THICKNESS + basis2*THICKNESS,
-        node_pos2 + basis1*THICKNESS - basis2*THICKNESS,
-        node_pos2 - basis1*THICKNESS - basis2*THICKNESS,
-        node_pos2 - basis1*THICKNESS + basis2*THICKNESS,
-    ]
+        # Adds the new vertices/faces
+        vertices.extend(vertex_list)
 
-    return (
-        [tuple(vertex) for vertex in face1_vertices] + [tuple(vertex) for vertex in face2_vertices], # Vertex coordinates
-        [(0,1,2,3), (4,5,6,7)] + [(i, (i+1)%4, (i+1)%4+4, i+4) for i in range(4)] # Face vertex indices
-    )
+        # Adds the faces from the edge
+        for face in face_list:
+            faces.append(tuple(map(lambda x: x+edge*VERTICES_PER_EDGE, face)))
+
+    return vertices, faces
 
 
 def generate_face_mesh(material: Metamaterial, node1, node2, node3):
@@ -87,33 +124,21 @@ def generate_face_mesh(material: Metamaterial, node1, node2, node3):
         the first entry.
     """
     
-    # Computes the nodes' positions
-    node_pos1 = material.get_node_position(node1)
-    node_pos2 = material.get_node_position(node2)
-    node_pos3 = material.get_node_position(node3)
+    face_points = material.compute_face_points(node1, node2, node3)
 
-    # Computes the normal to the triangle
-    tri_norm = np.cross(node_pos2-node_pos1, node_pos3-node_pos1)
-    tri_norm /= np.linalg.norm(tri_norm)
+    vertices = []
+    faces = []
 
-    # Computes the top face vertices
-    face1_vertices = [
-        node_pos1 + tri_norm * THICKNESS,
-        node_pos2 + tri_norm * THICKNESS,
-        node_pos3 + tri_norm * THICKNESS,
-    ]
+    di = 0
+    for t in range(EDGE_SEGMENTS):
+        for s in range(EDGE_SEGMENTS-t):
+            vertices.extend([tuple(face_points(s,t)), tuple(face_points(s+1,t)), tuple(face_points(s,t+1)), tuple(face_points(s+1,t+1))])
+            faces.append((di, di+1, di+2))
+            if s+t+2 <= EDGE_SEGMENTS:
+                faces.append((di+1, di+2, di+3))
+            di += 4
 
-    # Computes the bottom face vertices
-    face2_vertices = [
-        node_pos1 - tri_norm * THICKNESS,
-        node_pos2 - tri_norm * THICKNESS,
-        node_pos3 - tri_norm * THICKNESS,
-    ]
-    
-    return (
-        [tuple(vertex) for vertex in face1_vertices] + [tuple(vertex) for vertex in face2_vertices], # Vertex coordinates
-        [(0,1,2), (3,4,5)] + [(i, (i+1)%3, (i+1)%3+3, i+3) for i in range(3)] # Face vertex indices
-    )
+    return vertices, faces
 
 
 def generate_metamaterial_mesh(material: Metamaterial):
@@ -131,7 +156,8 @@ def generate_metamaterial_mesh(material: Metamaterial):
     # Stores the vertices and faces
     vertices = []
     faces = []
-    edge_count = 0
+    vertex_count = 0
+    # edge_count = 0
 
     # Generates the edge mesh for each edge
     for n1 in range(NUM_NODES):
@@ -147,12 +173,14 @@ def generate_metamaterial_mesh(material: Metamaterial):
 
             # Adds the faces from the edge
             for face in face_list:
-                faces.append(tuple(map(lambda x: x+edge_count*VERTICES_PER_EDGE, face)))
+                # faces.append(tuple(map(lambda x: x+edge_count*VERTICES_PER_EDGE*EDGE_SEGMENTS, face)))
+                faces.append(tuple(map(lambda x: x + vertex_count, face)))
 
-            edge_count += 1
+            vertex_count += len(vertex_list)
+            # edge_count += 1
 
     # Generates the face mesh for each face
-    face_count = 0
+    # face_count = 0
     for n1 in range(NUM_NODES):
         for n2 in range(n1+1, NUM_NODES):
             for n3 in range(n2+1, NUM_NODES):
@@ -167,14 +195,16 @@ def generate_metamaterial_mesh(material: Metamaterial):
 
                 # Adds the faces from the face
                 for face in face_list:
-                    faces.append(tuple(map(lambda x: x + edge_count*VERTICES_PER_EDGE + face_count*VERTICES_PER_FACE, face)))
+                    # faces.append(tuple(map(lambda x: x + edge_count*VERTICES_PER_EDGE*EDGE_SEGMENTS + face_count*VERTICES_PER_FACE, face)))
+                    faces.append(tuple(map(lambda x: x + vertex_count, face)))
 
-                face_count += 1
+                vertex_count += len(vertex_list)
+                # face_count += 1
 
     return vertices, faces
 
 
-def generate_metamaterial_grid_mesh(metamaterial: Metamaterial, shape):
+def generate_metamaterial_grid_mesh(metamaterial: Metamaterial, shape=(1,1,1)):
     """
     Generates the mesh for the metamaterial.
 

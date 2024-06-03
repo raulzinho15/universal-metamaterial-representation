@@ -7,7 +7,7 @@ from representation.rep_utils import *
 from autoencoder.autoencoder import *
 
 
-def random_metamaterial(edge_prob=0.5, face_prob=0.5, grid_spacing=None, connected=False, cyclic=False, validate=False):
+def random_metamaterial(edge_prob=0.5, face_prob=0.5, grid_spacing=None, connected=False, cyclic=False, wavy_edges=False, validate=False):
     """
     Generates a random metamaterial's representation with its node positions,
     edge relations, and face relations. Implicitly determinable node positions
@@ -35,6 +35,9 @@ def random_metamaterial(edge_prob=0.5, face_prob=0.5, grid_spacing=None, connect
 
     validate: bool
         Whether to remove any invalid edges/faces from the generated metamaterial.
+
+    wavy_edges: bool
+        Whether to allow for wavy edges.
     
     Returns: Metamaterial
         A randomly generated metamaterial.
@@ -53,8 +56,14 @@ def random_metamaterial(edge_prob=0.5, face_prob=0.5, grid_spacing=None, connect
     while not edge_adj.any() and not face_adj.any():
         edge_adj = (np.random.rand(EDGE_ADJ_SIZE) < edge_prob).astype(float)
         face_adj = (np.random.rand(FACE_ADJ_SIZE) < face_prob).astype(float)
+
+    # Generates the edge parameters representation array
+    if wavy_edges:
+        edge_params = np.random.randn(EDGE_PARAMS_SIZE)/5
+    else:
+        edge_params = np.zeros(EDGE_PARAMS_SIZE)
     
-    metamaterial = Metamaterial(node_pos, edge_adj, face_adj)
+    metamaterial = Metamaterial(node_pos, edge_adj, edge_params, face_adj)
 
     if cyclic:
         metamaterial.remove_disconnections()
@@ -137,10 +146,17 @@ def plot_metamaterial(metamaterial: Metamaterial, subplot=None, filename="", ani
                 continue
 
             # Computes the edge coordinates
-            x1, y1, z1 = metamaterial.get_node_position(n1)
-            x2, y2, z2 = metamaterial.get_node_position(n2)
+            edge_points = metamaterial.compute_edge_points(n1, n2)
 
-            subplot.plot([x1, x2], [y1, y2], zs=[z1, z2], linewidth=5, color=EDGE_COLORS[(n1, n2)])
+            # Plots the edge coordinates
+            for i in range(len(edge_points)-1):
+
+                # Gets the correct coordinates
+                x1, y1, z1 = edge_points[i,:]
+                x2, y2, z2 = edge_points[i+1,:]
+
+                # Plots the edge segment
+                subplot.plot([x1, x2], [y1, y2], zs=[z1, z2], linewidth=5, color=EDGE_COLORS[(n1, n2)])
 
     # Plots each face
     for n1 in range(NUM_NODES):
