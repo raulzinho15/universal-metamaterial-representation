@@ -47,6 +47,25 @@ class MetamaterialAE(nn.Module):
         return self.encoder_stack(x)
     
 
+    def sample_latent_space(self, latent_vector):
+        """
+        Assuming the autoencoder is a VAE, splits the latent
+        vector into a normal distribution's mean/std and samples
+        from the distribution.
+        """
+
+        # Finds the halfway mark
+        halfway = latent_vector.shape[-1]
+
+        # Finds the distribution properties
+        mean = latent_vector[..., :halfway]
+        std = latent_vector[..., halfway:]
+
+        # Samples the distribution
+        eps = torch.randn(mean.shape)
+        return mean + eps * std
+    
+
     def decoder(self, z):
         """
         Runs the network's decoder on the input.
