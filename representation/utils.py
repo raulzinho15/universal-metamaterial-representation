@@ -1,6 +1,6 @@
 import numpy as np
 
-def triangle_line_intersection(tri1, tri2, tri3, line1, line2):
+def triangle_line_intersection(tri1: np.ndarray, tri2: np.ndarray, tri3: np.ndarray, line1: np.ndarray, line2: np.ndarray):
     """
     Checks whether the given line intersects the given triangle.
 
@@ -29,21 +29,23 @@ def triangle_line_intersection(tri1, tri2, tri3, line1, line2):
     """
 
     # Creates column vectors
-    tri1 = np.reshape(tri1, (3, 1))
-    tri2 = np.reshape(tri2, (3, 1))
-    tri3 = np.reshape(tri3, (3, 1))
-    line0 = np.reshape(line1, (3, 1))
-    lineD = np.reshape(line2-line1, (3, 1))
+    tri1 = tri1.reshape((3, 1))
+    tri2 = tri2.reshape((3, 1))
+    tri3 = tri3.reshape((3, 1))
+    line0 = line1.reshape((3, 1))
+    lineD = (line2-line1).reshape((3, 1))
 
-    # Sets up & solves the linear system
+    # Sets up the linear system
     A = np.concatenate([tri1-tri2, tri1-tri3, lineD], axis=1)
-    b = np.reshape(tri1-line0, (3,))
+    b = (tri1-line0)[:,0]
+
+    # Solves the linear system
     try:
         bgt = np.linalg.solve(A, b)
     except np.linalg.LinAlgError:
         return False
 
-    # Checks for intersection
+    # Checks for an intersection
     beta, gamma, t = bgt[0], bgt[1], bgt[2]
     if beta+gamma <= 1 and beta >= 0 and gamma >= 0 and 0 <= t <= 1:
         return True
