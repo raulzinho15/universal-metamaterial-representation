@@ -31,7 +31,7 @@ class MetamaterialAE(nn.Module):
         super().__init__()
 
         # Computes the sizes of the autoencoder's neural networks.
-        self.input_size = NODE_POS_SIZE + EDGE_ADJ_SIZE + EDGE_PARAMS_SIZE + FACE_ADJ_SIZE + FACE_PARAMS_SIZE
+        self.input_size = REP_SIZE
         self.hidden_size = self.input_size * hidden_size_scale
         self.latent_size = self.input_size * latent_size_scale
 

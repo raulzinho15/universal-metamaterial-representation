@@ -3,7 +3,7 @@ import numpy as np
 # User-controlled properties
 NUM_NODES = 12 + 1 # Non-center nodes plus the single center node
 EDGE_BEZIER_PARAMS = 2 # The number of parameters to describe curved edges
-EDGE_SEGMENTS = 32 # The number of segments to use to mesh edges
+EDGE_SEGMENTS = 4 # The number of segments to use to mesh edges/faces
 FACE_BEZIER_PARAMS = 1 # The number of parameters to described curved faces
 
 # Automatically-chosen properties
@@ -12,6 +12,7 @@ EDGE_ADJ_SIZE = NUM_NODES * (NUM_NODES-1) // 2
 EDGE_PARAMS_SIZE = EDGE_ADJ_SIZE * EDGE_BEZIER_PARAMS
 FACE_ADJ_SIZE = NUM_NODES * (NUM_NODES-1) * (NUM_NODES-2) // 6
 FACE_PARAMS_SIZE = FACE_ADJ_SIZE * FACE_BEZIER_PARAMS
+REP_SIZE = NODE_POS_SIZE + EDGE_ADJ_SIZE + EDGE_PARAMS_SIZE + FACE_ADJ_SIZE + FACE_PARAMS_SIZE
 
 
 def euclidian_to_spherical(x: float, y: float, z: float):
