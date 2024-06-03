@@ -5,7 +5,9 @@ from representation.generation import *
 from representation.meshing import *
 from autoencoder.autoencoder import *
 from autoencoder.dataset import *
-from local_test.example_materials import *
+
+#### NOTE:
+#### NUM_NODES in rep_utils.py must be set to 7.
 
 EPSILON = 1e-4
 
@@ -73,7 +75,6 @@ assert np.all(np.abs(actual-expected) < EPSILON), f"Got {actual}, but expected {
 print(".", end="")
 print()
 
-NUM_NODES = 7
 print("rep_utils.py - edge_adj_index")
 expected = 0
 actual = edge_adj_index(0,1)

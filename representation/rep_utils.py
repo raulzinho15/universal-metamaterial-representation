@@ -1,20 +1,22 @@
 import numpy as np
 
+# User-controlled properties
 NUM_NODES = 12 + 1 # Non-center nodes plus the single center node
+EDGE_BEZIER_PARAMS = 2 # The number of parameters to describe curved edges
+EDGE_SEGMENTS = 32 # The number of segments to use to mesh edges
+FACE_BEZIER_PARAMS = 1 # The number of parameters to described curved faces
 
-NODE_POS_SIZE = (NUM_NODES-1)*2
+# Automatically-chosen properties
+NODE_POS_SIZE = (NUM_NODES-1) * 2
 EDGE_ADJ_SIZE = NUM_NODES * (NUM_NODES-1) // 2
-EDGE_BEZIER_PARAMS = 2
-EDGE_PARAMS_SIZE = EDGE_ADJ_SIZE*EDGE_BEZIER_PARAMS
-EDGE_SEGMENTS = 32
+EDGE_PARAMS_SIZE = EDGE_ADJ_SIZE * EDGE_BEZIER_PARAMS
 FACE_ADJ_SIZE = NUM_NODES * (NUM_NODES-1) * (NUM_NODES-2) // 6
-FACE_BEZIER_PARAMS = 1
-FACE_PARAMS_SIZE = FACE_ADJ_SIZE*FACE_BEZIER_PARAMS
+FACE_PARAMS_SIZE = FACE_ADJ_SIZE * FACE_BEZIER_PARAMS
 
 
 def euclidian_to_spherical(x, y, z):
     """
-    Converts the given x,y,z triplet into spherical coordinates.
+    Converts the given x,y,z Euclidian triplet into spherical coordinates.
 
     x: float
         The x-coordinate to be converted.
@@ -31,41 +33,55 @@ def euclidian_to_spherical(x, y, z):
         If the input coordinate is too close to (0,0,0), returns (0,0).
     """
 
-    # Computes the spherical coordinates
-    mag = np.sqrt(x**2 + y**2 + z**2)
-    if mag < 1e-4:
+    # Computes the radial distance from the center
+    radius = np.sqrt(x**2 + y**2 + z**2)
+
+    # Checks for a non-collapsed radius
+    if radius < 1e-4:
         return np.zeros(2)
-    theta = np.arccos(z/mag)
+    
+    # Computes the angles in spherical coordinates
+    theta = np.arccos(z/radius)
     if np.abs(np.sin(theta)) < 1e-4:
         phi = 0
     else:
-        phi = np.arctan2(y/np.sin(theta)/mag, x/np.sin(theta)/mag)
+        phi = np.arctan2(y/np.sin(theta)/radius, x/np.sin(theta)/radius)
         phi = phi if phi >= 0 else phi+2*np.pi
 
     return np.array([theta/np.pi, phi/(2*np.pi)])
 
 
-def spherical_to_euclidian(theta, phi):
+def spherical_to_euclidian(theta, phi, radius=None):
     """
     Converts the given spherical coordinates into Euclidian coordinates.
-    Assumes a radius of 1.
 
-    theta: float
+    theta: float or ndarray
         The angle off the z-axis, [0, pi].
 
-    phi: float
+    phi: float or ndarray
         The angle on the xy plane, [0, 2pi].
 
+    radius: float or ndarray or None
+        The radius from the spherical center. If None, then
+        assumed to be 1.
+ 
     Returns: ndarray
         The first entry is the x-coordinate of the point.
         The second entry is the y-coordinate of the point.
         The third entry is the z-coordinate of the point.
     """
 
+    # Fixes the radius if needed
+    if radius is None:
+        if type(theta) == np.ndarray:
+            radius = np.ones(theta.shape)
+        else:
+            radius = 1.
+
     # Computes the Euclidian coordinates
-    x = np.sin(theta) * np.cos(phi)
-    y = np.sin(theta) * np.sin(phi)
-    z = np.cos(theta)
+    x = radius * np.sin(theta) * np.cos(phi)
+    y = radius * np.sin(theta) * np.sin(phi)
+    z = radius * np.cos(theta)
 
     return np.array([x,y,z])
 
@@ -171,7 +187,7 @@ def to_edge_adj_rep(edge_adj_matrix):
     """
 
     # Prepares the rep array
-    edge_adj = np.zeros(NUM_NODES * (NUM_NODES-1) // 2).astype(float)
+    edge_adj = np.zeros(EDGE_ADJ_SIZE).astype(float)
 
     # Stores each non-redundant edge adjacency from the matrix
     for n1 in range(NUM_NODES):
@@ -195,7 +211,7 @@ def to_edge_adj_matrix(edge_adj):
     """
 
     # Prepares the adjacency matrix
-    edge_adj_matrix = np.zeros((NUM_NODES, NUM_NODES))
+    edge_adj_matrix = np.zeros((NUM_NODES,) * 2)
 
     # Stores each edge adjacency from the rep
     for n1 in range(NUM_NODES):
@@ -272,7 +288,7 @@ def to_face_adj_rep(face_adj_tensor):
     """
 
     # Prepares the rep array
-    face_adj = np.zeros(NUM_NODES * (NUM_NODES-1) * (NUM_NODES-2) // 6).astype(float)
+    face_adj = np.zeros(FACE_ADJ_SIZE).astype(float)
 
     # Stores each non-redundant face adjacency from the tensor
     for n1 in range(NUM_NODES):
@@ -297,7 +313,7 @@ def to_face_adj_tensor(face_adj):
     """
 
     # Prepares the adjacency tensor
-    face_adj_matrix = np.zeros((NUM_NODES, NUM_NODES, NUM_NODES))
+    face_adj_matrix = np.zeros((NUM_NODES,) * 3)
 
     # Stores each face adjacency from the rep
     for n1 in range(NUM_NODES):
@@ -309,52 +325,3 @@ def to_face_adj_tensor(face_adj):
                     face_adj_matrix[n1, n2, n3] = face_adj[face_adj_index(n1, n2, n3)]
 
     return face_adj_matrix
-
-BUMP_FUNCTION = lambda x: (np.exp(-1e-1 / (1 - (x/(EDGE_SEGMENTS//2)-1)**2)) if x != 0 and x != EDGE_SEGMENTS else 0)
-BUMP_FUNCTION_BASE = lambda x: (np.exp(-1e-1 / (1 - (2*x-1)**2)) if 1-1e-4 > x > 1e-4 else 0)
-EDGE_DAMPER = np.array([BUMP_FUNCTION(x) for x in range(EDGE_SEGMENTS+1)]) / BUMP_FUNCTION(EDGE_SEGMENTS//2)
-FACE_DAMPER = np.array([[BUMP_FUNCTION(x)*BUMP_FUNCTION(y) for y in range(EDGE_SEGMENTS+1)] for x in range(EDGE_SEGMENTS+1)]) / (BUMP_FUNCTION(EDGE_SEGMENTS//2)**2)
-# DAMPER = [1 - (x/(EDGE_SEGMENTS//2)-1)**8 for x in range(EDGE_SEGMENTS+1)]
-
-def edge_values():
-    """
-    Yields each x-coordinate (uniformly distributed in [0,1]) and
-    damp value for as many damp values as there exist in the EDGE_DAMPER
-    array.
-    """
-    for x in range(EDGE_SEGMENTS+1):
-        yield x/EDGE_SEGMENTS, EDGE_DAMPER[x]
-
-def face_values():
-    """
-    Yields each x/y-coordinate (uniformly distributed in [0,1]) and
-    damp value for as many damp values as there exist in the FACE_DAMPER
-    array.
-    """
-    for x in range(EDGE_SEGMENTS+1):
-        for y in range(EDGE_SEGMENTS+1):
-            if x + y > EDGE_SEGMENTS:
-                break
-            yield x/EDGE_SEGMENTS, y/EDGE_SEGMENTS, FACE_DAMPER[x,y]
-
-
-def compute_edge_params(edge_points):
-    """
-    Computes the least-squares best edge parameters to match
-    the given edge points with dampening.
-
-    edge_points: ndarray
-        The y points on the edge, where x is assumed to uniformly
-        range in [0,1] with as many entries as there are in the
-        DAMPER array. No damping should be applied to them.
-
-    Returns: ndarray
-        The edge parameters that best fit the given edge points.
-        Constructed as described in the Metamaterial initializer.
-    """
-
-    # Computes the input values (with dampening) for each corresponding edge point
-    X = np.array([damp * np.array([x**i for i in range(EDGE_BEZIER_PARAMS)]) for x,damp in edge_values()])
-
-    # Computes the parameters to be used for most closely generating the edge points
-    return np.linalg.inv(X.T @ X) @ X.T @ edge_points
