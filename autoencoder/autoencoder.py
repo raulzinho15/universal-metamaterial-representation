@@ -11,7 +11,6 @@ class MetamaterialAE(nn.Module):
     the metamaterial autoencoder.
     """
 
-    # Initializes the structure of the NN
     def __init__(self, hidden_size_scale=2, latent_size_scale=2, is_variational=False):
         """
         Constructs a metamaterial autoencoder with the given properties.
