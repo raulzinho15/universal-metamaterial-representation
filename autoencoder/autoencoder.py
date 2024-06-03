@@ -1,11 +1,10 @@
 import torch
 from torch import nn
-
+from torch.utils.data import DataLoader
 from representation.rep_utils import *
 from representation.rep_class import *
 
 
-# Defines the autoencoder model
 class MetamaterialAE(nn.Module):
     """
     A class for handling computations involving
@@ -13,13 +12,29 @@ class MetamaterialAE(nn.Module):
     """
 
     # Initializes the structure of the NN
-    def __init__(self):
+    def __init__(self, hidden_size_scale=2, latent_size_scale=2, is_variational=False):
+        """
+        Constructs a metamaterial autoencoder with the given properties.
+
+        hidden_size_scale: int
+            The amount by which to scale the fixed input size to
+            reach the hidden size.
+
+        latent_size_scale: int
+            The amount by which to scale the fixed input size to
+            reach the latent size. If the autoencoder is chosen to
+            be variational, this shoul be chosen such that the
+            latent size will be even.
+
+        is_variational: bool
+            Whether the autoencoder is a variational autoencoder or not.
+        """
         super().__init__()
 
-        # Sizes
+        # Computes the sizes of the autoencoder's neural networks.
         self.input_size = NODE_POS_SIZE + EDGE_ADJ_SIZE + EDGE_PARAMS_SIZE + FACE_ADJ_SIZE + FACE_PARAMS_SIZE
-        self.hidden_size = self.input_size*2
-        self.latent_size = self.input_size*2
+        self.hidden_size = self.input_size * hidden_size_scale
+        self.latent_size = self.input_size * latent_size_scale
 
         # Encoder
         self.encoder_stack = nn.Sequential(
@@ -32,7 +47,7 @@ class MetamaterialAE(nn.Module):
 
         # Decoder
         self.decoder_stack = nn.Sequential(
-            nn.Linear(self.latent_size, self.hidden_size),
+            nn.Linear(self.latent_size // (2 if is_variational else 1), self.hidden_size),
             nn.ReLU(),
             nn.Linear(self.hidden_size, self.hidden_size),
             nn.ReLU(),
@@ -40,14 +55,14 @@ class MetamaterialAE(nn.Module):
         )
 
 
-    def encoder(self, x):
+    def encode(self, x: torch.Tensor):
         """
         Runs the network's encoder on the input.
         """
         return self.encoder_stack(x)
     
 
-    def sample_latent_space(self, latent_vector):
+    def sample_latent_space(self, latent_vector: torch.Tensor):
         """
         Assuming the autoencoder is a VAE, splits the latent
         vector into a normal distribution's mean/std and samples
@@ -55,7 +70,7 @@ class MetamaterialAE(nn.Module):
         """
 
         # Finds the halfway mark
-        halfway = latent_vector.shape[-1]
+        halfway = latent_vector.shape[-1] // 2
 
         # Finds the distribution properties
         mean = latent_vector[..., :halfway]
@@ -66,85 +81,85 @@ class MetamaterialAE(nn.Module):
         return mean + eps * std
     
 
-    def decoder(self, z):
+    def decode(self, z: torch.Tensor):
         """
         Runs the network's decoder on the input.
         """
         return self.decoder_stack(z)
 
 
-    # Defines a forward pass through the network
-    def forward(self, x):
-        return self.decoder(self.encoder(x))
+    def forward(self, x: torch.Tensor):
+        """
+        Defines a forward pass through the network.
+        """
+        return self.decode(self.encode(x))
 
 
-def train(model: MetamaterialAE, train_data, loss_fn, optim, verbose=True):
+def run_epoch(model: MetamaterialAE, dataloader: DataLoader, loss_fn, optim=None, train=True, verbose=True, report_frequency=200) -> float:
     """
-    Trains the model with the given training data.
+    Runs an epoch on the model with the given data.
 
     model: MetamaterialAutoencoder
-        The model to be trained.
+        The model to be used.
 
-    train_data: DataLoader
-        The data from a MetamaterialDataset with which to train.
+    dataloader: DataLoader
+        The data from a MetamaterialDataset to use.
 
     loss_fn:
-        The loss function to use in training.
+        The loss function to use.
 
     optim:
         The optimizer to use in training.
 
+    train: bool
+        Whether the model will be trained or not.
+
     verbose: bool
         Whether batch progress will output to the terminal.
+
+    report_frequency: int
+        The number of batches between which reports will be printed if
+        the verbose option is chosen.
+
+    Returns: float
+        The loss from the epoch.
     """
-    size = len(train_data.dataset)
-    model.train()
+
+    # Computes the size of the dataset
+    dataset_size = len(dataloader.dataset)
+
+    # Prepares values for the epoch
+    samples_used = 0
+    total_loss = 0
+
+    # Sets up the model's mode
+    if train:
+        model.train()
+    else:
+        model.eval()
 
     # Runs through each batch
-    for batch, (X,y), in enumerate(train_data):
+    for batch, (X,y), in enumerate(dataloader):
 
-        # Prepares for backpropagation
+        # Computes the forward pass
         decoding = model(X)
+
+        # Computes the loss
         loss = loss_fn(decoding, y)
+        total_loss += loss.item()
 
-        # Backpropagation
-        loss.backward()
-        optim.step()
-        optim.zero_grad()
+        # Runs backpropagation and gradient descent
+        if train:
+            loss.backward()
+            optim.step()
+            optim.zero_grad()
 
-        # Prints the loss every 200 batches
-        if verbose and batch % 200 == 0:
-            loss, current = loss.item(), (batch+1) * len(X)
-            print(f"Loss: {loss:>7f} [{current}/{size}]")
-    print()
-
-
-def test(model, test_data, loss_fn):
-    """
-    Tests the autoencoder with the given test data.
-
-    model: MetamaterialAutoencoder
-        The model to be tested.
-
-    test_data: DataLoader
-        The data from a MetamaterialDataset with which to test.
-
-    loss_fn:
-        The loss function to use in testing.
-    """
-    model.eval()
-    test_loss = 0
-
-    with torch.no_grad():
-        for X, y in test_data:
-            pred = model(X)
-            test_loss += loss_fn(pred, y).item()
+        # Prints the loss when the report frequency is met
+        samples_used += X.shape[0]
+        if verbose and batch % report_frequency == 0:
+            print(f"Loss: {(total_loss / samples_used):>7f} [{samples_used}/{dataset_size}]")
     
-    # Prints the results of testing
-    test_loss /= len(test_data)
-    print(f"Test Avg Loss: {test_loss:>8f} \n")
-
-    return test_loss
+    return total_loss
 
 
 def load_model(filepath):
@@ -157,7 +172,12 @@ def load_model(filepath):
     Returns: MetamaterialAutoencoder
         The autoencoder network stored at the given file.
     """
+
+    # Loads the model
     model = MetamaterialAE()
     model.load_state_dict(torch.load(filepath))
+
+    # Sets to evaluation mode
     model.eval()
+
     return model

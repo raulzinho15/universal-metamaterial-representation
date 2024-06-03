@@ -306,8 +306,8 @@ def interpolate(model: MetamaterialAE, material1: Metamaterial, material2: Metam
     """
 
     # Computes the latent representation of the two metamaterials
-    m1_latent = model.encoder(material1.flatten_rep(pad_dim=True))
-    m2_latent = model.encoder(material2.flatten_rep(pad_dim=True))
+    m1_latent = model.encode(material1.flatten_rep(pad_dim=True))
+    m2_latent = model.encode(material2.flatten_rep(pad_dim=True))
 
     # Runs through each interpolation
     materials = []
@@ -323,9 +323,9 @@ def interpolate(model: MetamaterialAE, material1: Metamaterial, material2: Metam
             # Interpolates according to the given function
             if func == "spherical":
                 omega = torch.acos(torch.sum(m1_latent * m2_latent) / (torch.norm(m1_latent, p=2) * torch.norm(m2_latent, p=2))).item()
-                decoding = model.decoder((np.sin((1-alpha) * omega) * m1_latent + np.sin(alpha * omega) * m2_latent) / np.sin(omega))
+                decoding = model.decode((np.sin((1-alpha) * omega) * m1_latent + np.sin(alpha * omega) * m2_latent) / np.sin(omega))
             else:
-                decoding = model.decoder(m1_latent*(1-alpha) + m2_latent*alpha)
+                decoding = model.decode(m1_latent*(1-alpha) + m2_latent*alpha)
 
             materials.append(Metamaterial.from_tensor(decoding))
 
