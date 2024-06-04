@@ -2,16 +2,16 @@ import numpy as np
 
 # User-controlled properties
 NUM_NODES = 12 + 1 # Non-center nodes plus the single center node
-EDGE_BEZIER_PARAMS = 2 # The number of parameters to describe curved edges
-EDGE_SEGMENTS = 4 # The number of segments to use to mesh edges/faces
-FACE_BEZIER_PARAMS = 1 # The number of parameters to described curved faces
+EDGE_BEZIER_POINTS = 2 # The number of points to describe curved edges
+EDGE_SEGMENTS = 32 # The number of segments to use to mesh edges/faces
+FACE_BEZIER_POINTS = 1 # The number of points to described curved faces
 
 # Automatically-chosen properties
 NODE_POS_SIZE = (NUM_NODES-1) * 2
 EDGE_ADJ_SIZE = NUM_NODES * (NUM_NODES-1) // 2
-EDGE_PARAMS_SIZE = EDGE_ADJ_SIZE * EDGE_BEZIER_PARAMS
+EDGE_PARAMS_SIZE = EDGE_ADJ_SIZE * EDGE_BEZIER_POINTS * 3
 FACE_ADJ_SIZE = NUM_NODES * (NUM_NODES-1) * (NUM_NODES-2) // 6
-FACE_PARAMS_SIZE = FACE_ADJ_SIZE * FACE_BEZIER_PARAMS
+FACE_PARAMS_SIZE = FACE_ADJ_SIZE * FACE_BEZIER_POINTS
 REP_SIZE = NODE_POS_SIZE + EDGE_ADJ_SIZE + EDGE_PARAMS_SIZE + FACE_ADJ_SIZE + FACE_PARAMS_SIZE
 
 
@@ -326,3 +326,33 @@ def to_face_adj_tensor(face_adj: np.ndarray):
                     face_adj_matrix[n1, n2, n3] = face_adj[face_adj_index(n1, n2, n3)]
 
     return face_adj_matrix
+
+
+# Computes the coefficients for a Bezier curve
+BEZIER_LINE_COEFFS = np.ones(EDGE_BEZIER_POINTS+2)
+for i in range(1,EDGE_BEZIER_POINTS+1):
+    BEZIER_LINE_COEFFS[i] = BEZIER_LINE_COEFFS[i-1] * (EDGE_BEZIER_POINTS+2-i) // i
+
+
+def bezier_curve(bezier_params: np.ndarray):
+    """
+    Creates a function that, given t in [0,EDGE_SEGMENTS],
+    returns the position of the Bezier curve for that edge.
+
+    bezier_params: np.ndarray
+        A 2D numpy array storing the Bezier parameters (including the node
+        coordinates) in order from t=0 to t=1. The first axis should
+        contain the coordinates of a given parameter, and the second axis
+        should separate the parameters.
+    """
+
+    # Stores the number of parameters to use for the Bezier line
+    n = EDGE_BEZIER_POINTS
+
+    # Creates the function to compute the line
+    def bezier(t: float) -> np.ndarray:
+        t /= EDGE_SEGMENTS
+        scalars = np.array([t ** i * (1-t) ** (n+1-i) for i in range(n+2)])
+        return bezier_params @ (scalars * BEZIER_LINE_COEFFS)
+        
+    return bezier

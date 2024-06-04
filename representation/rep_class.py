@@ -237,30 +237,35 @@ class Metamaterial:
         if not self.has_edge(node1, node2):
             return None
         
-        # Computes the Bezier function
-        index = edge_adj_index(node1, node2)*EDGE_BEZIER_PARAMS
-        def bezier(t):
-            t /= EDGE_SEGMENTS
-            return self.edge_params[index] * t * (1-t)**2 + self.edge_params[index+1] * (1-t) * t**2
-
-        # Computes the origin
-        origin = self.get_node_position(NUM_NODES-1)
-
-        # Computes values for computing the coordinate system
+        # Computes the node positions
         node1, node2 = sorted((node1, node2))
         node1_pos = self.get_node_position(node1)
         node2_pos = self.get_node_position(node2)
-        origin_to_node1 = node1_pos - origin
-        origin_to_node2 = node2_pos - origin
+        
+        # Appropriately structures the edge parameters
+        index = edge_adj_index(node1, node2) * EDGE_BEZIER_POINTS*3
+        edge_params = self.edge_params[index : index + EDGE_BEZIER_POINTS*3]
 
-        # Computer the coordinate system for the edge
-        x_axis = (node2_pos - node1_pos) / EDGE_SEGMENTS # Normalized since t will range from [0,EDGE_SEGMENTS]
-        y_axis = origin_to_node1 + origin_to_node2
-        y_axis /= np.linalg.norm(y_axis)
+        # Computes the Bezier curve function
+        bezier_params = np.concatenate((node1_pos, edge_params, node2_pos))
+        bezier_params = bezier_params.reshape((EDGE_BEZIER_POINTS+2, 3)).T
+        return bezier_curve(bezier_params)
 
-        # Computes the edge points in the transformed axes
-        # return node1_pos + np.array([x_axis * t + y_axis * bezier(t) for t in range(EDGE_SEGMENTS+1)])
-        return lambda t: node1_pos + x_axis * t + y_axis * bezier(t)
+        # # Computes the origin
+        # origin = self.get_node_position(NUM_NODES-1)
+
+        # # Computes values for computing the coordinate system
+        # origin_to_node1 = node1_pos - origin
+        # origin_to_node2 = node2_pos - origin
+
+        # # Computer the coordinate system for the edge
+        # x_axis = (node2_pos - node1_pos) / EDGE_SEGMENTS # Normalized since t will range from [0,EDGE_SEGMENTS]
+        # y_axis = origin_to_node1 + origin_to_node2
+        # y_axis /= np.linalg.norm(y_axis)
+
+        # # Computes the edge points in the transformed axes
+        # # return node1_pos + np.array([x_axis * t + y_axis * bezier(t) for t in range(EDGE_SEGMENTS+1)])
+        # return lambda t: node1_pos + x_axis * t + y_axis * bezier(t)
 
 
     def has_face(self, node1: int, node2: int, node3: int) -> bool:
@@ -356,10 +361,10 @@ class Metamaterial:
         node3_pos = self.get_node_position(node3)
         
         # Computes values for the Bezier function
-        face_ind = face_adj_index(node1, node2, node3)*FACE_BEZIER_PARAMS
-        edge1_ind = edge_adj_index(node1, node2)*EDGE_BEZIER_PARAMS
-        edge2_ind = edge_adj_index(node1, node3)*EDGE_BEZIER_PARAMS
-        edge3_ind = edge_adj_index(node2, node3)*EDGE_BEZIER_PARAMS
+        face_ind = face_adj_index(node1, node2, node3)*FACE_BEZIER_POINTS
+        edge1_ind = edge_adj_index(node1, node2)*EDGE_BEZIER_POINTS
+        edge2_ind = edge_adj_index(node1, node3)*EDGE_BEZIER_POINTS
+        edge3_ind = edge_adj_index(node2, node3)*EDGE_BEZIER_POINTS
 
         # Computes the Bezier function
         def bezier(s, t):
@@ -677,9 +682,9 @@ class Metamaterial:
         reordered_edge_params = np.zeros(EDGE_PARAMS_SIZE)
         for n1 in range(NUM_NODES):
             for n2 in range(n1+1, NUM_NODES):
-                reordered_index = edge_adj_index(n1, n2)*EDGE_BEZIER_PARAMS
-                old_index = edge_adj_index(node_order[n1], node_order[n2])*EDGE_BEZIER_PARAMS
-                reordered_edge_params[reordered_index:reordered_index+EDGE_BEZIER_PARAMS] = self.edge_params[old_index:old_index+EDGE_BEZIER_PARAMS]
+                reordered_index = edge_adj_index(n1, n2)*EDGE_BEZIER_POINTS
+                old_index = edge_adj_index(node_order[n1], node_order[n2])*EDGE_BEZIER_POINTS
+                reordered_edge_params[reordered_index:reordered_index+EDGE_BEZIER_POINTS] = self.edge_params[old_index:old_index+EDGE_BEZIER_POINTS]
 
         # Stores the reordered face adjacencies
         reordered_face_adj = np.zeros(FACE_ADJ_SIZE)
@@ -693,9 +698,9 @@ class Metamaterial:
         for n1 in range(NUM_NODES):
             for n2 in range(n1+1, NUM_NODES):
                 for n3 in range(n2+1, NUM_NODES):
-                    reordered_index = face_adj_index(n1, n2, n3)*FACE_BEZIER_PARAMS
-                    old_index = face_adj_index(node_order[n1], node_order[n2], node_order[n3])*FACE_BEZIER_PARAMS
-                    reordered_face_params[reordered_index:reordered_index+FACE_BEZIER_PARAMS] = self.face_params[old_index:old_index+FACE_BEZIER_PARAMS]
+                    reordered_index = face_adj_index(n1, n2, n3)*FACE_BEZIER_POINTS
+                    old_index = face_adj_index(node_order[n1], node_order[n2], node_order[n3])*FACE_BEZIER_POINTS
+                    reordered_face_params[reordered_index:reordered_index+FACE_BEZIER_POINTS] = self.face_params[old_index:old_index+FACE_BEZIER_POINTS]
 
         return Metamaterial(reordered_node_pos, reordered_edge_adj, reordered_edge_params, reordered_face_adj, reordered_face_params)
 
