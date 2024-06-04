@@ -328,31 +328,54 @@ def to_face_adj_tensor(face_adj: np.ndarray):
     return face_adj_matrix
 
 
-# Computes the coefficients for a Bezier curve
-BEZIER_LINE_COEFFS = np.ones(EDGE_BEZIER_POINTS+2)
+# Computes the binomial coefficients for a Bezier curve
+binomial_coefficients = np.ones((1,EDGE_BEZIER_POINTS+2))
 for i in range(1,EDGE_BEZIER_POINTS+1):
-    BEZIER_LINE_COEFFS[i] = BEZIER_LINE_COEFFS[i-1] * (EDGE_BEZIER_POINTS+2-i) // i
+    binomial_coefficients[0,i] = binomial_coefficients[0,i-1] * (EDGE_BEZIER_POINTS+2-i) // i
+
+# Computes the general coefficients for a Bezier curve
+BEZIER_CURVE_COEFFICIENTS = binomial_coefficients * np.array([[
+    (t/EDGE_SEGMENTS) ** i * (1-t/EDGE_SEGMENTS) ** (EDGE_BEZIER_POINTS+1-i)
+        for i in range(EDGE_BEZIER_POINTS+2)]
+            for t in range(EDGE_SEGMENTS+1)
+])
 
 
-def bezier_curve(bezier_params: np.ndarray):
+def find_edge_params(target_edge_points: np.ndarray) -> np.ndarray:
     """
-    Creates a function that, given t in [0,EDGE_SEGMENTS],
-    returns the position of the Bezier curve for that edge.
+    Runs regression to find the edge parameters that most closely
+    produce the given target edge points.
 
-    bezier_params: np.ndarray
-        A 2D numpy array storing the Bezier parameters (including the node
-        coordinates) in order from t=0 to t=1. The first axis should
-        contain the coordinates of a given parameter, and the second axis
-        should separate the parameters.
+    target_edge_points: np.ndarray
+        A 2D numpy array of the edge points to try to most closely
+        match. The first axis should separate the target edge points
+        (in order from t=0 to t=1). The second axis should separate
+        the coordinates of a given edge point. There must be
+        `EDGE_SEGMENTS+1` edge points, as it must include the node
+        positions at the ends.
+
+    Returns: np.ndarray
+        The edge parameters that most closely match the given edge
+        points, formatted in the way that the Metamaterial class
+        edge_params value should be for a particular edge.
     """
 
-    # Stores the number of parameters to use for the Bezier line
-    n = EDGE_BEZIER_POINTS
+    # Separates the node positions (which are fixed)
+    node1_pos = target_edge_points[:1,:]
+    node2_pos = target_edge_points[-1:,:]
 
-    # Creates the function to compute the line
-    def bezier(t: float) -> np.ndarray:
-        t /= EDGE_SEGMENTS
-        scalars = np.array([t ** i * (1-t) ** (n+1-i) for i in range(n+2)])
-        return bezier_params @ (scalars * BEZIER_LINE_COEFFS)
-        
-    return bezier
+    # Computes the effect of the node positions
+    node1_effect = BEZIER_CURVE_COEFFICIENTS[1:-1,:1] @ node1_pos
+    node2_effect = BEZIER_CURVE_COEFFICIENTS[1:-1,-1:] @ node2_pos
+
+    # Computes the target output (the coordinates vary on second axis)
+    b = target_edge_points[1:-1,:]
+    b -= node1_effect + node2_effect
+
+    # Computes the linear system's matrix
+    A = BEZIER_CURVE_COEFFICIENTS[1:-1,1:-1]
+
+    # Solves the system for each coordinate
+    edge_params = np.concatenate([np.linalg.solve(A.T @ A, A.T @ b[:,i]).reshape(EDGE_BEZIER_POINTS, 1) for i in range(3)], axis=1)
+    return edge_params.flatten()
+

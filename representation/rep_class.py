@@ -246,10 +246,14 @@ class Metamaterial:
         index = edge_adj_index(node1, node2) * EDGE_BEZIER_POINTS*3
         edge_params = self.edge_params[index : index + EDGE_BEZIER_POINTS*3]
 
-        # Computes the Bezier curve function
+        # Appropriately structures all parameters for the Bezier curve
         bezier_params = np.concatenate((node1_pos, edge_params, node2_pos))
-        bezier_params = bezier_params.reshape((EDGE_BEZIER_POINTS+2, 3)).T
-        return bezier_curve(bezier_params)
+        bezier_params = bezier_params.reshape((EDGE_BEZIER_POINTS+2, 3))
+
+        # Creates the function to compute the line
+        def bezier(t: int) -> np.ndarray:
+            return BEZIER_CURVE_COEFFICIENTS[t,:] @ bezier_params
+        return bezier
 
         # # Computes the origin
         # origin = self.get_node_position(NUM_NODES-1)
