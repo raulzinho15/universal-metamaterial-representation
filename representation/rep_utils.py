@@ -1,17 +1,18 @@
 import numpy as np
+from math import factorial
 
 # User-controlled properties
 NUM_NODES = 12 + 1 # Non-center nodes plus the single center node
 EDGE_BEZIER_POINTS = 2 # The number of points to describe curved edges
 EDGE_SEGMENTS = 32 # The number of segments to use to mesh edges/faces
-FACE_BEZIER_POINTS = 1 # The number of points to described curved faces
 
 # Automatically-chosen properties
 NODE_POS_SIZE = (NUM_NODES-1) * 2
 EDGE_ADJ_SIZE = NUM_NODES * (NUM_NODES-1) // 2
 EDGE_PARAMS_SIZE = EDGE_ADJ_SIZE * EDGE_BEZIER_POINTS * 3
 FACE_ADJ_SIZE = NUM_NODES * (NUM_NODES-1) * (NUM_NODES-2) // 6
-FACE_PARAMS_SIZE = FACE_ADJ_SIZE * FACE_BEZIER_POINTS
+FACE_BEZIER_POINTS = EDGE_BEZIER_POINTS * (EDGE_BEZIER_POINTS-1) // 2
+FACE_PARAMS_SIZE = FACE_ADJ_SIZE * FACE_BEZIER_POINTS * 3
 REP_SIZE = NODE_POS_SIZE + EDGE_ADJ_SIZE + EDGE_PARAMS_SIZE + FACE_ADJ_SIZE + FACE_PARAMS_SIZE
 
 
@@ -328,17 +329,20 @@ def to_face_adj_tensor(face_adj: np.ndarray):
     return face_adj_matrix
 
 
-# Computes the binomial coefficients for a Bezier curve
-binomial_coefficients = np.ones((1,EDGE_BEZIER_POINTS+2))
-for i in range(1,EDGE_BEZIER_POINTS+1):
-    binomial_coefficients[0,i] = binomial_coefficients[0,i-1] * (EDGE_BEZIER_POINTS+2-i) // i
-
-# Computes the general coefficients for a Bezier curve
-BEZIER_CURVE_COEFFICIENTS = binomial_coefficients * np.array([[
-    (t/EDGE_SEGMENTS) ** i * (1-t/EDGE_SEGMENTS) ** (EDGE_BEZIER_POINTS+1-i)
+# Computes every monomial used in the Bezier curves/triangles
+BEZIER_MONOMIALS = np.array([[
+    (t/EDGE_SEGMENTS) ** i
         for i in range(EDGE_BEZIER_POINTS+2)]
             for t in range(EDGE_SEGMENTS+1)
 ])
+
+# Computes the binomial coefficients for a Bezier curve
+BINOMIAL_COEFFICIENTS = np.ones(EDGE_BEZIER_POINTS+2)
+for i in range(1,EDGE_BEZIER_POINTS+1):
+    BINOMIAL_COEFFICIENTS[i] = BINOMIAL_COEFFICIENTS[i-1] * (EDGE_BEZIER_POINTS+2-i) // i
+
+# Computes the general coefficients for a Bezier curve
+BEZIER_CURVE_COEFFICIENTS = BINOMIAL_COEFFICIENTS[np.newaxis,:] * BEZIER_MONOMIALS * BEZIER_MONOMIALS[::-1,::-1]
 
 
 def find_edge_params(target_edge_points: np.ndarray) -> np.ndarray:
@@ -368,7 +372,7 @@ def find_edge_params(target_edge_points: np.ndarray) -> np.ndarray:
     node1_effect = BEZIER_CURVE_COEFFICIENTS[1:-1,:1] @ node1_pos
     node2_effect = BEZIER_CURVE_COEFFICIENTS[1:-1,-1:] @ node2_pos
 
-    # Computes the target output (the coordinates vary on second axis)
+    # Computes the target output (the coordinates are on second axis)
     b = target_edge_points[1:-1,:]
     b -= node1_effect + node2_effect
 
@@ -379,3 +383,109 @@ def find_edge_params(target_edge_points: np.ndarray) -> np.ndarray:
     edge_params = np.concatenate([np.linalg.solve(A.T @ A, A.T @ b[:,i]).reshape(EDGE_BEZIER_POINTS, 1) for i in range(3)], axis=1)
     return edge_params.flatten()
 
+
+# Computes the multinomial coefficients that are relevant for Bezier triangle interpolation
+MULTINOMIAL_COEFFICIENTS = np.zeros((EDGE_BEZIER_POINTS-1, EDGE_BEZIER_POINTS-1))
+for i in range(EDGE_BEZIER_POINTS-1):
+    for j in range(EDGE_BEZIER_POINTS-1-i):
+        MULTINOMIAL_COEFFICIENTS[i,j] = factorial(EDGE_BEZIER_POINTS+1) // factorial(i+1) // factorial(j+1) // factorial(EDGE_BEZIER_POINTS-1-i-j)
+
+
+def bezier_triangle_coefficients(s: int, t: int) -> np.ndarray:
+    """
+    Computes the coefficients of a Bezier triangle for
+    a given set of parameters. The third parameter is
+    inferred from the two given ones.
+
+    s: int
+        The first parameter of the triangle, corresponding to
+        the first point defining the face.
+        Must be in [0,EDGE_SEGMENTS].
+
+    t: int
+        The second parameter of the triangle, corresponding to
+        the second point defining the face.
+        Must be in [0,EDGE_SEGMENTS].
+
+    Returns: np.ndarray
+        A 1D numpy array containing the Bezier triangle coefficients.
+        The ordering of the triangle coefficients is as follows:
+
+        The first 1 coefficient corresponds to the face's first vertex
+        control point.
+
+        The next 1 coefficient corresponds to the face's second vertex
+        control point.
+
+        The next 1 coefficient corresponds to the face's third vertex
+        control point.
+
+        The next `EDGE_BEZIER_POINTS` coefficients correspond to the
+        control points along the edge from the first vertex control point
+        to the second vertex control point.
+
+        The next `EDGE_BEZIER_POINTS` coefficients correspond to the
+        control points along the edge from the first vertex control point
+        to the third vertex control point.
+
+        The next `EDGE_BEZIER_POINTS` coefficients correspond to the
+        control points along the edge from the second vertex control point
+        to the third vertex control point.
+
+        The last `FACE_BEZIER_POINTS` coefficients correspond to the
+        control points in the middle of the triangle.
+    """
+
+    # Infers the third parameter
+    u = EDGE_SEGMENTS - s - t
+
+    # Computes each coefficient for each control point
+    return np.array(
+        [
+            BEZIER_MONOMIALS[s, EDGE_BEZIER_POINTS+1], # The weight for the face's first vertex control point
+            BEZIER_MONOMIALS[t, EDGE_BEZIER_POINTS+1], # The weight for the face's second vertex control point
+            BEZIER_MONOMIALS[u, EDGE_BEZIER_POINTS+1], # The weight for the face's third vertex control point
+        ] + [
+            # The weights for the edge between the face's first and second vertex control points
+            BINOMIAL_COEFFICIENTS[i] * BEZIER_MONOMIALS[s,EDGE_BEZIER_POINTS+1-i] * BEZIER_MONOMIALS[t,i]
+                for i in range(1,EDGE_BEZIER_POINTS+1)
+        ] + [
+            # The weights for the edge between the first and third vertex control points
+            BINOMIAL_COEFFICIENTS[i] * BEZIER_MONOMIALS[s,EDGE_BEZIER_POINTS+1-i] * BEZIER_MONOMIALS[u,i]
+                for i in range(1,EDGE_BEZIER_POINTS+1)
+        ] + [
+            # The weights for the edge between the second and third vertex control points
+            BINOMIAL_COEFFICIENTS[i] * BEZIER_MONOMIALS[t,EDGE_BEZIER_POINTS+1-i] * BEZIER_MONOMIALS[u,i]
+                for i in range(1,EDGE_BEZIER_POINTS+1)
+        ] + [
+            # The weights for the control points in the middle of the triangle
+            MULTINOMIAL_COEFFICIENTS[i,j] * BEZIER_MONOMIALS[s, i+1] * BEZIER_MONOMIALS[t, j+1] * BEZIER_MONOMIALS[u, EDGE_BEZIER_POINTS-1-i-j]
+                for i in range(EDGE_BEZIER_POINTS-1) for j in range(EDGE_BEZIER_POINTS-1-i)
+        ]
+    )
+
+
+# Computes the general coefficients for a Bezier triangle
+BEZIER_TRIANGLE_COEFFICIENTS = np.concatenate([
+    bezier_triangle_coefficients(s, t)[np.newaxis,:] for s in range(EDGE_SEGMENTS+1) for t in range(EDGE_SEGMENTS+1-s)
+], axis=0)
+
+
+def bezier_triangle_index(s: int, t: int) -> int:
+    """
+    Gets the index of the entry in `BEZIER_TRIANGLE_COEFFICIENTS`
+    that corresponds to the given triangle parameters. The
+    formula is similar in principle to that used in
+    `edge_adj_index()`.
+
+    s: int
+        The first parameter of the triangle, corresponding to
+        the first point defining the face.
+        Must be in `[0,EDGE_SEGMENTS]`.
+
+    t: int
+        The second parameter of the triangle, corresponding to
+        the second point defining the face.
+        Must be in `[0,EDGE_SEGMENTS]`.
+    """
+    return t + s*(3-s)//2 + s*EDGE_SEGMENTS

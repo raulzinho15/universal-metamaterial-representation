@@ -202,6 +202,25 @@ class Metamaterial:
             return False
 
         return self.edge_adj[edge_adj_index(node1, node2)] == 1
+    
+
+    def get_edge_params(self, node1: int, node2: int) -> np.ndarray:
+        """
+        Gets the parameters of the edge between the two given nodes.
+
+        node1: int
+            The ID of the first node of the edge.
+
+        node2: int
+            The ID of the second node of the edge.
+
+        Returns: np.ndarray
+            The edge parameters of the edge if it exists, otherwise `None`.
+        """
+
+        # Retrieves the edge parameters
+        edge_index = edge_adj_index(node1, node2) * EDGE_BEZIER_POINTS*3
+        return self.edge_params[edge_index : edge_index + EDGE_BEZIER_POINTS*3]
 
 
     def get_edge_adj_matrix(self) -> np.ndarray:
@@ -233,43 +252,25 @@ class Metamaterial:
             along on the Bezier curve. If no edge exists, returns None.
         """
 
-        # Checks for edge existence
-        if not self.has_edge(node1, node2):
-            return None
-        
+        # # Checks for edge existence
+        # if not self.has_edge(node1, node2):
+        #     return None
+
         # Computes the node positions
         node1, node2 = sorted((node1, node2))
-        node1_pos = self.get_node_position(node1)
-        node2_pos = self.get_node_position(node2)
-        
-        # Appropriately structures the edge parameters
-        index = edge_adj_index(node1, node2) * EDGE_BEZIER_POINTS*3
-        edge_params = self.edge_params[index : index + EDGE_BEZIER_POINTS*3]
+        node1_pos = self.get_node_position(node1)[np.newaxis, :]
+        node2_pos = self.get_node_position(node2)[np.newaxis, :]
 
+        # Retrieves the edge parameters
+        edge_params = self.get_edge_params(node1, node2).reshape((EDGE_BEZIER_POINTS,3))
+        
         # Appropriately structures all parameters for the Bezier curve
-        bezier_params = np.concatenate((node1_pos, edge_params, node2_pos))
-        bezier_params = bezier_params.reshape((EDGE_BEZIER_POINTS+2, 3))
+        bezier_params = np.concatenate((node1_pos, edge_params, node2_pos), axis=0)
 
         # Creates the function to compute the line
         def bezier(t: int) -> np.ndarray:
             return BEZIER_CURVE_COEFFICIENTS[t,:] @ bezier_params
         return bezier
-
-        # # Computes the origin
-        # origin = self.get_node_position(NUM_NODES-1)
-
-        # # Computes values for computing the coordinate system
-        # origin_to_node1 = node1_pos - origin
-        # origin_to_node2 = node2_pos - origin
-
-        # # Computer the coordinate system for the edge
-        # x_axis = (node2_pos - node1_pos) / EDGE_SEGMENTS # Normalized since t will range from [0,EDGE_SEGMENTS]
-        # y_axis = origin_to_node1 + origin_to_node2
-        # y_axis /= np.linalg.norm(y_axis)
-
-        # # Computes the edge points in the transformed axes
-        # # return node1_pos + np.array([x_axis * t + y_axis * bezier(t) for t in range(EDGE_SEGMENTS+1)])
-        # return lambda t: node1_pos + x_axis * t + y_axis * bezier(t)
 
 
     def has_face(self, node1: int, node2: int, node3: int) -> bool:
@@ -315,6 +316,32 @@ class Metamaterial:
             
         # No faces were found
         return False
+    
+
+    def get_face_params(self, node1: int, node2: int, node3) -> np.ndarray:
+        """
+        Gets the parameters of the face between the three given nodes.
+
+        node1: int
+            The ID of the first node of the face.
+
+        node2: int
+            The ID of the second node of the face.
+
+        node3: int
+            The ID of the third node of the face.
+
+        Returns: np.ndarray
+            The face parameters of the face if it exists, otherwise `None`.
+        """
+
+        # # Checks if a face exists
+        # if not self.has_face(node1, node2, node3):
+        #     return None
+        
+        # Retrieves the face parameters
+        face_index = face_adj_index(node1, node2, node3) * FACE_BEZIER_POINTS*3
+        return self.face_params[face_index : face_index + FACE_BEZIER_POINTS*3]
 
 
     def get_face_adj_tensor(self) -> np.ndarray:
@@ -350,56 +377,37 @@ class Metamaterial:
             A function giving the coordinate of the face point for a given s,t
             along on the Bezier triangle. If no face exists, returns None.
         """
-
+        
         # Checks for face existence
         if not self.has_face(node1, node2, node3):
             return None
 
-        # Computes the origin
-        origin = self.get_node_position(NUM_NODES-1)
-
-        # Computes values for computing the coordinate system
+        # Stores the node positions
         node1, node2, node3 = sorted((node1, node2, node3))
-        node1_pos = self.get_node_position(node1)
-        node2_pos = self.get_node_position(node2)
-        node3_pos = self.get_node_position(node3)
+        node1_pos = self.get_node_position(node1)[np.newaxis, :]
+        node2_pos = self.get_node_position(node2)[np.newaxis, :]
+        node3_pos = self.get_node_position(node3)[np.newaxis, :]
+
+        # Stores the edge parameters
+        edge1_params = self.get_edge_params(node1, node2).reshape((EDGE_BEZIER_POINTS, 3))
+        edge2_params = self.get_edge_params(node1, node3).reshape((EDGE_BEZIER_POINTS, 3))
+        edge3_params = self.get_edge_params(node2, node3).reshape((EDGE_BEZIER_POINTS, 3))
         
-        # Computes values for the Bezier function
-        face_ind = face_adj_index(node1, node2, node3)*FACE_BEZIER_POINTS
-        edge1_ind = edge_adj_index(node1, node2)*EDGE_BEZIER_POINTS
-        edge2_ind = edge_adj_index(node1, node3)*EDGE_BEZIER_POINTS
-        edge3_ind = edge_adj_index(node2, node3)*EDGE_BEZIER_POINTS
+        # Stores the face parameters
+        face_params = self.get_face_params(node1, node2, node3).reshape((FACE_BEZIER_POINTS, 3))
 
-        # Computes the Bezier function
-        def bezier(s, t):
-            curve = 0
-            s /= EDGE_SEGMENTS
-            t /= EDGE_SEGMENTS
-            u = 1 - s - t
+        # Appropriately structures all parameters for the Bezier curve
+        bezier_params = np.concatenate([
+            node1_pos, node2_pos, node3_pos,
+            edge1_params, edge2_params, edge3_params,
+            face_params
+        ], axis=0)
 
-            # Computes the curve output due to edges
-            curve += self.edge_params[edge1_ind] * t * s**2 + self.edge_params[edge1_ind+1] * s * t**2
-            curve += self.edge_params[edge2_ind] * u * s**2 + self.edge_params[edge2_ind+1] * s * u**2
-            curve += self.edge_params[edge3_ind] * u * t**2 + self.edge_params[edge3_ind+1] * t * u**2
-
-            # Computes the curve output due to face
-            curve += self.face_params[face_ind] * s * t * u
-
-            return curve
-
-        # Computer the coordinate system for the edge
-        x_axis = (node2_pos - node1_pos) / EDGE_SEGMENTS # Normalized since t will range from [0,EDGE_SEGMENTS]
-        z_axis = (node3_pos - node1_pos) / EDGE_SEGMENTS # Normalized since s will range from [0,EDGE_SEGMENTS]
-        y_axis = np.cross(x_axis, z_axis)
-        y_axis /= np.linalg.norm(y_axis)
-        if np.dot(y_axis, node1_pos - origin) < 0: # Correctly orients y-axis
-            y_axis *= -1
-
-        # Computes the edge points in the transformed axes
-        # return node1_pos + np.array([x_axis * s + z_axis * t + y_axis * bezier(s, t)
-        #                                 for s in range(EDGE_SEGMENTS+1)
-        #                                     for t in range(EDGE_SEGMENTS+1-s)])
-        return lambda s,t: node1_pos + x_axis * s + z_axis * t + y_axis * bezier(s, t)
+        # Creates the function to compute the face
+        def bezier(s: int, t: int) -> np.ndarray:
+            ind = bezier_triangle_index(s,t)
+            return BEZIER_TRIANGLE_COEFFICIENTS[ind,:] @ bezier_params
+        return bezier
 
 
     def remove_invalid_faces(self):

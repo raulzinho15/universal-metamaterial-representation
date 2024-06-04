@@ -132,11 +132,13 @@ def generate_face_mesh(material: Metamaterial, node1, node2, node3):
     di = 0
     for t in range(EDGE_SEGMENTS):
         for s in range(EDGE_SEGMENTS-t):
-            vertices.extend([tuple(face_points(s,t)), tuple(face_points(s+1,t)), tuple(face_points(s,t+1)), tuple(face_points(s+1,t+1))])
+            vertices.extend([tuple(face_points(s,t)), tuple(face_points(s+1,t)), tuple(face_points(s,t+1))])
             faces.append((di, di+1, di+2))
+            di += 3
             if s+t+2 <= EDGE_SEGMENTS:
-                faces.append((di+1, di+2, di+3))
-            di += 4
+                vertices.append(tuple(face_points(s+1,t+1)))
+                faces.append((di-2, di-1, di))
+                di += 1
 
     return vertices, faces
 
