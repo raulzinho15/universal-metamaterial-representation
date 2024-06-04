@@ -5,7 +5,7 @@ from representation.rep_utils import *
 
 class Metamaterial:
 
-    def __init__(self, node_pos, edge_adj, edge_params, face_adj, face_params):
+    def __init__(self, node_pos: np.ndarray, edge_adj: np.ndarray, edge_params: np.ndarray, face_adj: np.ndarray, face_params: np.ndarray):
         """
         Initializes a metamaterial representation with the given
         representation arrays.
@@ -19,30 +19,28 @@ class Metamaterial:
             extracting nodes' positions can be found in get_node_positions().
         
         edge_adj: ndarray
-            A 1d numpy array edge adjacency
-            array, where a 1 at the corresponding adjacency matrix's i-th row and
-            j-th column means that nodes i and j are connected by an edge. All other
-            entries are 0. The logic for extracting the edge adjacencies can be found
-            in the edge_adj_index() function.
+            A 1d numpy array edge adjacency array, where a 1 at the corresponding
+            adjacency matrix's i-th row and j-th column means that nodes i and j are
+            connected by an edge. All other entries are 0. The logic for extracting
+            the edge adjacencies can be found in the edge_adj_index() function.
 
         edge_params: ndarray
             A 1d numpy array with (scaled) coefficients for Bezier curves, where
-            groups of 2 coefficients will be associated with the edge in the
-            corresponding position. Specifically, the non-node 2 coefficients
-            of the Bezier curve will be set to those values.
+            groups of EDGE_BEZIER_PARAMS coefficients will be associated with the
+            edge in the corresponding position. Specifically, the non-node
+            coefficients of the Bezier curve will be set to those values.
         
         face_adj: ndarray
-            A 1d numpy array face adjacency
-            array, where a 1 at the corresponding adjacency tensor's (i,j,k) index
-            means that nodes i, j, and k are connected by a triangular face. All other
-            entries are 0. The logic for extracting the face adjacencies can be found
-            in the face_adj_index() function.
+            A 1d numpy array face adjacency array, where a 1 at the corresponding
+            adjacency tensor's (i,j,k) index means that nodes i, j, and k are connected
+            by a triangular face. All other entries are 0. The logic for extracting the
+            face adjacencies can be found in the face_adj_index() function.
 
         face_params: ndarray
             A 1d numpy array with (scaled) coefficients for Bezier triangle, where
-            groups of 1 coefficient will be associated with the edge in the
-            corresponding position. Specifically, the non-edge 1 coefficient
-            of the Bezier curve will be set to those values.
+            groups of FACE_BEZIER_PARAMS coefficients will be associated with the
+            edge in the corresponding position. Specifically, the non-edge
+            coefficients of the Bezier curve will be set to those values.
         """
 
         # Stores the rep arrays
@@ -66,7 +64,7 @@ class Metamaterial:
         self.cube_pos = {}
 
 
-    def get_node_position(self, node):
+    def get_node_position(self, node: int) -> np.ndarray:
         """
         Computes the 3D position of the given node.
 
@@ -77,12 +75,13 @@ class Metamaterial:
             The 3D position of the given node.
         """
 
-        # Gets the position of the center node
-        if node == NUM_NODES-1:
-            x,y,z = (0.5,0.5,0.5)
-
-        elif node in self.cube_pos:
+        # Uses a pre-computed node position
+        if node in self.cube_pos:
             return self.cube_pos[node]
+
+        # Gets the position of the center node
+        elif node == NUM_NODES-1:
+            x,y,z = (0.5,0.5,0.5)
 
         # Computes the position of a non-center node
         else:
@@ -100,19 +99,18 @@ class Metamaterial:
         return self.cube_pos[node]
 
 
-    def get_node_positions(self):
+    def get_node_positions(self) -> np.ndarray:
         """
         Computes the positions of all nodes in the metamaterial representation.
 
         Returns: ndarray
-            The positions of all nodes, ordered as face nodes, edge nodes, vertex
-            nodes, and the center node.
+            The positions of all nodes, ordered as according to node ID.
         """
 
         return np.array([list(self.get_node_position(node)) for node in range(NUM_NODES)])
     
 
-    def angle_score(self, node):
+    def angle_score(self, node: int) -> float:
         """
         Computes the angle score of the given node.
 
@@ -184,7 +182,7 @@ class Metamaterial:
         return material
 
 
-    def has_edge(self, node1, node2):
+    def has_edge(self, node1: int, node2: int) -> bool:
         """
         Checks whether the two given nodes have an edge between them
         based on the edge adjacencies.
@@ -206,7 +204,7 @@ class Metamaterial:
         return self.edge_adj[edge_adj_index(node1, node2)] == 1
 
 
-    def get_edge_adj_matrix(self):
+    def get_edge_adj_matrix(self) -> np.ndarray:
         """
         Converts the edge adjacencies into an edge adjacency matrix.
 
@@ -220,7 +218,7 @@ class Metamaterial:
                             for n2 in range(NUM_NODES)]).astype(float)
     
 
-    def compute_edge_points(self, node1, node2):
+    def compute_edge_points(self, node1: int, node2: int):
         """
         Computes the coordinates of the points that make up an edge.
 
@@ -265,7 +263,7 @@ class Metamaterial:
         return lambda t: node1_pos + x_axis * t + y_axis * bezier(t)
 
 
-    def has_face(self, node1, node2, node3):
+    def has_face(self, node1: int, node2: int, node3: int) -> bool:
         """
         Checks whether the three given nodes have a face between them
         based on the face adjacencies.
@@ -290,7 +288,7 @@ class Metamaterial:
         return self.face_adj[face_adj_index(node1, node2, node3)] == 1
     
 
-    def has_some_face(self, node1, node2):
+    def has_some_face(self, node1: int, node2: int) -> bool:
         """
         Checks whether there exists some face between the two nodes.
 
@@ -310,7 +308,7 @@ class Metamaterial:
         return False
 
 
-    def get_face_adj_tensor(self):
+    def get_face_adj_tensor(self) -> np.ndarray:
         """
         Converts the given face adjacencies into a face adjacency tensor.
 
@@ -326,7 +324,7 @@ class Metamaterial:
                                 for n3 in range(NUM_NODES)]).astype(float)
     
 
-    def compute_face_points(self, node1, node2, node3):
+    def compute_face_points(self, node1: int, node2: int, node3: int):
         """
         Computes the coordinates of the points that make up a face.
 
@@ -780,7 +778,7 @@ class Metamaterial:
         return pair
 
 
-    def flatten_rep(self, pad_dim=False):
+    def flatten_rep(self, pad_dim=False) -> torch.Tensor:
         """
         Computes the flattened array representation of the metamaterial.
 
@@ -816,21 +814,34 @@ class Metamaterial:
 
         return material
     
-    def from_tensor(rep_tensor):
+    def from_tensor(rep_tensor: torch.Tensor, random_cutoffs=False):
         """
         Creates a Metamaterial from the given PyTorch tensor.
 
         rep_tensor: Tensor
             A tensor with the representation arrays concatenated together.
+
+        random_cutoffs: bool
+            Whether random cutoffs will be used for determining
+            edge/face existence. If False, then 0.5 is used.
         """
 
-        numpy_rep = rep_tensor.detach().numpy().reshape(NODE_POS_SIZE+EDGE_ADJ_SIZE+EDGE_PARAMS_SIZE+FACE_ADJ_SIZE+FACE_PARAMS_SIZE)
+        numpy_rep = rep_tensor.detach().reshape(REP_SIZE).numpy()
+
+        if random_cutoffs:
+            np.random.seed(0)
+            edge_cutoffs = np.random.rand(EDGE_ADJ_SIZE)
+            face_cutoffs = np.random.rand(FACE_ADJ_SIZE)
+        else:
+            edge_cutoffs = np.ones(EDGE_ADJ_SIZE) / 2
+            face_cutoffs = np.ones(FACE_ADJ_SIZE) / 2
+
 
         # Stores the individual parts of the rep
         node_pos = numpy_rep[ : NODE_POS_SIZE]
-        edge_adj = (numpy_rep[NODE_POS_SIZE : NODE_POS_SIZE + EDGE_ADJ_SIZE] > 0.48).astype(float)
+        edge_adj = (numpy_rep[NODE_POS_SIZE : NODE_POS_SIZE + EDGE_ADJ_SIZE] > edge_cutoffs).astype(float)
         edge_params = numpy_rep[NODE_POS_SIZE + EDGE_ADJ_SIZE : NODE_POS_SIZE + EDGE_ADJ_SIZE + EDGE_PARAMS_SIZE]
-        face_adj = (numpy_rep[NODE_POS_SIZE + EDGE_ADJ_SIZE + EDGE_PARAMS_SIZE : NODE_POS_SIZE + EDGE_ADJ_SIZE + EDGE_PARAMS_SIZE + FACE_ADJ_SIZE] > 0.48).astype(float)
+        face_adj = (numpy_rep[NODE_POS_SIZE + EDGE_ADJ_SIZE + EDGE_PARAMS_SIZE : NODE_POS_SIZE + EDGE_ADJ_SIZE + EDGE_PARAMS_SIZE + FACE_ADJ_SIZE] > face_cutoffs).astype(float)
         face_params = numpy_rep[NODE_POS_SIZE + EDGE_ADJ_SIZE + EDGE_PARAMS_SIZE + FACE_ADJ_SIZE : ]
 
         return Metamaterial(node_pos, edge_adj, edge_params, face_adj, face_params)

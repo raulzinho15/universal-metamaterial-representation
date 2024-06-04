@@ -32,8 +32,8 @@ class MetamaterialAE(nn.Module):
 
         # Computes the sizes of the autoencoder's neural networks.
         self.input_size = REP_SIZE
-        self.hidden_size = self.input_size * hidden_size_scale
-        self.latent_size = self.input_size * latent_size_scale
+        self.hidden_size = round(self.input_size * hidden_size_scale)
+        self.latent_size = round(self.input_size * latent_size_scale)
 
         # Encoder
         self.encoder_stack = nn.Sequential(
@@ -54,7 +54,7 @@ class MetamaterialAE(nn.Module):
         )
 
 
-    def encode(self, x: torch.Tensor):
+    def encode(self, x: torch.Tensor) -> torch.Tensor:
         """
         Runs the network's encoder on the input.
         """
@@ -80,7 +80,7 @@ class MetamaterialAE(nn.Module):
         return mean + eps * std
     
 
-    def decode(self, z: torch.Tensor):
+    def decode(self, z: torch.Tensor) -> torch.Tensor:
         """
         Runs the network's decoder on the input.
         """

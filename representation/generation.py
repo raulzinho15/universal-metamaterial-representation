@@ -277,12 +277,18 @@ def plot_metamaterial_grid(metamaterial, shape, filename="", animate=False):
     plt.close()
 
 
-def interpolate(model: MetamaterialAE, material1: Metamaterial, material2: Metamaterial, interps, validate=False, func="linear"):
+def generate_interpolation_steps(interps: int) -> torch.Tensor:
+
+    interpolation_steps = torch.abs(torch.randn((REP_SIZE, interps)))
+    return interpolation_steps / interpolation_steps.sum(dim=1, keepdim=True)
+
+
+def interpolate(model: MetamaterialAE, material1: Metamaterial, material2: Metamaterial, interps: int, validate=False, func="linear", use_ae=False, random_steps=False):
     """
     Generates the linear interpolation of the two materials.
 
     model: MetamaterialAE
-        The model to use to interpolate.
+        The model to use to interpolate. Can be None if use_ae is False.
 
     material1: Metamaterial
         The base material for interpolation.
@@ -301,33 +307,50 @@ def interpolate(model: MetamaterialAE, material1: Metamaterial, material2: Metam
         The function to use for interpolation. If "linear" then uses linear interpolation.
         If "spherical" then uses spherical integration. By default, uses linear.
 
+    use_ae: bool
+        Whether the given model should be used.
+
+    random_steps: bool
+        Whether to use random steps.
+
     Returns: list[Metamaterial]
         The list of interpolated metamaterials.
     """
 
     # Computes the latent representation of the two metamaterials
-    m1_latent = model.encode(material1.flatten_rep(pad_dim=True))
-    m2_latent = model.encode(material2.flatten_rep(pad_dim=True))
+    if use_ae:
+        m1_latent = model.encode(material1.flatten_rep(pad_dim=True))
+        m2_latent = model.encode(material2.flatten_rep(pad_dim=True))
+    else:
+        m1_latent = material1.flatten_rep()
+        m2_latent = material2.flatten_rep()
+
+    # Stores values for interpolation
+    alpha = torch.zeros(REP_SIZE)
+    if random_steps:
+        alpha_steps = generate_interpolation_steps(interps)
+    else:
+        alpha_steps = torch.ones((REP_SIZE, interps)) / interps
 
     # Runs through each interpolation
     materials = []
-    for ind, alpha in enumerate([x/interps for x in range(interps+1)]):
+    for interp in range(interps):
 
-        # Decodes the interpolated latent representation
-        if ind == 0:
-            materials.append(material1)
-        elif ind == interps:
-            materials.append(material2)
+        # Updates the value of alpha
+        alpha = alpha + alpha_steps[:,interp]
+
+        # Interpolates according to the given function
+        if func == "spherical":
+            omega = torch.acos(torch.sum(m1_latent * m2_latent) / (torch.norm(m1_latent, p=2) * torch.norm(m2_latent, p=2))).item()
+            interpolated_value = (np.sin((1-alpha) * omega) * m1_latent + np.sin(alpha * omega) * m2_latent) / np.sin(omega)
         else:
+            interpolated_value = m1_latent * (1-alpha) + m2_latent * alpha
 
-            # Interpolates according to the given function
-            if func == "spherical":
-                omega = torch.acos(torch.sum(m1_latent * m2_latent) / (torch.norm(m1_latent, p=2) * torch.norm(m2_latent, p=2))).item()
-                decoding = model.decode((np.sin((1-alpha) * omega) * m1_latent + np.sin(alpha * omega) * m2_latent) / np.sin(omega))
-            else:
-                decoding = model.decode(m1_latent*(1-alpha) + m2_latent*alpha)
+        # Decodes the interpolation
+        if use_ae:
+            interpolated_value = model.decode(interpolated_value)
 
-            materials.append(Metamaterial.from_tensor(decoding))
+        materials.append(Metamaterial.from_tensor(interpolated_value, random_cutoffs=False))
 
         # Validates the decoded representation
         if validate:
@@ -335,7 +358,7 @@ def interpolate(model: MetamaterialAE, material1: Metamaterial, material2: Metam
             materials[-1].remove_invalid_edges() # Removes edges intersecting with faces
             materials[-1].remove_invalid_faces() # Removes faces without all edges in the rep after edge removal
 
-    return materials
+    return [material1] + materials + [material2]
 
 
 def plot_interpolation(model, material1: Metamaterial, material2: Metamaterial, interps, path, validate=False, shape=(1,1,1), func="linear"):
