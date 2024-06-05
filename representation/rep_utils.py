@@ -2,7 +2,7 @@ import numpy as np
 from math import factorial
 
 # User-controlled properties
-NUM_NODES = 12 + 1 # Non-center nodes plus the single center node
+NUM_NODES = 3 + 1 # Non-center nodes plus the single center node
 EDGE_BEZIER_POINTS = 2 # The number of points to describe curved edges
 EDGE_SEGMENTS = 32 # The number of segments to use to mesh edges/faces
 
@@ -356,7 +356,9 @@ def find_edge_params(target_edge_points: np.ndarray) -> np.ndarray:
         (in order from t=0 to t=1). The second axis should separate
         the coordinates of a given edge point. There must be
         `EDGE_SEGMENTS+1` edge points, as it must include the node
-        positions at the ends.
+        positions at the ends. Assumes the points at the ends of
+        `target_edge_points` are also the node positions used in the
+        metamaterial.
 
     Returns: np.ndarray
         The edge parameters that most closely match the given edge
@@ -372,7 +374,7 @@ def find_edge_params(target_edge_points: np.ndarray) -> np.ndarray:
     node1_effect = BEZIER_CURVE_COEFFICIENTS[1:-1,:1] @ node1_pos
     node2_effect = BEZIER_CURVE_COEFFICIENTS[1:-1,-1:] @ node2_pos
 
-    # Computes the target output (the coordinates are on second axis)
+    # Computes the linear system's target output (the coordinates are on second axis)
     b = target_edge_points[1:-1,:]
     b -= node1_effect + node2_effect
 
@@ -440,7 +442,7 @@ def bezier_triangle_coefficients(s: int, t: int) -> np.ndarray:
     u = EDGE_SEGMENTS - s - t
 
     # Computes each coefficient for each control point
-    return np.array(
+    return np.array([
         [
             BEZIER_MONOMIALS[s, EDGE_BEZIER_POINTS+1], # The weight for the face's first vertex control point
             BEZIER_MONOMIALS[t, EDGE_BEZIER_POINTS+1], # The weight for the face's second vertex control point
@@ -460,14 +462,19 @@ def bezier_triangle_coefficients(s: int, t: int) -> np.ndarray:
         ] + [
             # The weights for the control points in the middle of the triangle
             MULTINOMIAL_COEFFICIENTS[i,j] * BEZIER_MONOMIALS[s, i+1] * BEZIER_MONOMIALS[t, j+1] * BEZIER_MONOMIALS[u, EDGE_BEZIER_POINTS-1-i-j]
-                for i in range(EDGE_BEZIER_POINTS-1) for j in range(EDGE_BEZIER_POINTS-1-i)
+                for i in range(EDGE_BEZIER_POINTS-1) for j in range(EDGE_BEZIER_POINTS-1-i) # The number of iterations = FACE_BEZIER_POINTS
         ]
-    )
+    ])
 
+
+# Computes the parameters of a Bezier triangle in the order they are used in BEZIER_TRIANGLE_COEFFICIENTS
+BEZIER_TRIANGLE_PARAMETERS = np.array([
+    [s, t, EDGE_SEGMENTS-s-t] for s in range(EDGE_SEGMENTS+1) for t in range(EDGE_SEGMENTS+1-s)
+])
 
 # Computes the general coefficients for a Bezier triangle
 BEZIER_TRIANGLE_COEFFICIENTS = np.concatenate([
-    bezier_triangle_coefficients(s, t)[np.newaxis,:] for s in range(EDGE_SEGMENTS+1) for t in range(EDGE_SEGMENTS+1-s)
+    bezier_triangle_coefficients(s, t) for s,t,u in BEZIER_TRIANGLE_PARAMETERS
 ], axis=0)
 
 
@@ -489,3 +496,101 @@ def bezier_triangle_index(s: int, t: int) -> int:
         Must be in `[0,EDGE_SEGMENTS]`.
     """
     return t + s*(3-s)//2 + s*EDGE_SEGMENTS
+
+
+def find_face_params(edge_params, face_function):
+    """
+    Runs regression to find the face parameters that most closely
+    produce the face points produced by the given function.
+
+    edge_params: nd.array or None
+        A 2D numpy array containing the edge parameters to be assumed in the
+        regression. The ordering should be that of the edge between the nodes with:
+        1) The lowest and second lowest index in the metamaterial.
+        2) The lowest and highest index in the metamaterial.
+        3) The second lowest and highest index in the metamaterial.
+        
+        All these nodes index orderings are relative to the nodes
+        themselves, i.e., not relative to all nodes in the metamaterial.
+        The first axis should separate the different edge parameters,
+        ordered as they are ordered in Metamaterial's `edge_params`.
+        The second axis should separate the coordinates of a given
+        edge parameter.
+
+        If this value is `None`, then the edge parameters are also computed
+        and returned by this function.
+
+    face_function: (int, int) -> np.ndarray
+        A function that takes in the Bezier parameters in [0,EDGE_SEGMENTS]
+        corresponding to the node of lowest and second lowest index,
+        respectively, and outputs the corresponding target point on the
+        face as a 1x3 numpy array, where the coordinates are along the
+        second axis.
+
+    Returns: np.ndarray
+        If `edge_params` is not `None`, this returns the face
+        parameters that most closely match the target face
+        points, formatted in the way that the Metamaterial class
+        `face_params` value should be for a particular face.
+        
+        If `edge_params` is `None`, then this also returns the edge
+        parameters, where the first row in the returned array contains
+        the face parameters, and the remaining three rows are the
+        edge parameters of the three edges defining this face, where the
+        edges are ordered as described in `edge_params` description.
+    """
+
+    # Computes the node positions
+    node1_pos = face_function(EDGE_SEGMENTS, 0)
+    node2_pos = face_function(0, EDGE_SEGMENTS)
+    node3_pos = face_function(0, 0)
+
+    # Combines the fixed parameters
+    fixed_params = np.concatenate([
+        node1_pos, node2_pos, node3_pos
+    ], axis=0)
+    if edge_params is not None:
+        fixed_params = np.concatenate([fixed_params, edge_params], axis=0)
+
+    # Defines how to ignore indices of Bezier triangle coefficients/parameters
+    if edge_params is not None:
+        # Ignores node-only and edge-only points along the face
+        is_not_ignored_index = lambda a: a[0] > 0 and a[1] > 0 and a[2] > 0
+    else:
+        # Ignores node-only points along the face
+        is_not_ignored_index = lambda a: a[0] != EDGE_SEGMENTS and a[1] != EDGE_SEGMENTS and a[2] != EDGE_SEGMENTS
+
+    # Keeps only the Bezier triangle coefficients for which the face parameter is non-zero
+    relevant_indices = np.array([i for i,a in enumerate(BEZIER_TRIANGLE_PARAMETERS) if is_not_ignored_index(a)])
+    relevant_bezier_coefficients = BEZIER_TRIANGLE_COEFFICIENTS[relevant_indices, :]
+    relevant_bezier_parameters = BEZIER_TRIANGLE_PARAMETERS[relevant_indices, :]
+
+    # Computes the effect of the node and edge parameters
+    cutoff_index = -FACE_BEZIER_POINTS - (EDGE_BEZIER_POINTS*3 if edge_params is None else 0)
+    fixed_effect = relevant_bezier_coefficients[:,:cutoff_index] @ fixed_params
+
+    # Computes the linear system's target output (the coordinates are on second axis)
+    b = np.concatenate([
+        face_function(s,t) for s,t,u in relevant_bezier_parameters
+    ], axis=0)
+    b -= fixed_effect
+
+    # Computes the linear system's matrix
+    A = relevant_bezier_coefficients[:,cutoff_index:]
+
+    # Solves the system for each coordinate
+    inferred_params = np.concatenate([np.linalg.solve(A.T @ A, A.T @ b[:,i]).reshape(-cutoff_index, 1) for i in range(3)], axis=1)
+    inferred_params = inferred_params.flatten()
+
+    # Returns the correctly formatted parameters
+    if edge_params is not None:
+        return inferred_params
+    else:
+        return (
+            inferred_params[-FACE_BEZIER_POINTS*3 :],
+            inferred_params[: EDGE_BEZIER_POINTS*3],
+            inferred_params[EDGE_BEZIER_POINTS*3 : EDGE_BEZIER_POINTS*3*2],
+            inferred_params[EDGE_BEZIER_POINTS*3*2 : -FACE_BEZIER_POINTS*3],
+        )
+
+
