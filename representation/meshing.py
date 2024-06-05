@@ -6,7 +6,7 @@ THICKNESS = 0.02
 VERTICES_PER_EDGE = 8
 VERTICES_PER_FACE = 3
 
-def generate_edge_segment_mesh(point1, point2):
+def generate_edge_segment_mesh(point1, point2, next_point=None):
     """
     Generates the vertices and faces for an edge segment.
     
@@ -23,19 +23,21 @@ def generate_edge_segment_mesh(point1, point2):
         the first entry.
     """
 
-    # Computes the edge direction
+    # Computes the edge direction for face 1
     edge_dir = point1 - point2
     edge_len = np.linalg.norm(edge_dir)
     edge_dir /= edge_len
 
-    # Computes a random vector to be used for orthogonal vector generation
+    # Computes a random vector to be used for orthogonal vector generation for face 1
     rand_vec = np.array([1,0,0])
     if np.linalg.norm(np.cross(rand_vec, edge_dir)) < 0.1:
         rand_vec = np.array([0,1,0])
         
-    # Computes two co-orthogonal vectors orthogonal to the edge direction
+    # Computes two co-orthogonal vectors orthogonal to the edge direction for face1
     basis1 = np.cross(edge_dir, rand_vec)
+    basis1 /= np.linalg.norm(basis1)
     basis2 = np.cross(edge_dir, basis1)
+    basis2 /= np.linalg.norm(basis2)
 
     # Computes the face 1 (around node1) vertices
     face1_vertices = [
@@ -44,6 +46,25 @@ def generate_edge_segment_mesh(point1, point2):
         point1 - basis1*THICKNESS - basis2*THICKNESS,
         point1 - basis1*THICKNESS + basis2*THICKNESS,
     ]
+
+    # Adapts the normal to how it will appear on the next segment, if applicable
+    if next_point is not None:
+
+        # Computes the edge direction for face 2
+        edge_dir = point2 - next_point
+        edge_len = np.linalg.norm(edge_dir)
+        edge_dir /= edge_len
+
+        # Computes a random vector to be used for orthogonal vector generation for face 2
+        rand_vec = np.array([1,0,0])
+        if np.linalg.norm(np.cross(rand_vec, edge_dir)) < 0.1:
+            rand_vec = np.array([0,1,0])
+            
+        # Computes two co-orthogonal vectors orthogonal to the edge direction for face 2
+        basis1 = np.cross(edge_dir, rand_vec)
+        basis1 /= np.linalg.norm(basis1)
+        basis2 = np.cross(edge_dir, basis1)
+        basis2 /= np.linalg.norm(basis2)
 
     # Computes the face 2 (around node2) vertices
     face2_vertices = [
@@ -89,7 +110,7 @@ def generate_edge_mesh(material: Metamaterial, node1, node2):
 
     # Runs through each edge segment
     for edge in range(EDGE_SEGMENTS):
-        vertex_list, face_list = generate_edge_segment_mesh(edge_points(edge), edge_points(edge+1))
+        vertex_list, face_list = generate_edge_segment_mesh(edge_points(edge), edge_points(edge+1), next_point=(None if edge+2 > EDGE_SEGMENTS else edge_points(edge+2)))
 
         # Adds the new vertices/faces
         vertices.extend(vertex_list)
