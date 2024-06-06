@@ -12,14 +12,11 @@ edge_adj = np.zeros(EDGE_ADJ_SIZE)
 
 # Prepares the metamaterial's face function
 def face_function(s,t):
-    s /= EDGE_SEGMENTS
-    t /= EDGE_SEGMENTS
-    u = 1-s-t
-
     return (
-        s * np.array([[0., 0., 0.]]) +
-        t * np.array([[1., 0., 0.]]) +
-        u * np.array([[0., 0., 1.]])
+        s/EDGE_SEGMENTS * np.array([[0., 0., 0.]]) +
+        t/EDGE_SEGMENTS * np.array([[1., 0., 0.]]) +
+        (EDGE_SEGMENTS-s-t)/EDGE_SEGMENTS * np.array([[0., 0., 1.]]) +
+        s*t*(EDGE_SEGMENTS-s-t)/EDGE_SEGMENTS**2/2 * np.array([[0., 1., 0.]])
     )
 
 # Separately computes the edge parameters of the metamaterial

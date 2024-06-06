@@ -180,7 +180,6 @@ def generate_metamaterial_mesh(material: Metamaterial):
     vertices = []
     faces = []
     vertex_count = 0
-    # edge_count = 0
 
     # Generates the edge mesh for each edge
     for n1 in range(NUM_NODES):
@@ -196,14 +195,11 @@ def generate_metamaterial_mesh(material: Metamaterial):
 
             # Adds the faces from the edge
             for face in face_list:
-                # faces.append(tuple(map(lambda x: x+edge_count*VERTICES_PER_EDGE*EDGE_SEGMENTS, face)))
                 faces.append(tuple(map(lambda x: x + vertex_count, face)))
 
             vertex_count += len(vertex_list)
-            # edge_count += 1
 
     # Generates the face mesh for each face
-    # face_count = 0
     for n1 in range(NUM_NODES):
         for n2 in range(n1+1, NUM_NODES):
             for n3 in range(n2+1, NUM_NODES):
@@ -218,11 +214,9 @@ def generate_metamaterial_mesh(material: Metamaterial):
 
                 # Adds the faces from the face
                 for face in face_list:
-                    # faces.append(tuple(map(lambda x: x + edge_count*VERTICES_PER_EDGE*EDGE_SEGMENTS + face_count*VERTICES_PER_FACE, face)))
                     faces.append(tuple(map(lambda x: x + vertex_count, face)))
 
                 vertex_count += len(vertex_list)
-                # face_count += 1
 
     return vertices, faces
 

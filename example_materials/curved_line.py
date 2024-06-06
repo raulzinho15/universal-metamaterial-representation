@@ -14,7 +14,7 @@ edge_adj[index] = 1
 # Prepares the edge parameters of the metamaterial
 edge_params = np.zeros(EDGE_PARAMS_SIZE)
 index *= EDGE_BEZIER_COORDS
-edge_function = lambda t: np.array([[0.5, 0.5, t/EDGE_SEGMENTS]])
+edge_function = lambda t: np.array([[0.5 + np.sin(t/EDGE_SEGMENTS*2*np.pi)/2, 0.5 + (t/EDGE_SEGMENTS)*(1-t/EDGE_SEGMENTS)*2, t/EDGE_SEGMENTS]])
 edge_params[index : index + EDGE_BEZIER_COORDS] = find_edge_params(edge_function)
 
 # Prepares the face adjacencies of the metamaterial
