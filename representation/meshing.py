@@ -6,7 +6,7 @@ THICKNESS = 0.02
 VERTICES_PER_EDGE = 8
 VERTICES_PER_FACE = 3
 
-def generate_edge_segment_mesh(point1, point2, next_point=None):
+def generate_edge_segment_mesh(point1, point2, next_point=None, prev_normal=None):
     """
     Generates the vertices and faces for an edge segment.
     
@@ -29,12 +29,13 @@ def generate_edge_segment_mesh(point1, point2, next_point=None):
     edge_dir /= edge_len
 
     # Computes a random vector to be used for orthogonal vector generation for face 1
-    rand_vec = np.array([1,0,0])
-    if np.linalg.norm(np.cross(rand_vec, edge_dir)) < 0.1:
-        rand_vec = np.array([0,1,0])
+    if prev_normal is None:
+        prev_normal = np.array([1,0,0])
+        if np.linalg.norm(np.cross(prev_normal, edge_dir)) < 0.1:
+            prev_normal = np.array([0,1,0])
         
     # Computes two co-orthogonal vectors orthogonal to the edge direction for face1
-    basis1 = np.cross(edge_dir, rand_vec)
+    basis1 = np.cross(edge_dir, prev_normal)
     basis1 /= np.linalg.norm(basis1)
     basis2 = np.cross(edge_dir, basis1)
     basis2 /= np.linalg.norm(basis2)
@@ -55,13 +56,13 @@ def generate_edge_segment_mesh(point1, point2, next_point=None):
         edge_len = np.linalg.norm(edge_dir)
         edge_dir /= edge_len
 
-        # Computes a random vector to be used for orthogonal vector generation for face 2
-        rand_vec = np.array([1,0,0])
-        if np.linalg.norm(np.cross(rand_vec, edge_dir)) < 0.1:
-            rand_vec = np.array([0,1,0])
+        # # Computes a random vector to be used for orthogonal vector generation for face 2
+        # prev_normal = np.array([1,0,0])
+        # if np.linalg.norm(np.cross(prev_normal, edge_dir)) < 0.1:
+        #     prev_normal = np.array([0,1,0])
             
         # Computes two co-orthogonal vectors orthogonal to the edge direction for face 2
-        basis1 = np.cross(edge_dir, rand_vec)
+        basis1 = np.cross(edge_dir, prev_normal)
         basis1 /= np.linalg.norm(basis1)
         basis2 = np.cross(edge_dir, basis1)
         basis2 /= np.linalg.norm(basis2)
