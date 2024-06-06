@@ -51,56 +51,29 @@ class Metamaterial:
         self.face_params = np.copy(face_params)
 
         # Stores mirror transforms
-        self.mirror_x = False
-        self.mirror_y = False
-        self.mirror_z = False
+        self.mirrors = np.zeros(3)
 
         # Stores translation transforms
-        self.translate_x = 0
-        self.translate_y = 0
-        self.translate_z = 0
+        self.translations = np.zeros(3)
 
         # Stores already-computed node positions on the cube for computation speed-up
         self.cube_pos = {}
 
 
-    def tranform_coordinate(self, coord: float, x=False, y=False, z=False) -> np.ndarray:
+    def transform_point(self, point: np.ndarray) -> np.ndarray:
         """
-        Transforms the given coordinate with mirroring and translations according
-        to which specified spacial dimension it corresponds to.
+        Transforms the given point with mirroring and translations
+        according to the metamaterial's transforms.
 
-        coord: float
-            The coordinate to be transformed.
-
-        x: bool
-            If `True`, transforms the point according to the
-            metamaterial's x-direction transformations.
-            Should not be `True` if `y` or `z` are `True`.
-
-        y: bool
-            If `True`, transforms the point according to the
-            metamaterial's y-direction transformations.
-            Should not be `True` if `x` or `z` are `True`.
-
-        z: bool
-            If `True`, transforms the point according to the
-            metamaterial's z-direction transformations.
-            Should not be `True` if `x` or `y` are `True`.
+        point: np.ndarray
+            The point to be transformed.
 
         Returns: np.ndarray
-            The transformed coordinate.
+            The transformed point.
         """
 
-        # Applies an x transformation
-        if x:
-            return self.translate_x + (1-coord if self.mirror_x else coord)
-
-        # Applies a y transformation
-        if y:
-            return self.translate_y + (1-coord if self.mirror_y else coord)
-
-        # Applies a z transformation
-        return self.translate_z + (1-coord if self.mirror_z else coord)
+        # Applies the transformations
+        return self.translations + (1-point)*self.mirrors + point*(1-self.mirrors)
 
 
     def get_node_position(self, node: int) -> np.ndarray:
@@ -120,21 +93,17 @@ class Metamaterial:
 
         # Gets the position of the center node
         elif node == NUM_NODES-1:
-            x,y,z = (0.5,0.5,0.5)
+            point = np.ones(3)/2
 
         # Computes the position of a non-center node
         else:
             theta, phi = self.node_pos[node*2:(node+1)*2]
             theta, phi = theta*np.pi, phi*2*np.pi
             # biases = [0.8,0.5,0.8,0.8]
-            x,y,z = project_onto_cube(*spherical_to_euclidian(theta, phi))#, grid_lines=3, bias_cutoff=biases[node])
+            point = project_onto_cube(*spherical_to_euclidian(theta, phi))#, grid_lines=3, bias_cutoff=biases[node])
 
         # Returns the transformed position
-        self.cube_pos[node] = np.array([
-            self.translate_x + (1-x if self.mirror_x else x),
-            self.translate_y + (1-y if self.mirror_y else y),
-            self.translate_z + (1-z if self.mirror_z else z)
-        ])
+        self.cube_pos[node] = self.transform_point(point)
         return self.cube_pos[node]
 
 
@@ -184,10 +153,11 @@ class Metamaterial:
         # Creates copy for mirroring
         material = self.copy()
 
+        # Prepares a numpy array of the mirrorings
+        new_mirrors = np.array([x, y, z])
+
         # Mirrors the coordinates
-        material.mirror_x = not material.mirror_x if x else material.mirror_x
-        material.mirror_y = not material.mirror_y if y else material.mirror_y
-        material.mirror_z = not material.mirror_z if z else material.mirror_z
+        material.mirrors = np.logical_xor(new_mirrors, material.mirrors)
 
         return material
     
@@ -213,10 +183,11 @@ class Metamaterial:
         # Creates copy for translating
         material = self.copy()
 
+        # Creates a numpy array of the translations
+        new_translations = np.array([dx, dy, dz])
+
         # Translates the coordinates
-        material.translate_x += dx
-        material.translate_y += dy
-        material.translate_z += dz
+        material.translations += new_translations
 
         return material
 
@@ -859,14 +830,10 @@ class Metamaterial:
         material = Metamaterial(self.node_pos, self.edge_adj, self.edge_params, self.face_adj, self.face_params)
 
         # Copies the mirror transforms
-        material.mirror_x = self.mirror_x
-        material.mirror_y = self.mirror_y
-        material.mirror_z = self.mirror_z
+        material.mirrors = self.mirrors.copy()
 
         # Copies the translate transforms
-        material.translate_x = self.translate_x
-        material.translate_y = self.translate_y
-        material.translate_z = self.translate_z
+        material.translations = self.translations.copy()
 
         return material
     
