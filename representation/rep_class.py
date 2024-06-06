@@ -64,6 +64,45 @@ class Metamaterial:
         self.cube_pos = {}
 
 
+    def tranform_coordinate(self, coord: float, x=False, y=False, z=False) -> np.ndarray:
+        """
+        Transforms the given coordinate with mirroring and translations according
+        to which specified spacial dimension it corresponds to.
+
+        coord: float
+            The coordinate to be transformed.
+
+        x: bool
+            If `True`, transforms the point according to the
+            metamaterial's x-direction transformations.
+            Should not be `True` if `y` or `z` are `True`.
+
+        y: bool
+            If `True`, transforms the point according to the
+            metamaterial's y-direction transformations.
+            Should not be `True` if `x` or `z` are `True`.
+
+        z: bool
+            If `True`, transforms the point according to the
+            metamaterial's z-direction transformations.
+            Should not be `True` if `x` or `y` are `True`.
+
+        Returns: np.ndarray
+            The transformed coordinate.
+        """
+
+        # Applies an x transformation
+        if x:
+            return self.translate_x + (1-coord if self.mirror_x else coord)
+
+        # Applies a y transformation
+        if y:
+            return self.translate_y + (1-coord if self.mirror_y else coord)
+
+        # Applies a z transformation
+        return self.translate_z + (1-coord if self.mirror_z else coord)
+
+
     def get_node_position(self, node: int) -> np.ndarray:
         """
         Computes the 3D position of the given node.
