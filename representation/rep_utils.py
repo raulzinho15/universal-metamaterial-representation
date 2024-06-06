@@ -2,7 +2,7 @@ import numpy as np
 from math import factorial
 
 # User-controlled properties
-NUM_NODES = 3 + 1 # Non-center nodes plus the single center node
+NUM_NODES = 4 + 1 # Non-center nodes plus the single center node
 EDGE_BEZIER_POINTS = 2 # The number of points to describe curved edges
 EDGE_SEGMENTS = 32 # The number of segments to use to mesh edges/faces
 
@@ -345,20 +345,16 @@ for i in range(1,EDGE_BEZIER_POINTS+1):
 BEZIER_CURVE_COEFFICIENTS = BINOMIAL_COEFFICIENTS[np.newaxis,:] * BEZIER_MONOMIALS * BEZIER_MONOMIALS[::-1,::-1]
 
 
-def find_edge_params(target_edge_points: np.ndarray) -> np.ndarray:
+def find_edge_params(edge_function) -> np.ndarray:
     """
     Runs regression to find the edge parameters that most closely
     produce the given target edge points.
 
-    target_edge_points: np.ndarray
-        A 2D numpy array of the edge points to try to most closely
-        match. The first axis should separate the target edge points
-        (in order from t=0 to t=1). The second axis should separate
-        the coordinates of a given edge point. There must be
-        `EDGE_SEGMENTS+1` edge points, as it must include the node
-        positions at the ends. Assumes the points at the ends of
-        `target_edge_points` are also the node positions used in the
-        metamaterial.
+    edge_function: (int) -> np.ndarray
+        A function that takes in the Bezier parameter in [0,EDGE_SEGMENTS],
+        where t=0 corresponds to the initial point and t=1 to the end point.
+        It outputs the corresponding target point on the edge as a 1x3 numpy
+        array, where the coordinates are along the second axis.
 
     Returns: np.ndarray
         The edge parameters that most closely match the given edge
@@ -367,15 +363,16 @@ def find_edge_params(target_edge_points: np.ndarray) -> np.ndarray:
     """
 
     # Separates the node positions (which are fixed)
-    node1_pos = target_edge_points[:1,:]
-    node2_pos = target_edge_points[-1:,:]
+    node1_pos = edge_function(0)
+    node2_pos = edge_function(EDGE_SEGMENTS)
+
 
     # Computes the effect of the node positions
     node1_effect = BEZIER_CURVE_COEFFICIENTS[1:-1,:1] @ node1_pos
     node2_effect = BEZIER_CURVE_COEFFICIENTS[1:-1,-1:] @ node2_pos
 
     # Computes the linear system's target output (the coordinates are on second axis)
-    b = target_edge_points[1:-1,:]
+    b = np.concatenate([edge_function(t) for t in range(1, EDGE_SEGMENTS)], axis=0)
     b -= node1_effect + node2_effect
 
     # Computes the linear system's matrix
