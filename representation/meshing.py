@@ -76,6 +76,7 @@ def generate_edge_segment_mesh(point1, point2, next_point=None, prev_normal=None
     ]
 
     return (
+        basis2,
         [tuple(vertex) for vertex in face1_vertices] + [tuple(vertex) for vertex in face2_vertices], # Vertex coordinates
         [(0,1,2,3), (4,5,6,7)] + [(i, (i+1)%4, (i+1)%4+4, i+4) for i in range(4)] # Face vertex indices
     )
@@ -110,8 +111,9 @@ def generate_edge_mesh(material: Metamaterial, node1, node2):
     faces = []
 
     # Runs through each edge segment
+    prev_normal = None
     for edge in range(EDGE_SEGMENTS):
-        vertex_list, face_list = generate_edge_segment_mesh(edge_points(edge), edge_points(edge+1), next_point=(None if edge+2 > EDGE_SEGMENTS else edge_points(edge+2)))
+        prev_normal, vertex_list, face_list = generate_edge_segment_mesh(edge_points(edge), edge_points(edge+1), next_point=(None if edge+2 > EDGE_SEGMENTS else edge_points(edge+2)), prev_normal=prev_normal)
 
         # Adds the new vertices/faces
         vertices.extend(vertex_list)
