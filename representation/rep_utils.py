@@ -16,7 +16,7 @@ FACE_PARAMS_SIZE = FACE_ADJ_SIZE * FACE_BEZIER_POINTS * 3
 REP_SIZE = NODE_POS_SIZE + EDGE_ADJ_SIZE + EDGE_PARAMS_SIZE + FACE_ADJ_SIZE + FACE_PARAMS_SIZE
 
 
-def euclidian_to_spherical(x: float, y: float, z: float):
+def euclidian_to_spherical(x: float, y: float, z: float) -> np.ndarray:
     """
     Converts the given x,y,z Euclidian triplet into spherical coordinates.
 
@@ -53,7 +53,7 @@ def euclidian_to_spherical(x: float, y: float, z: float):
     return np.array([theta/np.pi, phi/(2*np.pi)])
 
 
-def spherical_to_euclidian(theta, phi, radius=None):
+def spherical_to_euclidian(theta, phi, radius=None) -> np.ndarray:
     """
     Converts the given spherical coordinates into Euclidian coordinates.
 
@@ -88,7 +88,7 @@ def spherical_to_euclidian(theta, phi, radius=None):
     return np.array([x,y,z])
 
 
-def project_onto_cube(x: float, y: float, z: float, grid_lines=0, bias_cutoff=1):
+def project_onto_cube(x: float, y: float, z: float, grid_lines=0, bias_cutoff=1) -> np.ndarray:
     """
     Projects the given coordinates onto the surface of the unit cube
     centered at (0.5, 0.5, 0.5).
@@ -138,7 +138,7 @@ def project_onto_cube(x: float, y: float, z: float, grid_lines=0, bias_cutoff=1)
     return pos
 
 
-def edge_adj_index(node1: int, node2: int):
+def edge_adj_index(node1: int, node2: int) -> int:
     """
     Computes the index at which the two nodes' edge adjacency is contained
     in the edge adjacency representation array.
@@ -175,7 +175,7 @@ def edge_adj_index(node1: int, node2: int):
     return offset2d + offset1d
 
 
-def to_edge_adj_rep(edge_adj_matrix: np.ndarray):
+def to_edge_adj_rep(edge_adj_matrix: np.ndarray) -> np.ndarray:
     """
     Converts the given edge adjacency matrix into the edge adjacency
     representation array.
@@ -199,7 +199,7 @@ def to_edge_adj_rep(edge_adj_matrix: np.ndarray):
     return edge_adj
 
 
-def to_edge_adj_matrix(edge_adj: np.ndarray):
+def to_edge_adj_matrix(edge_adj: np.ndarray) -> np.ndarray:
     """
     Converts the given edge adjacency representation into an edge adjacency
     matrix.
@@ -226,7 +226,7 @@ def to_edge_adj_matrix(edge_adj: np.ndarray):
     return edge_adj_matrix
 
 
-def face_adj_index(node1: int, node2: int, node3: int):
+def face_adj_index(node1: int, node2: int, node3: int) -> int:
     """
     Computes the index at which the three nodes' face adjacency is contained
     in the face adjacency representation array.
@@ -276,7 +276,7 @@ def face_adj_index(node1: int, node2: int, node3: int):
     return offset3d + offset2d + offset1d
 
 
-def to_face_adj_rep(face_adj_tensor: np.ndarray):
+def to_face_adj_rep(face_adj_tensor: np.ndarray) -> np.ndarray:
     """
     Converts the given face adjacency tensor into the face adjacency
     representation array.
@@ -301,7 +301,7 @@ def to_face_adj_rep(face_adj_tensor: np.ndarray):
     return face_adj
 
 
-def to_face_adj_tensor(face_adj: np.ndarray):
+def to_face_adj_tensor(face_adj: np.ndarray) -> np.ndarray:
     """
     Converts the given face adjacency representation into a face adjacency
     tensor.
