@@ -51,10 +51,10 @@ class Metamaterial:
         self.face_params = np.copy(face_params)
 
         # Stores mirror transforms
-        self.mirrors = np.zeros(3)
+        self.mirrors = np.zeros((1,3))
 
         # Stores translation transforms
-        self.translations = np.zeros(3)
+        self.translations = np.zeros((1,3))
 
         # Stores already-computed node positions on the cube for computation speed-up
         self.cube_pos = {}
@@ -66,14 +66,19 @@ class Metamaterial:
         according to the metamaterial's transforms.
 
         point: np.ndarray
-            The point to be transformed.
+            The point(s) to be transformed. If multiple points,
+            then should be a flattened array.
 
         Returns: np.ndarray
-            The transformed point.
+            The transformed point(s) as a flattened array.
         """
 
+        # Reshapes points if more than one point is given
+        if point.shape[0] > 3:
+            point = point.reshape(point.shape[0]//3, 3)
+
         # Applies the transformations
-        return self.translations + (1-point)*self.mirrors + point*(1-self.mirrors)
+        return (self.translations + (1-point)*self.mirrors + point*(1-self.mirrors)).flatten()
 
 
     def get_node_position(self, node: int) -> np.ndarray:
@@ -154,7 +159,7 @@ class Metamaterial:
         material = self.copy()
 
         # Prepares a numpy array of the mirrorings
-        new_mirrors = np.array([x, y, z])
+        new_mirrors = np.array([[x, y, z]])
 
         # Mirrors the coordinates
         material.mirrors = np.logical_xor(new_mirrors, material.mirrors)
@@ -184,7 +189,7 @@ class Metamaterial:
         material = self.copy()
 
         # Creates a numpy array of the translations
-        new_translations = np.array([dx, dy, dz])
+        new_translations = np.array([[dx, dy, dz]])
 
         # Translates the coordinates
         material.translations += new_translations
@@ -217,6 +222,7 @@ class Metamaterial:
     def get_edge_params(self, node1: int, node2: int) -> np.ndarray:
         """
         Gets the parameters of the edge between the two given nodes.
+        Assumes an edge exists between the two nodes.
 
         node1: int
             The ID of the first node of the edge.
@@ -225,12 +231,13 @@ class Metamaterial:
             The ID of the second node of the edge.
 
         Returns: np.ndarray
-            The edge parameters of the edge if it exists, otherwise `None`.
+            The edge parameters of the edge, transformed according
+            to the metamaterial's transformations.
         """
 
         # Retrieves the edge parameters
-        edge_index = edge_adj_index(node1, node2) * EDGE_BEZIER_POINTS*3
-        return self.edge_params[edge_index : edge_index + EDGE_BEZIER_POINTS*3]
+        edge_index = edge_adj_index(node1, node2) * EDGE_BEZIER_COORDS
+        return self.transform_point(self.edge_params[edge_index : edge_index + EDGE_BEZIER_COORDS])
 
 
     def get_edge_adj_matrix(self) -> np.ndarray:
@@ -262,10 +269,6 @@ class Metamaterial:
             along on the Bezier curve. If no edge exists, returns None.
         """
 
-        # # Checks for edge existence
-        # if not self.has_edge(node1, node2):
-        #     return None
-
         # Computes the node positions
         node1, node2 = sorted((node1, node2))
         node1_pos = self.get_node_position(node1)[np.newaxis, :]
@@ -277,7 +280,7 @@ class Metamaterial:
         # Appropriately structures all parameters for the Bezier curve
         bezier_params = np.concatenate((node1_pos, edge_params, node2_pos), axis=0)
 
-        # Creates the function to compute the line
+        # Creates the function to compute the edge points
         def bezier(t: int) -> np.ndarray:
             return BEZIER_CURVE_COEFFICIENTS[t,:] @ bezier_params
         return bezier
@@ -345,13 +348,9 @@ class Metamaterial:
             The face parameters of the face if it exists, otherwise `None`.
         """
 
-        # # Checks if a face exists
-        # if not self.has_face(node1, node2, node3):
-        #     return None
-        
         # Retrieves the face parameters
-        face_index = face_adj_index(node1, node2, node3) * FACE_BEZIER_POINTS*3
-        return self.face_params[face_index : face_index + FACE_BEZIER_POINTS*3]
+        face_index = face_adj_index(node1, node2, node3) * FACE_BEZIER_COORDS
+        return self.transform_point(self.face_params[face_index : face_index + FACE_BEZIER_COORDS])
 
 
     def get_face_adj_tensor(self) -> np.ndarray:
@@ -413,7 +412,7 @@ class Metamaterial:
             face_params
         ], axis=0)
 
-        # Creates the function to compute the face
+        # Creates the function to compute the face points
         def bezier(s: int, t: int) -> np.ndarray:
             ind = bezier_triangle_index(s,t)
             return BEZIER_TRIANGLE_COEFFICIENTS[ind,:] @ bezier_params
@@ -704,9 +703,9 @@ class Metamaterial:
         reordered_edge_params = np.zeros(EDGE_PARAMS_SIZE)
         for n1 in range(NUM_NODES):
             for n2 in range(n1+1, NUM_NODES):
-                reordered_index = edge_adj_index(n1, n2)*EDGE_BEZIER_POINTS
-                old_index = edge_adj_index(node_order[n1], node_order[n2])*EDGE_BEZIER_POINTS
-                reordered_edge_params[reordered_index:reordered_index+EDGE_BEZIER_POINTS] = self.edge_params[old_index:old_index+EDGE_BEZIER_POINTS]
+                reordered_index = edge_adj_index(n1, n2) * EDGE_BEZIER_COORDS
+                old_index = edge_adj_index(node_order[n1], node_order[n2]) * EDGE_BEZIER_COORDS
+                reordered_edge_params[reordered_index:reordered_index+EDGE_BEZIER_COORDS] = self.edge_params[old_index:old_index+EDGE_BEZIER_COORDS]
 
         # Stores the reordered face adjacencies
         reordered_face_adj = np.zeros(FACE_ADJ_SIZE)
@@ -720,9 +719,9 @@ class Metamaterial:
         for n1 in range(NUM_NODES):
             for n2 in range(n1+1, NUM_NODES):
                 for n3 in range(n2+1, NUM_NODES):
-                    reordered_index = face_adj_index(n1, n2, n3)*FACE_BEZIER_POINTS
-                    old_index = face_adj_index(node_order[n1], node_order[n2], node_order[n3])*FACE_BEZIER_POINTS
-                    reordered_face_params[reordered_index:reordered_index+FACE_BEZIER_POINTS] = self.face_params[old_index:old_index+FACE_BEZIER_POINTS]
+                    reordered_index = face_adj_index(n1, n2, n3) * FACE_BEZIER_COORDS
+                    old_index = face_adj_index(node_order[n1], node_order[n2], node_order[n3]) * FACE_BEZIER_COORDS
+                    reordered_face_params[reordered_index:reordered_index+FACE_BEZIER_COORDS] = self.face_params[old_index:old_index+FACE_BEZIER_COORDS]
 
         return Metamaterial(reordered_node_pos, reordered_edge_adj, reordered_edge_params, reordered_face_adj, reordered_face_params)
 

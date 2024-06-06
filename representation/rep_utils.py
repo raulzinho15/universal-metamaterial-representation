@@ -2,17 +2,19 @@ import numpy as np
 from math import factorial
 
 # User-controlled properties
-NUM_NODES = 4 + 1 # Non-center nodes plus the single center node
+NUM_NODES = 12 + 1 # Non-center nodes plus the single center node
 EDGE_BEZIER_POINTS = 2 # The number of points to describe curved edges
 EDGE_SEGMENTS = 32 # The number of segments to use to mesh edges/faces
 
 # Automatically-chosen properties
 NODE_POS_SIZE = (NUM_NODES-1) * 2
 EDGE_ADJ_SIZE = NUM_NODES * (NUM_NODES-1) // 2
-EDGE_PARAMS_SIZE = EDGE_ADJ_SIZE * EDGE_BEZIER_POINTS * 3
+EDGE_BEZIER_COORDS = EDGE_BEZIER_POINTS * 3
+EDGE_PARAMS_SIZE = EDGE_ADJ_SIZE * EDGE_BEZIER_COORDS
 FACE_ADJ_SIZE = NUM_NODES * (NUM_NODES-1) * (NUM_NODES-2) // 6
 FACE_BEZIER_POINTS = EDGE_BEZIER_POINTS * (EDGE_BEZIER_POINTS-1) // 2
-FACE_PARAMS_SIZE = FACE_ADJ_SIZE * FACE_BEZIER_POINTS * 3
+FACE_BEZIER_COORDS = FACE_BEZIER_POINTS * 3
+FACE_PARAMS_SIZE = FACE_ADJ_SIZE * FACE_BEZIER_COORDS
 REP_SIZE = NODE_POS_SIZE + EDGE_ADJ_SIZE + EDGE_PARAMS_SIZE + FACE_ADJ_SIZE + FACE_PARAMS_SIZE
 
 
@@ -383,6 +385,36 @@ def find_edge_params(edge_function) -> np.ndarray:
     return edge_params.flatten()
 
 
+def flat_edge_params(node1_pos: np.ndarray, node2_pos: np.ndarray) -> np.ndarray:
+    """
+    Finds the edge parameters for costructing a straight edge between
+    the two given points.
+
+    node1_pos: np.ndarray
+        The position of the starting node of the edge.
+
+    node2_pos: np.ndarray
+        The position of the ending node of the edge.
+
+    Returns: np.ndarray
+        The edge parameters that produce a straight edge between
+        the two given points, structured as they are in
+        `find_edge_params`.
+    """
+
+    # Prepares the function for computing points along the edge
+    def edge_function(t):
+        
+        # Prepares the Bezier parameter
+        t /= EDGE_SEGMENTS
+
+        # Interpolates between the two edge vertices
+        return ((1-t)*node1_pos + t*node2_pos)[np.newaxis,:]
+    
+    # Computes the best-fit edge parameters
+    return find_edge_params(edge_function)
+
+
 # Computes the multinomial coefficients that are relevant for Bezier triangle interpolation
 MULTINOMIAL_COEFFICIENTS = np.zeros((EDGE_BEZIER_POINTS-1, EDGE_BEZIER_POINTS-1))
 for i in range(EDGE_BEZIER_POINTS-1):
@@ -584,10 +616,45 @@ def find_face_params(edge_params, face_function):
         return inferred_params
     else:
         return (
-            inferred_params[-FACE_BEZIER_POINTS*3 :],
-            inferred_params[: EDGE_BEZIER_POINTS*3],
-            inferred_params[EDGE_BEZIER_POINTS*3 : EDGE_BEZIER_POINTS*3*2],
-            inferred_params[EDGE_BEZIER_POINTS*3*2 : -FACE_BEZIER_POINTS*3],
+            inferred_params[-FACE_BEZIER_COORDS :],
+            inferred_params[: EDGE_BEZIER_COORDS],
+            inferred_params[EDGE_BEZIER_COORDS : EDGE_BEZIER_COORDS*2],
+            inferred_params[EDGE_BEZIER_COORDS*2 : -FACE_BEZIER_COORDS],
         )
+
+
+def flat_face_params(node1_pos: np.ndarray, node2_pos: np.ndarray, node3_pos) -> np.ndarray:
+    """
+    Finds the face parameters for costructing a flat face between
+    the three given points.
+
+    node1_pos: np.ndarray
+        The position of the node of lowest index of the face.
+
+    node2_pos: np.ndarray
+        The position of the node of second lowest index of the face.
+
+    node3_pos: np.ndarray
+        The position of the node of highest index of the face.
+
+    Returns: np.ndarray
+        The face and edge parameters that produce a flat face between
+        the three given points, structure as they are structured in
+        `find_face_params`.
+    """
+
+    # Prepares the function for computing points along the face
+    def face_function(s, t):
+
+        # Prepares the Bezier parameters
+        s /= EDGE_SEGMENTS
+        t /= EDGE_SEGMENTS
+        u = 1-s-t
+
+        # Interpolates between the three face vertices
+        return (s*node1_pos + t*node2_pos + u*node3_pos)[np.newaxis, :]
+
+    # Computes the best-fit edge/face parameters
+    return find_face_params(None, face_function)
 
 
