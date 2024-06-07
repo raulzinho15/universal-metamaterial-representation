@@ -96,17 +96,8 @@ class Metamaterial:
         if node in self.cube_pos:
             return self.cube_pos[node]
 
-        # Gets the position of the center node
-        if node == NUM_NODES-1:
-            point = CUBE_CENTER
-
-        # Computes the position of a non-center node
-        else:
-            point = pseudo_spherical_to_euclidean(self.node_pos[node*3 : (node+1)*3][np.newaxis,:])
-            # theta, phi, radius = self.node_pos[node*3 : (node+1)*3]
-            # theta, phi = theta*np.pi, phi*2*np.pi
-            # cube_surface_point = project_onto_cube(*spherical_to_euclidian(theta, phi))
-            # point = CUBE_CENTER + (cube_surface_point-CUBE_CENTER) * radius
+        # Gets the position of the node
+        point = pseudo_spherical_to_euclidean(self.node_pos[node*3 : (node+1)*3][np.newaxis,:])
 
         # Returns the transformed position
         self.cube_pos[node] = self.transform_point(point)
