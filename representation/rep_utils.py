@@ -2,13 +2,13 @@ import numpy as np
 from math import factorial
 
 # User-controlled properties
-NUM_NODES = 12 # Non-center nodes plus the single center node
+NUM_NODES = 13 # Non-center nodes plus the single center node
 EDGE_BEZIER_POINTS = 2 # The number of points to describe curved edges
 EDGE_SEGMENTS = 32 # The number of segments to use to mesh edges/faces
 CUBE_CENTER = np.ones(3)/2 # The center of the metamaterial cube
 
 # Automatically-chosen properties
-NODE_POS_SIZE = (NUM_NODES-1) * 3 # The number of parameters in the node position array
+NODE_POS_SIZE = NUM_NODES * 3 # The number of parameters in the node position array
 EDGE_ADJ_SIZE = NUM_NODES * (NUM_NODES-1) // 2 # The number of parameters in the edge adjacency array
 EDGE_BEZIER_COORDS = EDGE_BEZIER_POINTS * 3 # The number of edge curvature parameters per edge
 EDGE_PARAMS_SIZE = EDGE_ADJ_SIZE * EDGE_BEZIER_COORDS # The total number of edge curvature parameters
@@ -635,7 +635,7 @@ def bezier_triangle_index(s: int, t: int) -> int:
     return t + s*(3-s)//2 + s*EDGE_SEGMENTS
 
 
-def find_face_params(edge_params, face_function):
+def find_face_params(edge_params: np.ndarray | None, face_function):
     """
     Runs regression to find the face parameters that most closely
     produce the face points produced by the given function.
@@ -731,7 +731,7 @@ def find_face_params(edge_params, face_function):
         )
 
 
-def flat_face_params(node1_pos: np.ndarray, node2_pos: np.ndarray, node3_pos) -> np.ndarray:
+def flat_face_params(node1_pos: np.ndarray, node2_pos: np.ndarray, node3_pos: np.ndarray) -> np.ndarray:
     """
     Finds the face parameters for costructing a flat face between
     the three given points.
@@ -766,3 +766,45 @@ def flat_face_params(node1_pos: np.ndarray, node2_pos: np.ndarray, node3_pos) ->
     return find_face_params(None, face_function)
 
 
+def circle_quadrant_edge_params(circle_center: np.ndarray, node1_pos: np.ndarray, node2_pos: np.ndarray) -> np.ndarray:
+    """
+    Computes the edge parameters that describe the circle quadrant
+    between the two given nodes with the given center.
+
+    circle_center: np.ndarray
+        The center of the circle to be described.
+
+    node1_pos: np.ndarray
+        The position of the starting node. Must have a node index
+        in its metamaterial lower than the other given node.
+
+    node1_pos: np.ndarray
+        The position of the ending node. Must have a node index
+        in its metamaterial higher than the other given node.
+
+    Returns: np.ndarray
+        The edge parameters that describe the specified circle quadrant.
+    """
+
+    # Computes the cos() and sin() coefficients
+    cos_coeff = node1_pos - circle_center
+    sin_coeff = node2_pos - circle_center
+
+    # Defines the function producing edge points
+    def edge_function(t):
+
+        # Normalizes the Bezier parameter
+        t /= EDGE_SEGMENTS
+        t *= np.pi/2
+
+        # Returns the interpolated edge point
+        return (circle_center + cos_coeff*np.cos(t) + sin_coeff*np.sin(t))[np.newaxis,:]
+    
+    return find_edge_params(edge_function)
+
+
+def sphere_octant_face_params(sphere_center: np.ndarray, node1_pos: np.ndarray, node2_pos: np.ndarray, node3_pos: np.ndarray) -> np.ndarray:
+    """
+    
+    """
+    pass

@@ -306,7 +306,7 @@ def save_obj(vertices, faces, filepath):
 
         # Writes each vertex
         for vertex in vertices:
-            f.write(f"v {' '.join(map(str, vertex))}\n")
+            f.write(f"v {' '.join(map(str, map(lambda v: np.round(v,4), vertex)))}\n") # Rounds to 4 decimal places
 
         # Writes each face
         for face in faces:
