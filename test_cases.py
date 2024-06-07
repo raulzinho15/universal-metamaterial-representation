@@ -28,49 +28,49 @@ print()
 
 print("rep_utils.py - euclidian_to_spherical")
 expected = np.array([0.25, 0])
-actual = np.array(euclidian_to_spherical(1,0,1))
+actual = np.array(euclidean_to_spherical(1,0,1))
 assert np.all(np.abs(actual-expected) < EPSILON), f"Got {actual}, but expected {expected}."
 print(".", end="")
 expected = np.array([np.arccos(3**(-0.5))/np.pi, 0.125])
-actual = np.array(euclidian_to_spherical(1,1,1))
+actual = np.array(euclidean_to_spherical(1,1,1))
 assert np.all(np.abs(actual-expected) < EPSILON), f"Got {actual}, but expected {expected}."
 print(".", end="")
 expected = np.array([0.75, 0.5])
-actual = np.array(euclidian_to_spherical(-1,0,-1))
+actual = np.array(euclidean_to_spherical(-1,0,-1))
 assert np.all(np.abs(actual-expected) < EPSILON), f"Got {actual}, but expected {expected}."
 print(".", end="")
 expected = np.zeros(2)
-actual = np.array(euclidian_to_spherical(0,0,0))
+actual = np.array(euclidean_to_spherical(0,0,0))
 assert np.all(np.abs(actual-expected) < EPSILON), f"Got {actual}, but expected {expected}."
 print(".", end="")
 print()
 
 print("rep_utils.py - spherical_to_euclidian")
 expected = np.array([1,0,1])/2**0.5
-actual = np.array(spherical_to_euclidian(np.pi/4,0))
+actual = np.array(spherical_to_euclidean(np.pi/4,0))
 assert np.all(np.abs(actual-expected) < EPSILON), f"Got {actual}, but expected {expected}."
 print(".", end="")
 expected = np.array([1,1,1])/3**0.5
-actual = np.array(spherical_to_euclidian(np.arccos(3**(-0.5)), np.pi/4))
+actual = np.array(spherical_to_euclidean(np.arccos(3**(-0.5)), np.pi/4))
 assert np.all(np.abs(actual-expected) < EPSILON), f"Got {actual}, but expected {expected}."
 print(".", end="")
 expected = np.array([-1,0,-1])/2**0.5
-actual = np.array(spherical_to_euclidian(3*np.pi/4,np.pi))
+actual = np.array(spherical_to_euclidean(3*np.pi/4,np.pi))
 assert np.all(np.abs(actual-expected) < EPSILON), f"Got {actual}, but expected {expected}."
 print(".", end="")
 print()
 
 print("rep_utils.py - project_onto_cube")
 expected = np.array([1,0.5,1])
-actual = np.array(project_onto_cube(*spherical_to_euclidian(np.pi/4,0)))
+actual = np.array(project_onto_cube(*spherical_to_euclidean(np.pi/4,0)))
 assert np.all(np.abs(actual-expected) < EPSILON), f"Got {actual}, but expected {expected}."
 print(".", end="")
 expected = np.array([1,1,1])
-actual = np.array(project_onto_cube(*spherical_to_euclidian(np.arccos(3**(-0.5)), np.pi/4)))
+actual = np.array(project_onto_cube(*spherical_to_euclidean(np.arccos(3**(-0.5)), np.pi/4)))
 assert np.all(np.abs(actual-expected) < EPSILON), f"Got {actual}, but expected {expected}."
 print(".", end="")
 expected = np.array([0,0.5,0])
-actual = np.array(project_onto_cube(*spherical_to_euclidian(3*np.pi/4,np.pi)))
+actual = np.array(project_onto_cube(*spherical_to_euclidean(3*np.pi/4,np.pi)))
 assert np.all(np.abs(actual-expected) < EPSILON), f"Got {actual}, but expected {expected}."
 print(".", end="")
 print()

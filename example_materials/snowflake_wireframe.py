@@ -5,26 +5,21 @@ from representation.rep_utils import *
 node_pos = np.zeros(NODE_POS_SIZE)
 
 # Computes the node positions of the metamaterial
-node_pos[0:24] = np.concatenate([
-    euclidian_to_spherical(1,1,0),
-
-    euclidian_to_spherical(-0.25,1,-1),
-    euclidian_to_spherical(-1,1,-1),
-    euclidian_to_spherical(-1,1,-0.25),
-
-    euclidian_to_spherical(0,1,1),
-
-    euclidian_to_spherical(-1,-0.25,1),
-    euclidian_to_spherical(-1,-1,1),
-    euclidian_to_spherical(-0.25,-1,1),
-
-    euclidian_to_spherical(1,0,1),
-
-    euclidian_to_spherical(1,-1,-0.25),
-    euclidian_to_spherical(1,-1,-1),
-    euclidian_to_spherical(1,-0.25,-1),
+node_positions = np.array([
+    [1.0,   1.0,   0.5  ],
+    [0.375, 1.0,   0.0  ],
+    [0.0,   1.0,   0.0  ],
+    [0.0,   1.0,   0.375],
+    [0.5,   1.0,   1.0  ],
+    [0.0,   0.375, 1.0  ],
+    [0.0,   0.0,   1.0  ],
+    [0.375, 0.0,   1.0  ],
+    [1.0,   0.5,   1.0  ],
+    [1.0,   0.0,   0.375],
+    [1.0,   0.0,   0.0  ],
+    [1.0,   0.375, 0.0  ],
 ])
-cube_node_pos = np.array([project_onto_cube(*spherical_to_euclidian(node_pos[i*2]*np.pi, node_pos[i*2+1]*2*np.pi)) for i in range(NODE_POS_SIZE//2)])
+node_pos[:36] = euclidean_to_pseudo_spherical(node_positions)
 
 # Prepares the edge adjacencies of the metamaterial
 edge_adj = np.zeros(EDGE_ADJ_SIZE)
@@ -43,15 +38,15 @@ for n1 in range(12):
 
     # Computes straight edge parameters for the snowflake tips
     if (n2 // 2) % 2 == 1:
-        fit_edge_params = flat_edge_params(cube_node_pos[n1], cube_node_pos[n2])
+        fit_edge_params = flat_edge_params(node_positions[n1], node_positions[n2])
     
     # Computed curved edge parameters for non-tips
     elif n1 % 4 == 0:
-        pull_point = cube_node_pos[n1].copy()
+        pull_point = node_positions[n1].copy()
         pull_point[(n1//4)%3] -= 0.25
         fit_edge_params = np.concatenate([pull_point] * EDGE_BEZIER_POINTS).flatten()
     elif n2 % 4 == 0:
-        pull_point = cube_node_pos[n2].copy()
+        pull_point = node_positions[n2].copy()
         pull_point[(n2//4+1)%3] -= 0.25
         fit_edge_params = np.concatenate([pull_point] * EDGE_BEZIER_POINTS).flatten()
 

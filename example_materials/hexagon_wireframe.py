@@ -5,13 +5,15 @@ from representation.rep_utils import *
 node_pos = np.zeros(NODE_POS_SIZE)
 
 # Computes the node positions of the metamaterial
-node_pos[0:2] =   euclidian_to_spherical(1,-1,0)
-node_pos[2:4] =   euclidian_to_spherical(0,-1,1)
-node_pos[4:6] =   euclidian_to_spherical(-1,0,1)
-node_pos[6:8] =   euclidian_to_spherical(-1,1,0)
-node_pos[8:10] =  euclidian_to_spherical(0,1,-1)
-node_pos[10:12] = euclidian_to_spherical(1,0,-1)
-cube_node_pos = np.array([project_onto_cube(*spherical_to_euclidian(node_pos[i*2]*np.pi, node_pos[i*2+1]*2*np.pi)) for i in range(NODE_POS_SIZE//2)])
+node_positions = np.array([
+    [1.,  0.,  0.5],
+    [0.5, 0.,  1. ],
+    [0.,  0.5, 1. ],
+    [0.,  1.,  0.5],
+    [0.5, 1.,  0. ],
+    [1.,  0.5, 0. ],
+])
+node_pos[:18] = euclidean_to_pseudo_spherical(node_positions)
 
 # Prepares the edge adjacencies of the metamaterial
 edge_adj = np.zeros(EDGE_ADJ_SIZE)
@@ -29,7 +31,7 @@ for n1 in range(6):
     edge_index *= EDGE_BEZIER_COORDS
 
     # Stores the edge parameters
-    fit_edge_params = flat_edge_params(cube_node_pos[n1], cube_node_pos[n2])
+    fit_edge_params = flat_edge_params(node_positions[n1], node_positions[n2])
     edge_params[edge_index : edge_index+EDGE_BEZIER_COORDS] = fit_edge_params
 
 # Prepares the face adjacencies of the metamaterial

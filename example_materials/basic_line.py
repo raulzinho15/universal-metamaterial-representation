@@ -3,8 +3,13 @@ from representation.rep_utils import *
 
 # Prepares the node positions of the metamaterial
 node_pos = np.zeros(NODE_POS_SIZE)
-node_pos[0:2] = euclidian_to_spherical(0,0,-1)
-node_pos[2:4] = euclidian_to_spherical(0,0,1)
+
+# Computes the node positions of the metamaterial
+node_positions = np.array([
+    [0.5, 0.5, 0.],
+    [0.5, 0.5, 1.],
+])
+node_pos[:6] = euclidean_to_pseudo_spherical(node_positions)
 
 # Prepares the edge adjacencies of the metamaterial
 edge_adj = np.zeros(EDGE_ADJ_SIZE)
@@ -14,8 +19,7 @@ edge_adj[index] = 1
 # Prepares the edge parameters of the metamaterial
 edge_params = np.zeros(EDGE_PARAMS_SIZE)
 index *= EDGE_BEZIER_COORDS
-edge_function = lambda t: np.array([[0.5, 0.5, t/EDGE_SEGMENTS]])
-edge_params[index : index + EDGE_BEZIER_COORDS] = find_edge_params(edge_function)
+edge_params[index : index + EDGE_BEZIER_COORDS] = flat_edge_params(node_positions[0], node_positions[1])
 
 # Prepares the face adjacencies of the metamaterial
 face_adj = np.zeros(FACE_ADJ_SIZE)
