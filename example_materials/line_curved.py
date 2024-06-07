@@ -29,4 +29,4 @@ face_adj = np.zeros(FACE_ADJ_SIZE)
 face_params = np.zeros(FACE_PARAMS_SIZE)
 
 # Creates the metamaterial
-CURVED_LINE = Metamaterial(node_pos, edge_adj, edge_params, face_adj, face_params)
+LINE_CURVED = Metamaterial(node_pos, edge_adj, edge_params, face_adj, face_params)

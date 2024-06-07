@@ -54,4 +54,4 @@ face_params = np.zeros(FACE_PARAMS_SIZE)
 face_params[face_index : face_index + FACE_BEZIER_COORDS] = auto_face_params
 
 # Creates the metamaterial
-CURVED_TRIANGLE = Metamaterial(node_pos, edge_adj, edge_params, face_adj, face_params)
+TRIANGLE_CURVED = Metamaterial(node_pos, edge_adj, edge_params, face_adj, face_params)
