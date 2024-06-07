@@ -97,15 +97,16 @@ class Metamaterial:
             return self.cube_pos[node]
 
         # Gets the position of the center node
-        elif node == NUM_NODES-1:
-            point = np.ones(3)/2
+        if node == NUM_NODES-1:
+            point = CUBE_CENTER
 
         # Computes the position of a non-center node
         else:
-            theta, phi = self.node_pos[node*2:(node+1)*2]
-            theta, phi = theta*np.pi, phi*2*np.pi
-            # biases = [0.8,0.5,0.8,0.8]
-            point = project_onto_cube(*spherical_to_euclidian(theta, phi))#, grid_lines=3, bias_cutoff=biases[node])
+            point = pseudo_spherical_to_euclidean(self.node_pos[node*3 : (node+1)*3][np.newaxis,:])
+            # theta, phi, radius = self.node_pos[node*3 : (node+1)*3]
+            # theta, phi = theta*np.pi, phi*2*np.pi
+            # cube_surface_point = project_onto_cube(*spherical_to_euclidian(theta, phi))
+            # point = CUBE_CENTER + (cube_surface_point-CUBE_CENTER) * radius
 
         # Returns the transformed position
         self.cube_pos[node] = self.transform_point(point)
@@ -120,7 +121,7 @@ class Metamaterial:
             The positions of all nodes, ordered as according to node ID.
         """
 
-        return np.array([list(self.get_node_position(node)) for node in range(NUM_NODES)])
+        return np.array([self.get_node_position(node) for node in range(NUM_NODES)])
     
 
     def angle_score(self, node: int) -> float:
@@ -134,7 +135,7 @@ class Metamaterial:
             The angle score.
         """
 
-        return self.node_pos[2*node] * self.node_pos[2*node+1]
+        return self.node_pos[3*node] * self.node_pos[3*node+1]
     
 
     def mirror(self, x=False, y=False, z=False):
@@ -691,7 +692,7 @@ class Metamaterial:
         """
         
         # Stores the reordered node positions
-        reordered_node_pos = np.array([self.node_pos[2*node_order[i]:2*node_order[i]+2] for i in range(self.node_pos.shape[0]//2)]).reshape(self.node_pos.shape[0])
+        reordered_node_pos = np.concatenate([self.node_pos[3*node_order[i]:3*node_order[i]+3] for i in range(self.node_pos.shape[0]//3)])
 
         # Stores the reordered edge adjacencies
         reordered_edge_adj = np.zeros(EDGE_ADJ_SIZE)
@@ -736,7 +737,7 @@ class Metamaterial:
 
         # Stores the sorted node IDs
         sorted_node_indices = sorted(
-            [i for i in range(self.node_pos.shape[0]//2)],
+            [i for i in range(self.node_pos.shape[0]//3)],
                 key=lambda node: self.angle_score(node)
         )
         sorted_node_indices.append(NUM_NODES-1) # Includes the center node as last node

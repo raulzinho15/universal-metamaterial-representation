@@ -56,11 +56,6 @@ def generate_edge_segment_mesh(point1, point2, next_point=None, prev_normal=None
         edge_len = np.linalg.norm(edge_dir)
         edge_dir /= edge_len
 
-        # # Computes a random vector to be used for orthogonal vector generation for face 2
-        # prev_normal = np.array([1,0,0])
-        # if np.linalg.norm(np.cross(prev_normal, edge_dir)) < 0.1:
-        #     prev_normal = np.array([0,1,0])
-            
         # Computes two co-orthogonal vectors orthogonal to the edge direction for face 2
         basis1 = np.cross(edge_dir, prev_normal)
         basis1 /= np.linalg.norm(basis1)
@@ -80,7 +75,6 @@ def generate_edge_segment_mesh(point1, point2, next_point=None, prev_normal=None
         [tuple(vertex) for vertex in face1_vertices] + [tuple(vertex) for vertex in face2_vertices], # Vertex coordinates
         [(0,1,2,3), (4,5,6,7)] + [(i, (i+1)%4, (i+1)%4+4, i+4) for i in range(4)] # Face vertex indices
     )
-
 
 
 def generate_edge_mesh(material: Metamaterial, node1, node2):

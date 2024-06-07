@@ -5,20 +5,21 @@ from math import factorial
 NUM_NODES = 12 + 1 # Non-center nodes plus the single center node
 EDGE_BEZIER_POINTS = 2 # The number of points to describe curved edges
 EDGE_SEGMENTS = 32 # The number of segments to use to mesh edges/faces
+CUBE_CENTER = np.ones(3)/2 # The center of the metamaterial cube
 
 # Automatically-chosen properties
-NODE_POS_SIZE = (NUM_NODES-1) * 2
-EDGE_ADJ_SIZE = NUM_NODES * (NUM_NODES-1) // 2
-EDGE_BEZIER_COORDS = EDGE_BEZIER_POINTS * 3
-EDGE_PARAMS_SIZE = EDGE_ADJ_SIZE * EDGE_BEZIER_COORDS
-FACE_ADJ_SIZE = NUM_NODES * (NUM_NODES-1) * (NUM_NODES-2) // 6
-FACE_BEZIER_POINTS = EDGE_BEZIER_POINTS * (EDGE_BEZIER_POINTS-1) // 2
-FACE_BEZIER_COORDS = FACE_BEZIER_POINTS * 3
-FACE_PARAMS_SIZE = FACE_ADJ_SIZE * FACE_BEZIER_COORDS
-REP_SIZE = NODE_POS_SIZE + EDGE_ADJ_SIZE + EDGE_PARAMS_SIZE + FACE_ADJ_SIZE + FACE_PARAMS_SIZE
+NODE_POS_SIZE = (NUM_NODES-1) * 3 # The number of parameters in the node position array
+EDGE_ADJ_SIZE = NUM_NODES * (NUM_NODES-1) // 2 # The number of parameters in the edge adjacency array
+EDGE_BEZIER_COORDS = EDGE_BEZIER_POINTS * 3 # The number of edge curvature parameters per edge
+EDGE_PARAMS_SIZE = EDGE_ADJ_SIZE * EDGE_BEZIER_COORDS # The total number of edge curvature parameters
+FACE_ADJ_SIZE = NUM_NODES * (NUM_NODES-1) * (NUM_NODES-2) // 6 # The number of parameters in the face adjacency array
+FACE_BEZIER_POINTS = EDGE_BEZIER_POINTS * (EDGE_BEZIER_POINTS-1) // 2 # The number of points to described curved faces
+FACE_BEZIER_COORDS = FACE_BEZIER_POINTS * 3 # The number of face curvature parameters per face
+FACE_PARAMS_SIZE = FACE_ADJ_SIZE * FACE_BEZIER_COORDS # The total number of face curvature parameters
+REP_SIZE = NODE_POS_SIZE + EDGE_ADJ_SIZE + EDGE_PARAMS_SIZE + FACE_ADJ_SIZE + FACE_PARAMS_SIZE # The total number of parameters in the representation
 
 
-def euclidian_to_spherical(x: float, y: float, z: float) -> np.ndarray:
+def euclidean_to_spherical(x: float, y: float, z: float) -> np.ndarray:
     """
     Converts the given x,y,z Euclidian triplet into spherical coordinates.
 
@@ -55,7 +56,7 @@ def euclidian_to_spherical(x: float, y: float, z: float) -> np.ndarray:
     return np.array([theta/np.pi, phi/(2*np.pi)])
 
 
-def spherical_to_euclidian(theta, phi, radius=None) -> np.ndarray:
+def spherical_to_euclidean(theta, phi, radius=None) -> np.ndarray:
     """
     Converts the given spherical coordinates into Euclidian coordinates.
 
@@ -138,6 +139,113 @@ def project_onto_cube(x: float, y: float, z: float, grid_lines=0, bias_cutoff=1)
         pos /= grid_lines
 
     return pos
+
+
+def euclidean_to_pseudo_spherical(points: np.ndarray) -> np.ndarray:
+    """
+    Computes the psuedo-spherical coordinates, centered at `CUBE_CENTER`,
+    of the given Euclidean points.
+
+    points: np.ndarray
+        A 2D numpy array containing the points whose pseudo-spherical
+        coordinates will be computed. The first axis should separate
+        different points. The second axis should separate the `(x,y,z)`
+        coordinates of a particular point. Assumed points are centered
+        at `CUBE_CENTER`. Assumes points are in [0,1].
+
+    Returns: np.ndarray
+        A flattened 2D numpy array containing the pseudo-spherical coordinates.
+        The first axis separates different pseudo-spherical points.
+        The second axis separates the `(radius, theta, phi)` coordinates
+        of a particular point. The `radius` value is a value in [0,1].
+        At a radius of 0, the point is at `CUBE_CENTER`. At a radius
+        of 1, the point is on the surface of the cube. Everything in
+        between varies linearly. The `theta` and `phi` values are as
+        conventionally defined for spherical coordinates, normalized
+        to [0,1].
+    """
+
+    # Stores the indices for the different coordinates
+    x_index, y_index, z_index = 0, 1, 2
+
+    # Transforms the points to be centered at the origin
+    points = points*2 - 1
+
+    # Computes the actual radii
+    radius = np.sqrt((points**2).sum(axis=1))
+
+    # Computes the pseudo radii of the points
+    pseudo_radius = np.abs(points).max(axis=1)
+
+    # Ignores divide by 0 warnings
+    with np.errstate(invalid='ignore'):
+
+        # Computes theta, forcing the center to have theta=0
+        theta = np.arccos(points[:,z_index]/radius)
+        theta = np.nan_to_num(theta)
+        theta /= np.pi
+
+        # Computes phi, forcing the center to have phi=0
+        phi = np.arctan2(
+            points[:,y_index]/np.sin(theta)/radius,
+            points[:,x_index]/np.sin(theta)/radius,
+        )
+        phi = (phi + 2*np.pi) % (2*np.pi)
+        phi = np.nan_to_num(phi)
+        phi /= (2*np.pi)
+
+    # Returns the pseudo-spherical coordinates in a stack
+    return np.stack([
+        pseudo_radius, theta, phi
+    ], axis=1).flatten()
+
+
+def pseudo_spherical_to_euclidean(points: np.ndarray) -> np.ndarray:
+    """
+    Computes the Euclidean coordinates, of the given pseudo-spherical
+    points centered at `CUBE_CENTER`.
+
+    points: np.ndarray
+        A 2D numpy array containing the pseudo-spherical coordinates.
+        The first axis separates different pseudo-spherical points.
+        The second axis separates the `(radius, theta, phi)` coordinates
+        of a particular point. Assumes the `radius` value is a value in
+        [0,1]. At a radius of 0, the point is at `CUBE_CENTER`. At a radius
+        of 1, the point is on the surface of the cube. Everything in
+        between varies linearly. The `theta` and `phi` values are assumed
+        to be as conventionally defined for spherical coordinates, normalized
+        to [0,1].
+
+    Returns: np.ndarray
+        A 2D numpy array containing the points whose pseudo-spherical
+        coordinates will be computed. The first axis separates
+        different points. The second axis separates the `(x,y,z)`
+        coordinates of a particular point. Points are centered
+        at `CUBE_CENTER`. Points are in [0,1].
+    """
+
+    # Stores the pseudo-spherical coordinate values
+    radius = points[:,0:1]
+    theta = points[:,1] * np.pi
+    phi = points[:,2] * 2*np.pi
+
+    # Computes the Euclidian coordinates on the unit sphere
+    euclidean_points: np.ndarray = np.stack([
+        np.sin(theta) * np.cos(phi),
+        np.sin(theta) * np.sin(phi),
+        np.cos(theta),
+    ], axis=1)
+
+    # Projects the unit sphere onto the unit cube
+    euclidean_points /= np.abs(euclidean_points).max(axis=1, keepdims=True)
+
+    # Normalizes the points within the cube based on the pseudo-radius
+    euclidean_points *= radius
+
+    # Transforms the points to be within the unit cube
+    euclidean_points = (euclidean_points+1)/2
+
+    return euclidean_points
 
 
 def edge_adj_index(node1: int, node2: int) -> int:

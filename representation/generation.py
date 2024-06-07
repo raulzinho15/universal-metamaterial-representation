@@ -48,7 +48,7 @@ def random_metamaterial(edge_prob=0.5, face_prob=0.5, grid_spacing=None, connect
         node_pos = np.random.rand(NODE_POS_SIZE)
     else:
         nums = [2*x/grid_spacing-1 for x in range(grid_spacing+1)]
-        node_pos = np.array([euclidian_to_spherical(choice(nums),choice(nums),choice(nums)) for _ in range(NUM_NODES-1)]).reshape(NODE_POS_SIZE)
+        node_pos = np.array([euclidean_to_spherical(choice(nums),choice(nums),choice(nums)) for _ in range(NUM_NODES-1)]).reshape(NODE_POS_SIZE)
 
     # Generates the edge/face adjacency representation array
     edge_adj = np.zeros(EDGE_ADJ_SIZE)
