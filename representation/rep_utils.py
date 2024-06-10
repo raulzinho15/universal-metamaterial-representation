@@ -823,9 +823,6 @@ def triangle_center(vertex1: np.ndarray, vertex2: np.ndarray, vertex3: np.ndarra
     center1 = (vertex2 + vertex3 - 2*vertex1) / 4 + vertex1
     center2 = (vertex1 + vertex3 - 2*vertex2) / 4 + vertex2
     center3 = (vertex1 + vertex2 - 2*vertex3) / 4 + vertex3
-    print(center1)
-    print(center2)
-    print(center3)
 
     # Returns their average
     return (center1 + center2 + center3) / 3
