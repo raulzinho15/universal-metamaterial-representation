@@ -32,29 +32,15 @@ for n1 in range(6):
 
     # Computes the circle center around which the edge goes
     if n1 % 2 == 0:
-        circle_center = np.zeros((1,3))
-        circle_center[0,(n1//2+1)%3] = 1
+        circle_center = np.zeros(3)
+        circle_center[(n1//2+1)%3] = 1
     else:
-        circle_center = np.ones((1,3))
-        circle_center[0,(n1//2)%3] = 0
+        circle_center = np.ones(3)
+        circle_center[(n1//2)%3] = 0
 
-    # Computes the cos() and sin() coefficients
-    n1, n2 = sorted((n1, n2))
-    cos_coeff = node_positions[n1] - circle_center
-    sin_coeff = node_positions[n2] - circle_center
-
-    # Defines the function producing edge points
-    def edge_function(t):
-
-        # Normalizes the Bezier parameter
-        t /= EDGE_SEGMENTS
-        t *= np.pi/2
-
-        # Returns the interpolated edge point
-        return circle_center + cos_coeff*np.cos(t) + sin_coeff*np.sin(t)
-    
     # Computes the edge parameters
-    fit_edge_params = find_edge_params(edge_function)
+    n1, n2 = sorted((n1, n2))
+    fit_edge_params = circle_quadrant_edge_params(circle_center, node_positions[n1], node_positions[n2])
 
     # Stores the edge parameters
     edge_params[edge_index : edge_index+EDGE_BEZIER_COORDS] = fit_edge_params
