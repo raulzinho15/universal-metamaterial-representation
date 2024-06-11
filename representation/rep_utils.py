@@ -778,7 +778,7 @@ def circle_quadrant_edge_params(circle_center: np.ndarray, node1_pos: np.ndarray
         The position of the starting node. Must have a node index
         in its metamaterial lower than the other given node.
 
-    node1_pos: np.ndarray
+    node2_pos: np.ndarray
         The position of the ending node. Must have a node index
         in its metamaterial higher than the other given node.
 
@@ -819,17 +819,57 @@ def triangle_center(vertex1: np.ndarray, vertex2: np.ndarray, vertex3: np.ndarra
         Another of the vertices of the triangle.
     """
 
-    # Computes the centers
-    center1 = (vertex2 + vertex3 - 2*vertex1) / 4 + vertex1
-    center2 = (vertex1 + vertex3 - 2*vertex2) / 4 + vertex2
-    center3 = (vertex1 + vertex2 - 2*vertex3) / 4 + vertex3
-
-    # Returns their average
-    return (center1 + center2 + center3) / 3
+    # Returns the vertex average
+    return (vertex1 + vertex2 + vertex3) / 3
 
 
 def sphere_octant_face_params(sphere_center: np.ndarray, node1_pos: np.ndarray, node2_pos: np.ndarray, node3_pos: np.ndarray) -> np.ndarray:
     """
-    
+    Computes the face parameters that describe the sphere octant
+    between the three given nodes with the given center.
+
+    sphere_center: np.ndarray
+        The center of the sphere to be described.
+
+    node1_pos: np.ndarray
+        The position of the node corresponding to the first Bezier
+        parameter. Must have a node index in its metamaterial lower
+        than the other given nodes.
+
+    node2_pos: np.ndarray
+        The position of the node corresponding to the second Bezier
+        parameter. Must have a node index in its metamaterial 
+        between the other given nodes.
+
+    node1_pos: np.ndarray
+        The position of the node corresponding to the third Bezier
+        parameter. Must have a node index in its metamaterial higher
+        than the other given nodes.
+
+    Returns: tuple of np.ndarray
+        The face/edge parameters that describe the specified sphere
+        octant. The face parameters are returned as the first item,
+        followed by the edge parameters ordered as described in
+        `find_face_params()`.
     """
-    pass
+
+    coeff1 = node1_pos - sphere_center
+    coeff2 = node2_pos - sphere_center
+    coeff3 = node3_pos - sphere_center
+
+    # Defines the face function
+    def face_function(s, t):
+
+        # Normalizes the Bezier parameters
+        s /= EDGE_SEGMENTS
+        t /= EDGE_SEGMENTS
+        u = 1-s-t
+
+        # Transforms into sphere coordinates
+        s = np.sqrt(s)
+        t = np.sqrt(t)
+        u = np.sqrt(u)
+
+        return (sphere_center + s*coeff1 + t*coeff2 + u*coeff3)[np.newaxis,:]
+
+    return find_face_params(None, face_function)
