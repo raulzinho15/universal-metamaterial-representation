@@ -6,7 +6,7 @@ THICKNESS = 0.02
 VERTICES_PER_EDGE = 8
 VERTICES_PER_FACE = 3
 
-def generate_edge_segment_mesh(point1, point2, next_point=None, prev_normal=None):
+def generate_edge_segment_surface_mesh(point1, point2, next_point=None, prev_normal=None):
     """
     Generates the vertices and faces for an edge segment.
     
@@ -77,7 +77,7 @@ def generate_edge_segment_mesh(point1, point2, next_point=None, prev_normal=None
     )
 
 
-def generate_edge_mesh(material: Metamaterial, node1, node2):
+def generate_edge_surface_mesh(material: Metamaterial, node1, node2):
     """
     Generates the vertices and faces for an edge of the metamaterial.
     
@@ -107,7 +107,7 @@ def generate_edge_mesh(material: Metamaterial, node1, node2):
     # Runs through each edge segment
     prev_normal = None
     for edge in range(EDGE_SEGMENTS):
-        prev_normal, vertex_list, face_list = generate_edge_segment_mesh(edge_points(edge), edge_points(edge+1), next_point=(None if edge+2 > EDGE_SEGMENTS else edge_points(edge+2)), prev_normal=prev_normal)
+        prev_normal, vertex_list, face_list = generate_edge_segment_surface_mesh(edge_points(edge), edge_points(edge+1), next_point=(None if edge+2 > EDGE_SEGMENTS else edge_points(edge+2)), prev_normal=prev_normal)
 
         # Adds the new vertices/faces
         vertices.extend(vertex_list)
@@ -119,7 +119,7 @@ def generate_edge_mesh(material: Metamaterial, node1, node2):
     return vertices, faces
 
 
-def generate_face_mesh(material: Metamaterial, node1, node2, node3):
+def generate_face_surface_mesh(material: Metamaterial, node1, node2, node3):
     """
     Generates the vertices and faces for a face of the metamaterial.
     
@@ -161,7 +161,7 @@ def generate_face_mesh(material: Metamaterial, node1, node2, node3):
     return vertices, faces
 
 
-def generate_metamaterial_mesh(material: Metamaterial):
+def generate_metamaterial_surface_mesh(material: Metamaterial):
     """
     Generates the mesh for the metamaterial.
 
@@ -187,7 +187,7 @@ def generate_metamaterial_mesh(material: Metamaterial):
                 continue
 
             # Adds the vertices from the edge
-            vertex_list, face_list = generate_edge_mesh(material, n1, n2)
+            vertex_list, face_list = generate_edge_surface_mesh(material, n1, n2)
             vertices.extend(vertex_list)
 
             # Adds the faces from the edge
@@ -206,7 +206,7 @@ def generate_metamaterial_mesh(material: Metamaterial):
                     continue
 
                 # Adds the vertices from the face
-                vertex_list, face_list = generate_face_mesh(material, n1, n2, n3)
+                vertex_list, face_list = generate_face_surface_mesh(material, n1, n2, n3)
                 vertices.extend(vertex_list)
 
                 # Adds the faces from the face
@@ -218,7 +218,7 @@ def generate_metamaterial_mesh(material: Metamaterial):
     return vertices, faces
 
 
-def generate_metamaterial_grid_mesh(metamaterial: Metamaterial, shape=(1,1,1)):
+def generate_metamaterial_grid_surface_mesh(metamaterial: Metamaterial, shape=(1,1,1)):
     """
     Generates the mesh for the metamaterial.
 
@@ -244,7 +244,7 @@ def generate_metamaterial_grid_mesh(metamaterial: Metamaterial, shape=(1,1,1)):
 
     # Meshes each material
     for material in materials:
-        next_vertices, next_faces = generate_metamaterial_mesh(material)
+        next_vertices, next_faces = generate_metamaterial_surface_mesh(material)
         vertices.extend(next_vertices)
         faces.extend([tuple(map(lambda x: x+vertex_count, face)) for face in next_faces])
         vertex_count += len(next_vertices)
@@ -252,7 +252,7 @@ def generate_metamaterial_grid_mesh(metamaterial: Metamaterial, shape=(1,1,1)):
     return vertices, faces
 
 
-def generate_metamaterials_zigzag_meshes(metamaterials: list[Metamaterial], shape=(1,1,1)):
+def generate_metamaterials_zigzag_surface_meshes(metamaterials: list[Metamaterial], shape=(1,1,1)):
     """
     Generates meshes for the given metamaterials with the given shape in a
     zigzag pattern.
@@ -281,12 +281,37 @@ def generate_metamaterials_zigzag_meshes(metamaterials: list[Metamaterial], shap
 
         # Meshes the material
         material = material.translate(dx=(dx-square_side//2)*1.5*max(shape), dz=(dz-square_side//2)*1.5*max(shape))
-        next_vertices, next_faces = generate_metamaterial_grid_mesh(material, shape)
+        next_vertices, next_faces = generate_metamaterial_grid_surface_mesh(material, shape)
         vertices.extend(next_vertices)
         faces.extend([tuple(map(lambda x: x+vertex_count, face)) for face in next_faces])
         vertex_count += len(next_vertices)
 
     return vertices, faces
+
+
+def optimize_vertices(vertices, faces):
+
+    # Stores data structures for removing duplicate vertices
+    unique_vertices = 0
+    new_vertices = []
+    vertex_to_index = {}
+    index_to_index = {}
+
+    # Removes duplicate vertices
+    for i,vertex in enumerate(vertices):
+
+        # First time seeing node
+        if vertex not in vertex_to_index:
+            vertex_to_index[vertex] = unique_vertices
+            unique_vertices += 1
+            new_vertices.append(vertex)
+            
+        index_to_index[i] = vertex_to_index[vertex]
+
+    # Stores the faces with new indices
+    new_faces = [map(lambda x:index_to_index[x], face) for face in faces]
+
+    return new_vertices, new_faces
 
 
 def save_obj(vertices, faces, filepath):
@@ -302,6 +327,9 @@ def save_obj(vertices, faces, filepath):
     filepath: str
         The path at which the file will be saved.
     """
+
+    vertices, faces = optimize_vertices(vertices, faces)
+
     with open(filepath, 'w') as f:
 
         # Writes each vertex
