@@ -3,12 +3,12 @@ from representation.rep_class import *
 from representation.generation import *
 
 THICKNESS = 0.02
-VERTICES_PER_EDGE = 8
-VERTICES_PER_FACE = 3
+NODES_PER_EDGE = 8
+NODES_PER_FACE = 6
 
 def generate_edge_segment_volume_mesh(point1, point2, next_point=None, prev_normal=None):
     """
-    Generates the vertices and tetrahedra for an edge segment.
+    Generates the nodes and tetrahedra for an edge segment.
     
     point1: ndarray
         The position of the start of the edge segment.
@@ -17,10 +17,10 @@ def generate_edge_segment_volume_mesh(point1, point2, next_point=None, prev_norm
         The position of the end of the edge segment.
 
     Returns: (list of tuples of floats, list of tuples of ints)
-        The first entry is a list of the vertex (x,y,z) coordinates.
+        The first entry is a list of the node (x,y,z) coordinates.
         The second is a list containing each tetrahedron's corresponding
-        vertices, where the vertex numbers correspond to the index of the
-        vertex in the first entry.
+        nodes, where the node numbers correspond to the index of the
+        node in the first entry.
     """
 
     # Computes the edge direction for face 1
@@ -40,8 +40,8 @@ def generate_edge_segment_volume_mesh(point1, point2, next_point=None, prev_norm
     basis2 = np.cross(edge_dir, basis1)
     basis2 /= np.linalg.norm(basis2)
 
-    # Computes the face 1 (around node1) vertices
-    face1_vertices = [
+    # Computes the face 1 (around node1) nodes
+    face1_nodes = [
         point1 + basis1*THICKNESS + basis2*THICKNESS,
         point1 + basis1*THICKNESS - basis2*THICKNESS,
         point1 - basis1*THICKNESS - basis2*THICKNESS,
@@ -62,8 +62,8 @@ def generate_edge_segment_volume_mesh(point1, point2, next_point=None, prev_norm
         basis2 = np.cross(edge_dir, basis1)
         basis2 /= np.linalg.norm(basis2)
 
-    # Computes the face 2 (around node2) vertices
-    face2_vertices = [
+    # Computes the face 2 (around node2) nodes
+    face2_nodes = [
         point2 + basis1*THICKNESS + basis2*THICKNESS,
         point2 + basis1*THICKNESS - basis2*THICKNESS,
         point2 - basis1*THICKNESS - basis2*THICKNESS,
@@ -72,14 +72,14 @@ def generate_edge_segment_volume_mesh(point1, point2, next_point=None, prev_norm
 
     return (
         basis2,
-        [tuple(vertex) for vertex in face1_vertices] + [tuple(vertex) for vertex in face2_vertices], # Vertex coordinates
-        [(0,1,4,3), (1,3,2,6), (1,4,5,6), (4,3,7,6)] # Tetrahedron vertex indices
+        [tuple(node) for node in face1_nodes] + [tuple(node) for node in face2_nodes], # Vertex coordinates
+        [(0,1,4,3), (1,3,2,6), (1,4,5,6), (4,3,7,6)] # Tetrahedron node indices
     )
 
 
 def generate_edge_volume_mesh(material: Metamaterial, node1, node2):
     """
-    Generates the vertices and faces for an edge of the metamaterial.
+    Generates the nodes and faces for an edge of the metamaterial.
     
     material: Metamaterial
         The metamaterial whose edge will be meshed.
@@ -91,9 +91,9 @@ def generate_edge_volume_mesh(material: Metamaterial, node1, node2):
         The node ID for the other node defining the edge.
 
     Returns: (list of tuples of floats, list of tuples of ints)
-        The first entry is a list of the vertex (x,y,z) coordinates.
-        The second is a list containing each face's corresponding vertices,
-        where the vertex numbers correspond to the index of the vertex in
+        The first entry is a list of the node (x,y,z) coordinates.
+        The second is a list containing each face's corresponding nodes,
+        where the node numbers correspond to the index of the node in
         the first entry.
     """
 
@@ -101,64 +101,134 @@ def generate_edge_volume_mesh(material: Metamaterial, node1, node2):
     edge_points = material.compute_edge_points(node1, node2)
 
     # Stores values for the function
-    vertices = []
+    nodes = []
     tetrahedra = []
 
     # Runs through each edge segment
     prev_normal = None
     for edge in range(EDGE_SEGMENTS):
-        prev_normal, vertex_list, tetrahedra_list = generate_edge_segment_volume_mesh(edge_points(edge), edge_points(edge+1), next_point=(None if edge+2 > EDGE_SEGMENTS else edge_points(edge+2)), prev_normal=prev_normal)
+        prev_normal, node_list, tetrahedra_list = generate_edge_segment_volume_mesh(edge_points(edge), edge_points(edge+1), next_point=(None if edge+2 > EDGE_SEGMENTS else edge_points(edge+2)), prev_normal=prev_normal)
 
-        # Adds the new vertices/faces
-        vertices.extend(vertex_list)
+        # Adds the new nodes/faces
+        nodes.extend(node_list)
 
         # Adds the tetrahedra from the edge
         for tetrahedron in tetrahedra_list:
-            tetrahedra.append(tuple(map(lambda x: x+edge*VERTICES_PER_EDGE, tetrahedron)))
+            tetrahedra.append(tuple(map(lambda x: x+edge*NODES_PER_EDGE, tetrahedron)))
 
-    return vertices, tetrahedra
+    return nodes, tetrahedra
 
 
-# def generate_face_mesh(material: Metamaterial, node1, node2, node3):
-#     """
-#     Generates the vertices and faces for a face of the metamaterial.
+def generate_face_segment_volume_mesh(point1: np.ndarray, point2: np.ndarray, point3: np.ndarray):
+    """
+    Generates the nodes and tetrahedra for an face segment.
     
-#     material: Metamaterial
-#         The metamaterial whose face will be meshed.
-
-#     node1: int
-#         The node ID for one of the nodes defining the face.
-
-#     node2: int
-#         The node ID for one of the other nodes defining the face.
-
-#     node3: int
-#         The node ID of the last node defining the face.
-
-#     Returns: (list of tuples of floats, list of tuples of ints)
-#         The first entry is a list of the vertex (x,y,z) coordinates.
-#         The second is a list containing each face's corresponding vertices,
-#         where the vertex numbers correspond to the index of the vertex in
-#         the first entry.
-#     """
+    point1: ndarray
+        The position of the face with lowest (s,t).
     
-#     face_points = material.compute_face_points(node1, node2, node3)
+    point2: ndarray
+        The position of the face with (s+1,t).
+    
+    point3: ndarray
+        The position of the face with (s,t+1).
 
-#     vertices = []
-#     faces = []
+    Returns: (list of tuples of floats, list of tuples of ints)
+        The first entry is a list of the node (x,y,z) coordinates.
+        The second is a list containing each tetrahedron's corresponding
+        nodes, where the node numbers correspond to the index of the node
+        in the first entry.
+    """
 
-#     di = 0
-#     for t in range(EDGE_SEGMENTS):
-#         for s in range(EDGE_SEGMENTS-t):
-#             vertices.extend([tuple(face_points(s,t)), tuple(face_points(s+1,t)), tuple(face_points(s,t+1))])
-#             faces.append((di, di+1, di+2))
-#             di += 3
-#             if s+t+2 <= EDGE_SEGMENTS:
-#                 vertices.append(tuple(face_points(s+1,t+1)))
-#                 faces.append((di-2, di-1, di))
-#                 di += 1
+    # Computes the face normal
+    face_normal = np.cross(point2-point1, point3-point1)
+    face_normal /= np.linalg.norm(face_normal)
 
-#     return vertices, faces
+    # IDEA FOR CONSISTENT NORMALS:
+    # Take the next s+1 and t+1 face point, and compute the normal using them as endpoints,
+    # adjusting for whenever s+1 or t+1 is out of bounds.
+    # This will require each point to have its own normal based on the points that are
+    # s+1 and t+1 away from that point.
+
+    # Computes all vertices of the face segment
+    segment_nodes = [
+        point1 - face_normal*THICKNESS,
+        point2 - face_normal*THICKNESS,
+        point3 - face_normal*THICKNESS,
+        point1 + face_normal*THICKNESS,
+        point2 + face_normal*THICKNESS,
+        point3 + face_normal*THICKNESS,
+    ]
+
+    # Returns the nodes and tetrahedra
+    return (
+        [tuple(node) for node in segment_nodes],
+        [(0,1,2,3), (1,2,3,4), (2,3,4,5)]
+    )
+
+
+def generate_face_volume_mesh(material: Metamaterial, node1, node2, node3):
+    """
+    Generates the nodes and tetrahedra for a face of the metamaterial.
+    
+    material: Metamaterial
+        The metamaterial whose face will be meshed.
+
+    node1: int
+        The node ID for one of the nodes defining the face.
+
+    node2: int
+        The node ID for one of the other nodes defining the face.
+
+    node3: int
+        The node ID of the last node defining the face.
+
+    Returns: (list of tuples of floats, list of tuples of ints)
+        The first entry is a list of the node (x,y,z) coordinates.
+        The second is a list containing each tetrahedron's corresponding
+        nodes, where the node numbers correspond to the index of the node
+        in the first entry.
+    """
+    
+    # Creates function for computing face points
+    face_points = material.compute_face_points(node1, node2, node3)
+
+    # Stores the nodes and tetrahedra
+    nodes = []
+    tetrahedra = []
+
+    # Stores the number of nodes so far
+    node_count = 0
+
+    # Runs through each face
+    for t in range(EDGE_SEGMENTS):
+        for s in range(EDGE_SEGMENTS-t):
+
+            # Gets the first face's nodes and tetrahedra
+            node_list, tetrahedra_list = generate_face_segment_volume_mesh(face_points(s,t), face_points(s+1,t), face_points(s,t+1))
+            
+            # Stores the nodes
+            nodes.extend(node_list)
+
+            # Stores the tetrahedra
+            for tetrahedron in tetrahedra_list:
+                tetrahedra.append(tuple(map(lambda x:x+node_count, tetrahedron)))
+            node_count += NODES_PER_FACE
+
+            # Checks for a second face
+            if s+t+2 <= EDGE_SEGMENTS:
+
+                # Gets the first face's nodes and tetrahedra
+                node_list, tetrahedra_list = generate_face_segment_volume_mesh(face_points(s+1,t+1), face_points(s,t+1), face_points(s+1,t))
+                
+                # Stores the nodes
+                nodes.extend(node_list)
+
+                # Stores the tetrahedra
+                for tetrahedron in tetrahedra_list:
+                    tetrahedra.append(tuple(map(lambda x:x+node_count, tetrahedron)))
+                node_count += NODES_PER_FACE
+    
+    return nodes, tetrahedra
 
 
 def generate_metamaterial_volume_mesh(material: Metamaterial):
@@ -169,14 +239,14 @@ def generate_metamaterial_volume_mesh(material: Metamaterial):
         The material for which the mesh will be generated.
 
     Returns: (list of tuples, list of tuples)
-        The vertex and face list, respectively, as described in 
+        The node and face list, respectively, as described in 
         the save_obj() function's specification.
     """
 
-    # Stores the vertices and faces
-    vertices = []
+    # Stores the nodes and faces
+    nodes = []
     tetrahedra = []
-    vertex_count = 0
+    node_count = 0
 
     # Generates the edge mesh for each edge
     for n1 in range(NUM_NODES):
@@ -186,36 +256,36 @@ def generate_metamaterial_volume_mesh(material: Metamaterial):
             if not material.has_edge(n1, n2):
                 continue
 
-            # Adds the vertices from the edge
-            vertex_list, tetrahedra_list = generate_edge_volume_mesh(material, n1, n2)
-            vertices.extend(vertex_list)
+            # Adds the nodes from the edge
+            node_list, tetrahedra_list = generate_edge_volume_mesh(material, n1, n2)
+            nodes.extend(node_list)
 
             # Adds the faces from the edge
             for tetrahedron in tetrahedra_list:
-                tetrahedra.append(tuple(map(lambda x: x + vertex_count, tetrahedron)))
+                tetrahedra.append(tuple(map(lambda x: x + node_count, tetrahedron)))
 
-            vertex_count += len(vertex_list)
+            node_count += len(node_list)
 
-    # # Generates the face mesh for each face
-    # for n1 in range(NUM_NODES):
-    #     for n2 in range(n1+1, NUM_NODES):
-    #         for n3 in range(n2+1, NUM_NODES):
+    # Generates the face mesh for each face
+    for n1 in range(NUM_NODES):
+        for n2 in range(n1+1, NUM_NODES):
+            for n3 in range(n2+1, NUM_NODES):
 
-    #             # Skips non-faces
-    #             if not material.has_face(n1, n2, n3):
-    #                 continue
+                # Skips non-faces
+                if not material.has_face(n1, n2, n3):
+                    continue
 
-    #             # Adds the vertices from the face
-    #             vertex_list, tetrahedra_list = generate_face_mesh(material, n1, n2, n3)
-    #             vertices.extend(vertex_list)
+                # Adds the nodes from the face
+                node_list, tetrahedra_list = generate_face_volume_mesh(material, n1, n2, n3)
+                nodes.extend(node_list)
 
-    #             # Adds the faces from the face
-    #             for tetrahedron in tetrahedra_list:
-    #                 tetrahedra.append(tuple(map(lambda x: x + vertex_count, tetrahedron)))
+                # Adds the faces from the face
+                for tetrahedron in tetrahedra_list:
+                    tetrahedra.append(tuple(map(lambda x: x + node_count, tetrahedron)))
 
-    #             vertex_count += len(vertex_list)
+                node_count += len(node_list)
 
-    return vertices, tetrahedra
+    return nodes, tetrahedra
 
 
 def generate_metamaterial_grid_volume_mesh(metamaterial: Metamaterial, shape=(1,1,1)):
@@ -231,7 +301,7 @@ def generate_metamaterial_grid_volume_mesh(metamaterial: Metamaterial, shape=(1,
         should be (1,1,1).
 
     Returns: (list of tuples, list of tuples)
-        The vertex and face list, respectively, as described in 
+        The node and face list, respectively, as described in 
         the save_obj() function's specification.
     """
 
@@ -239,17 +309,17 @@ def generate_metamaterial_grid_volume_mesh(metamaterial: Metamaterial, shape=(1,
     materials = metamaterial_grid(metamaterial, shape)
 
     # Stores values for the meshing
-    vertex_count = 0
-    vertices, tetrahedra = [], []
+    node_count = 0
+    nodes, tetrahedra = [], []
 
     # Meshes each material
     for material in materials:
-        next_vertices, next_tetrahedra = generate_metamaterial_volume_mesh(material)
-        vertices.extend(next_vertices)
-        tetrahedra.extend([tuple(map(lambda x: x+vertex_count, tetrahedron)) for tetrahedron in next_tetrahedra])
-        vertex_count += len(next_vertices)
+        next_nodes, next_tetrahedra = generate_metamaterial_volume_mesh(material)
+        nodes.extend(next_nodes)
+        tetrahedra.extend([tuple(map(lambda x: x+node_count, tetrahedron)) for tetrahedron in next_tetrahedra])
+        node_count += len(next_nodes)
 
-    return vertices, tetrahedra
+    return nodes, tetrahedra
 
 
 def generate_metamaterials_zigzag_volume_meshes(metamaterials: list[Metamaterial], shape=(1,1,1)):
@@ -269,8 +339,8 @@ def generate_metamaterials_zigzag_volume_meshes(metamaterials: list[Metamaterial
     square_side = math.ceil(len(metamaterials)**0.5)
 
     # Stores values for the function
-    vertices, tetrahedra = [], []
-    vertex_count = 0
+    nodes, tetrahedra = [], []
+    node_count = 0
 
     # Places each metamaterial along a zigzag
     for i, material in enumerate(metamaterials):
@@ -281,12 +351,12 @@ def generate_metamaterials_zigzag_volume_meshes(metamaterials: list[Metamaterial
 
         # Meshes the material
         material = material.translate(dx=(dx-square_side//2)*1.5*max(shape), dz=(dz-square_side//2)*1.5*max(shape))
-        next_vertices, next_tetrahedra = generate_metamaterial_grid_volume_mesh(material, shape)
-        vertices.extend(next_vertices)
-        tetrahedra.extend([tuple(map(lambda x: x+vertex_count, tetrahedron)) for tetrahedron in next_tetrahedra])
-        vertex_count += len(next_vertices)
+        next_nodes, next_tetrahedra = generate_metamaterial_grid_volume_mesh(material, shape)
+        nodes.extend(next_nodes)
+        tetrahedra.extend([tuple(map(lambda x: x+node_count, tetrahedron)) for tetrahedron in next_tetrahedra])
+        node_count += len(next_nodes)
 
-    return vertices, tetrahedra
+    return nodes, tetrahedra
 
 
 def optimize_nodes(nodes, tetrahedra):
@@ -316,14 +386,14 @@ def optimize_nodes(nodes, tetrahedra):
 
 def save_msh(nodes, tetrahedra, filepath):
     """
-    Saves the .msh file with the given vertices and tetrahedron vertex
+    Saves the .msh file with the given nodes and tetrahedron node
     indices.
 
     nodes: list of tuples
         The node (x,y,z) coordinates.
 
     tetrahedra: list of tuples
-        The vertex indices corresponding to each tetrahedron.
+        The node indices corresponding to each tetrahedron.
 
     filepath: str
         The path at which the file will be saved.
