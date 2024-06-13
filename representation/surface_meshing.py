@@ -359,13 +359,15 @@ def save_obj(vertices, faces, filepath):
         The path at which the file will be saved.
     """
 
+    print("Saving:", filepath[filepath.rindex("/")+1:])
+
     vertices, faces = optimize_vertices(vertices, faces)
 
     with open(filepath, 'w') as f:
 
         # Writes each vertex
         for vertex in vertices:
-            f.write(f"v {' '.join(map(str, map(lambda v: np.round(v,4), vertex)))}\n") # Rounds to 4 decimal places
+            f.write(f"v {' '.join(map(str, map(lambda v: np.round(v,5), vertex)))}\n") # Rounds to 5 decimal places
 
         # Writes each face
         for face in faces:
