@@ -56,12 +56,12 @@ def generate_edge_surface_mesh(material: Metamaterial, node1: int, node2: int):
     for edge in range(EDGE_SEGMENTS+1):
 
         # Adds all of the vertices on the circular face of this edge point
-        vertices.extend([
+        vertices.extend(
             tuple(edge_points[edge]
              + np.cos(2*np.pi*theta/EDGE_SEGMENTS) * normal1*THICKNESS
              + np.sin(2*np.pi*theta/EDGE_SEGMENTS) * normal2*THICKNESS)
                 for theta in range(EDGE_SEGMENTS)
-        ])
+        )
 
         # Adds the face at the ends of the cylindrical edge
         if edge == 0 or edge == EDGE_SEGMENTS:
@@ -69,10 +69,10 @@ def generate_edge_surface_mesh(material: Metamaterial, node1: int, node2: int):
 
         # Adds the faces that connect edge segments
         if edge != 0:
-            faces.extend([
+            faces.extend(
                 (vertex_count-EDGE_SEGMENTS+i, vertex_count-EDGE_SEGMENTS+(i+1)%EDGE_SEGMENTS, vertex_count+(i+1)%EDGE_SEGMENTS, vertex_count+i)
                     for i in range(EDGE_SEGMENTS)
-            ])
+            )
 
         # Updates the normals
         if edge != EDGE_SEGMENTS:
@@ -90,46 +90,6 @@ def generate_edge_surface_mesh(material: Metamaterial, node1: int, node2: int):
         vertex_count += EDGE_SEGMENTS
 
     return vertices, faces
-
-
-def generate_face_segment_surface_mesh(point1: np.ndarray, point2: np.ndarray, point3: np.ndarray, face_normal: np.ndarray):
-    """
-    Generates the vertices and faces for an face segment.
-    
-    point1: ndarray
-        One of the three nodes of the face.
-    
-    point2: ndarray
-        Another of the three nodes of the face.
-    
-    point3: ndarray
-        The last of the three nodes of the face.
-
-    face_normal: np.ndarray
-        The normal to the face. One normal is used for the whole face.
-
-    Returns: (list of tuples of floats, list of tuples of ints)
-        The first entry is a list of the vertex (x,y,z) coordinates.
-        The second is a list containing each face's corresponding vertices,
-        where the vertex numbers correspond to the index of the vertex in
-        the first entry.
-    """
-
-    # Computes all vertices of the face segment
-    segment_vertices = [
-        point1 - face_normal*THICKNESS,
-        point2 - face_normal*THICKNESS,
-        point3 - face_normal*THICKNESS,
-        point1 + face_normal*THICKNESS,
-        point2 + face_normal*THICKNESS,
-        point3 + face_normal*THICKNESS,
-    ]
-
-    # Returns the vertices and faces
-    return (
-        [tuple(vertex) for vertex in segment_vertices],
-        [(0,1,2), (3,4,5), (0,1,4,3), (1,2,5,4), (2,0,3,5)]
-    )
 
 
 def generate_face_surface_mesh(material: Metamaterial, node1, node2, node3):
@@ -155,14 +115,6 @@ def generate_face_surface_mesh(material: Metamaterial, node1, node2, node3):
         the first entry.
     """
 
-    ### TODO:
-    #
-    # Make this compute all the face segments, rather than
-    # calling a helper function.
-    #
-    # Make only the outermost walls be included in the mesh,
-    # rather than making a triangular prism every time.
-    
     # Creates function for computing face points
     face_points_function = material.compute_face_points(node1, node2, node3)
 
@@ -176,42 +128,67 @@ def generate_face_surface_mesh(material: Metamaterial, node1, node2, node3):
     vertices = []
     faces = []
 
-    # Stores the number of vertices so far
-    vertex_count = 0
-
     # Computes the face normal
     face_normal = np.cross(face_points[0][EDGE_SEGMENTS] - face_points[EDGE_SEGMENTS][0], face_points[0][0] - face_points[EDGE_SEGMENTS][0])
-    face_normal /= np.linalg.norm(face_normal)
+    face_normal *= THICKNESS/np.linalg.norm(face_normal)
 
-    # Runs through each face
+    # Adds each vertex
+    for s in range(EDGE_SEGMENTS+1):
+        for t in range(EDGE_SEGMENTS+1-s):
+            vertices.append(tuple(face_points[s][t] - face_normal)) # Bottom vertices
+            vertices.append(tuple(face_points[s][t] + face_normal)) # Top vertices
+
+    # Runs through each top/bottom face
     for t in range(EDGE_SEGMENTS):
         for s in range(EDGE_SEGMENTS-t):
 
-            # Gets the first face's vertices and faces
-            vertex_list, face_list = generate_face_segment_surface_mesh(face_points[s][t], face_points[s+1][t], face_points[s][t+1], face_normal)
-            
-            # Stores the first face's vertices
-            vertices.extend(vertex_list)
+            # Stores the point indices
+            point1_index = bezier_triangle_index(s,t)*2
+            point2_index = bezier_triangle_index(s+1,t)*2
+            point3_index = bezier_triangle_index(s,t+1)*2
 
-            # Stores the faces
-            for face in face_list:
-                faces.append(tuple(map(lambda x:x+vertex_count, face)))
-            vertex_count += VERTICES_PER_FACE
+            # Adds the faces
+            faces.append((point1_index, point2_index, point3_index)) # Bottom face
+            faces.append((point1_index+1, point2_index+1, point3_index+1)) # Top face
 
             # Checks for a second face
             if s+t+2 <= EDGE_SEGMENTS:
 
-                # Gets the second face's vertices and faces
-                vertex_list, face_list = generate_face_segment_surface_mesh(face_points[s+1][t+1], face_points[s][t+1], face_points[s+1][t], face_normal)
-                
-                # Stores the vertices
-                vertices.extend(vertex_list)
+                # Stores the new point index
+                point4_index = bezier_triangle_index(s+1,t+1)*2
 
-                # Stores the faces
-                for face in face_list:
-                    faces.append(tuple(map(lambda x:x+vertex_count, face)))
-                vertex_count += VERTICES_PER_FACE
-    
+                # Adds the faces
+                faces.append((point2_index, point3_index, point4_index)) # Bottom face
+                faces.append((point2_index+1, point3_index+1, point4_index+1)) # Top face
+
+    # Runs through the edge faces
+    for t in range(EDGE_SEGMENTS):
+        s = EDGE_SEGMENTS-t # Computes the opposite parameter
+
+        # Stores the u=0 edge faces
+        faces.append((
+            bezier_triangle_index(s,t)*2,
+            bezier_triangle_index(s-1,t+1)*2,
+            bezier_triangle_index(s-1,t+1)*2+1,
+            bezier_triangle_index(s,t)*2+1,
+        ))
+
+        # Stores the t=0 edge faces
+        faces.append((
+            bezier_triangle_index(t,0)*2,
+            bezier_triangle_index(t+1,0)*2,
+            bezier_triangle_index(t+1,0)*2+1,
+            bezier_triangle_index(t,0)*2+1,
+        ))
+
+        # Stores the s=0 edge faces
+        faces.append((
+            bezier_triangle_index(0,t)*2,
+            bezier_triangle_index(0,t+1)*2,
+            bezier_triangle_index(0,t+1)*2+1,
+            bezier_triangle_index(0,t)*2+1,
+        ))
+
     return vertices, faces
 
 
