@@ -119,18 +119,21 @@ def generate_edge_surface_mesh(material: Metamaterial, node1, node2):
     return vertices, faces
 
 
-def generate_face_segment_surface_mesh(point1: np.ndarray, point2: np.ndarray, point3: np.ndarray):
+def generate_face_segment_surface_mesh(point1: np.ndarray, point2: np.ndarray, point3: np.ndarray, face_normal: np.ndarray):
     """
     Generates the vertices and faces for an face segment.
     
     point1: ndarray
-        The position of the face with lowest (s,t).
+        One of the three nodes of the face.
     
     point2: ndarray
-        The position of the face with (s+1,t).
+        Another of the three nodes of the face.
     
     point3: ndarray
-        The position of the face with (s,t+1).
+        The last of the three nodes of the face.
+
+    face_normal: np.ndarray
+        The normal to the face. One normal is used for the whole face.
 
     Returns: (list of tuples of floats, list of tuples of ints)
         The first entry is a list of the vertex (x,y,z) coordinates.
@@ -138,10 +141,6 @@ def generate_face_segment_surface_mesh(point1: np.ndarray, point2: np.ndarray, p
         where the vertex numbers correspond to the index of the vertex in
         the first entry.
     """
-
-    # Computes the face normal
-    face_normal = np.cross(point2-point1, point3-point1)
-    face_normal /= np.linalg.norm(face_normal)
 
     # Computes all vertices of the face segment
     segment_vertices = [
@@ -193,12 +192,16 @@ def generate_face_surface_mesh(material: Metamaterial, node1, node2, node3):
     # Stores the number of vertices so far
     vertex_count = 0
 
+    # Computes the face normal
+    face_normal = np.cross(face_points(0,EDGE_SEGMENTS) - face_points(EDGE_SEGMENTS, 0), face_points(0,0) - face_points(EDGE_SEGMENTS, 0))
+    face_normal /= np.linalg.norm(face_normal)
+
     # Runs through each face
     for t in range(EDGE_SEGMENTS):
         for s in range(EDGE_SEGMENTS-t):
 
             # Gets the first face's vertices and faces
-            vertex_list, face_list = generate_face_segment_surface_mesh(face_points(s,t), face_points(s+1,t), face_points(s,t+1))
+            vertex_list, face_list = generate_face_segment_surface_mesh(face_points(s,t), face_points(s+1,t), face_points(s,t+1), face_normal)
             
             # Stores the vertices
             vertices.extend(vertex_list)
@@ -212,7 +215,7 @@ def generate_face_surface_mesh(material: Metamaterial, node1, node2, node3):
             if s+t+2 <= EDGE_SEGMENTS:
 
                 # Gets the second face's vertices and faces
-                vertex_list, face_list = generate_face_segment_surface_mesh(face_points(s+1,t+1), face_points(s,t+1), face_points(s+1,t))
+                vertex_list, face_list = generate_face_segment_surface_mesh(face_points(s+1,t+1), face_points(s,t+1), face_points(s+1,t), face_normal)
                 
                 # Stores the vertices
                 vertices.extend(vertex_list)
