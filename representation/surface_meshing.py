@@ -3,78 +3,8 @@ from representation.rep_class import *
 from representation.generation import *
 
 THICKNESS = 0.02
-VERTICES_PER_EDGE = 8
+VERTICES_PER_EDGE = EDGE_SEGMENTS*2
 VERTICES_PER_FACE = 6
-
-def generate_edge_segment_surface_mesh(point1, point2, next_point=None, prev_normal=None):
-    """
-    Generates the vertices and faces for an edge segment.
-    
-    point1: ndarray
-        The position of the start of the edge.
-    
-    point2: ndarray
-        The position of the end of the edge.
-
-    Returns: (list of tuples of floats, list of tuples of ints)
-        The first entry is a list of the vertex (x,y,z) coordinates.
-        The second is a list containing each face's corresponding vertices,
-        where the vertex numbers correspond to the index of the vertex in
-        the first entry.
-    """
-
-    # Computes the edge direction for face 1
-    edge_dir = point1 - point2
-    edge_len = np.linalg.norm(edge_dir)
-    edge_dir /= edge_len
-
-    # Computes a random vector to be used for orthogonal vector generation for face 1
-    if prev_normal is None:
-        prev_normal = np.array([1,0,0])
-        if np.linalg.norm(np.cross(prev_normal, edge_dir)) < 0.1:
-            prev_normal = np.array([0,1,0])
-        
-    # Computes two co-orthogonal vectors orthogonal to the edge direction for face1
-    basis1 = np.cross(edge_dir, prev_normal)
-    basis1 /= np.linalg.norm(basis1)
-    basis2 = np.cross(edge_dir, basis1)
-    basis2 /= np.linalg.norm(basis2)
-
-    # Computes the face 1 (around node1) vertices
-    face1_vertices = [
-        point1 + basis1*THICKNESS + basis2*THICKNESS,
-        point1 + basis1*THICKNESS - basis2*THICKNESS,
-        point1 - basis1*THICKNESS - basis2*THICKNESS,
-        point1 - basis1*THICKNESS + basis2*THICKNESS,
-    ]
-
-    # Adapts the normal to how it will appear on the next segment, if applicable
-    if next_point is not None:
-
-        # Computes the edge direction for face 2
-        edge_dir = point2 - next_point
-        edge_len = np.linalg.norm(edge_dir)
-        edge_dir /= edge_len
-
-        # Computes two co-orthogonal vectors orthogonal to the edge direction for face 2
-        basis1 = np.cross(edge_dir, prev_normal)
-        basis1 /= np.linalg.norm(basis1)
-        basis2 = np.cross(edge_dir, basis1)
-        basis2 /= np.linalg.norm(basis2)
-
-    # Computes the face 2 (around node2) vertices
-    face2_vertices = [
-        point2 + basis1*THICKNESS + basis2*THICKNESS,
-        point2 + basis1*THICKNESS - basis2*THICKNESS,
-        point2 - basis1*THICKNESS - basis2*THICKNESS,
-        point2 - basis1*THICKNESS + basis2*THICKNESS,
-    ]
-
-    return (
-        basis2,
-        [tuple(vertex) for vertex in face1_vertices] + [tuple(vertex) for vertex in face2_vertices], # Vertex coordinates
-        [(0,1,2,3), (4,5,6,7)] + [(i, (i+1)%4, (i+1)%4+4, i+4) for i in range(4)] # Face vertex indices
-    )
 
 
 def generate_edge_surface_mesh(material: Metamaterial, node1, node2):
@@ -98,23 +28,66 @@ def generate_edge_surface_mesh(material: Metamaterial, node1, node2):
     """
 
     # Computes the points along the edge
-    edge_points = material.compute_edge_points(node1, node2)
+    edge_points_function = material.compute_edge_points(node1, node2)
 
-    # Stores values for the function
+    # Stores the edge points for faster computation
+    edge_points = [edge_points_function(edge) for edge in range(EDGE_SEGMENTS+1)]
+
+    # Stores vertex and face values for the function
     vertices = []
     faces = []
 
-    # Runs through each edge segment
-    prev_normal = None
-    for edge in range(EDGE_SEGMENTS):
-        prev_normal, vertex_list, face_list = generate_edge_segment_surface_mesh(edge_points(edge), edge_points(edge+1), next_point=(None if edge+2 > EDGE_SEGMENTS else edge_points(edge+2)), prev_normal=prev_normal)
+    # Computes a starting point for the normal vectors
+    init_dir = edge_points[1] - edge_points[0]
+    init_guess = np.array([1,0,0])
+    if np.linalg.norm(np.cross(init_guess, init_dir)) < 1e-4:
+        init_guess = np.array([0,1,0])
+        
+    # Computes the initial normals
+    normal1 = np.cross(init_dir, init_guess)
+    normal1 /= np.linalg.norm(normal1)
+    normal2 = np.cross(init_dir, normal1)
+    normal2 /= np.linalg.norm(normal2)
 
-        # Adds the new vertices/faces
-        vertices.extend(vertex_list)
+    # Stores the number of vertices seen so far
+    vertex_count = 0
 
-        # Adds the faces from the edge
-        for face in face_list:
-            faces.append(tuple(map(lambda x: x+edge*VERTICES_PER_EDGE, face)))
+    # Runs through each edge point
+    for edge in range(EDGE_SEGMENTS+1):
+
+        # Adds all of the vertices on the circular face of this edge point
+        vertices.extend([
+            tuple(edge_points[edge]
+             + np.cos(2*np.pi*theta/EDGE_SEGMENTS) * normal1*THICKNESS
+             + np.sin(2*np.pi*theta/EDGE_SEGMENTS) * normal2*THICKNESS)
+                for theta in range(EDGE_SEGMENTS)
+        ])
+
+        # Adds the face at the ends of the cylindrical edge
+        if edge == 0 or edge == EDGE_SEGMENTS:
+            faces.append(tuple(i+vertex_count for i in range(EDGE_SEGMENTS)))
+
+        # Adds the faces that connect edge segments
+        if edge != 0:
+            faces.extend([
+                (vertex_count-EDGE_SEGMENTS+i, vertex_count-EDGE_SEGMENTS+(i+1)%EDGE_SEGMENTS, vertex_count+(i+1)%EDGE_SEGMENTS, vertex_count+i)
+                    for i in range(EDGE_SEGMENTS)
+            ])
+
+        # Updates the normals
+        if edge != EDGE_SEGMENTS:
+
+            # Computes the direction of the edge segment to be formed
+            edge_dir = edge_points[edge+1] - edge_points[edge]
+
+            # Computes the new normals
+            normal2 = np.cross(edge_dir, normal1)
+            normal2 /= np.linalg.norm(normal2)
+            normal1 = np.cross(normal2, edge_dir)
+            normal1 /= np.linalg.norm(normal1)
+
+        # Updates the vertex count
+        vertex_count += EDGE_SEGMENTS
 
     return vertices, faces
 
