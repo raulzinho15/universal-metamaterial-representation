@@ -120,27 +120,53 @@ def generate_face_surface_mesh(material: Metamaterial, node1, node2, node3):
 
     # Pre-computes the face points for faster computation
     face_points = [
-        [face_points_function(s,t) for t in range(EDGE_SEGMENTS+1-s)]
-            for s in range(EDGE_SEGMENTS+1)
+        face_points_function(s,t)
+            for s,t,u in BEZIER_TRIANGLE_PARAMETERS
     ]
+
+    # Pre-computes the face normals for faster computation
+    face_normals = []
+    for s,t,u in BEZIER_TRIANGLE_PARAMETERS:
+
+        # Stores the base point for the normal
+        base_point = face_points[bezier_triangle_index(s,t)]
+
+        # Stores the points from which the normal is deduced
+        if s+t != EDGE_SEGMENTS:
+            point1 = face_points[bezier_triangle_index(s+1,t)]
+            point2 = face_points[bezier_triangle_index(s,t+1)]
+
+        elif s == EDGE_SEGMENTS:
+            point1 = face_points[bezier_triangle_index(s-1,t+1)]
+            point2 = face_points[bezier_triangle_index(s-1,t)]
+
+        elif t == EDGE_SEGMENTS:
+            point1 = face_points[bezier_triangle_index(s,t-1)]
+            point2 = face_points[bezier_triangle_index(s+1,t-1)]
+
+        else:
+            point1 = face_points[bezier_triangle_index(s-1,t+1)]
+            point2 = face_points[bezier_triangle_index(s-1,t)]
+
+        # Computes the face's normal
+        face_normal = np.cross(point1-base_point, point2-base_point)
+        face_normal /= np.linalg.norm(face_normal)
+
+        # Stores the face's normal
+        face_normals.append(face_normal*THICKNESS)
 
     # Stores the vertices and faces
     vertices = []
     faces = []
 
-    # Computes the face normal
-    face_normal = np.cross(face_points[0][EDGE_SEGMENTS] - face_points[EDGE_SEGMENTS][0], face_points[0][0] - face_points[EDGE_SEGMENTS][0])
-    face_normal *= THICKNESS/np.linalg.norm(face_normal)
-
-    # Adds each vertex
-    for s in range(EDGE_SEGMENTS+1):
-        for t in range(EDGE_SEGMENTS+1-s):
-            vertices.append(tuple(face_points[s][t] - face_normal)) # Bottom vertices
-            vertices.append(tuple(face_points[s][t] + face_normal)) # Top vertices
+    # Stores each vertex
+    for point, normal in zip(face_points, face_normals):
+        vertices.append(tuple(point - normal)) # Bottom vertices
+        vertices.append(tuple(point + normal)) # Top vertices
 
     # Runs through each top/bottom face
-    for t in range(EDGE_SEGMENTS):
-        for s in range(EDGE_SEGMENTS-t):
+    for s in range(EDGE_SEGMENTS):
+        for t in range(EDGE_SEGMENTS-s):
 
             # Stores the point indices
             point1_index = bezier_triangle_index(s,t)*2
