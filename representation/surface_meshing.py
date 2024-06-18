@@ -7,7 +7,7 @@ VERTICES_PER_EDGE = EDGE_SEGMENTS*2
 VERTICES_PER_FACE = 6
 
 
-def generate_edge_surface_mesh(material: Metamaterial, node1: int, node2: int):
+def generate_edge_surface_mesh(material: Metamaterial, node1: int, node2: int) -> tuple[list[tuple], list[tuple]]:
     """
     Generates the vertices and faces for an edge of the metamaterial.
     
@@ -92,7 +92,7 @@ def generate_edge_surface_mesh(material: Metamaterial, node1: int, node2: int):
     return vertices, faces
 
 
-def generate_face_surface_mesh(material: Metamaterial, node1, node2, node3):
+def generate_face_surface_mesh(material: Metamaterial, node1: int, node2: int, node3: int) -> tuple[list[tuple], list[tuple]]:
     """
     Generates the vertices and faces for a face of the metamaterial.
     
@@ -218,7 +218,7 @@ def generate_face_surface_mesh(material: Metamaterial, node1, node2, node3):
     return vertices, faces
 
 
-def generate_metamaterial_surface_mesh(material: Metamaterial):
+def generate_metamaterial_surface_mesh(material: Metamaterial) -> tuple[list[tuple], list[tuple]]:
     """
     Generates the mesh for the metamaterial.
 
@@ -275,7 +275,7 @@ def generate_metamaterial_surface_mesh(material: Metamaterial):
     return vertices, faces
 
 
-def generate_metamaterial_grid_surface_mesh(metamaterial: Metamaterial, shape=(1,1,1)):
+def generate_metamaterial_grid_surface_mesh(metamaterial: Metamaterial, shape=(1,1,1)) -> tuple[list[tuple], list[tuple]]:
     """
     Generates the mesh for the metamaterial.
 
@@ -309,7 +309,7 @@ def generate_metamaterial_grid_surface_mesh(metamaterial: Metamaterial, shape=(1
     return vertices, faces
 
 
-def generate_metamaterials_zigzag_surface_meshes(metamaterials: list[Metamaterial], shape=(1,1,1)):
+def generate_metamaterials_zigzag_surface_meshes(metamaterials: list[Metamaterial], shape=(1,1,1)) -> tuple[list[tuple], list[tuple]]:
     """
     Generates meshes for the given metamaterials with the given shape in a
     zigzag pattern.
@@ -346,7 +346,7 @@ def generate_metamaterials_zigzag_surface_meshes(metamaterials: list[Metamateria
     return vertices, faces
 
 
-def optimize_vertices(vertices, faces):
+def optimize_vertices(vertices: list[tuple], faces: list[tuple]) -> tuple[list[tuple], list[tuple]]:
 
     # Stores data structures for removing duplicate vertices
     unique_vertices = 0
@@ -371,7 +371,7 @@ def optimize_vertices(vertices, faces):
     return new_vertices, new_faces
 
 
-def save_obj(vertices, faces, filepath):
+def save_obj(vertices: list[tuple], faces: list[tuple], filepath: str):
     """
     Saves the .obj file with the given vertices and face vertex indices.
 
@@ -387,7 +387,7 @@ def save_obj(vertices, faces, filepath):
 
     print("Saving:", filepath[filepath.rindex("/")+1:])
 
-    vertices, faces = optimize_vertices(vertices, faces)
+    # vertices, faces = optimize_vertices(vertices, faces)
 
     with open(filepath, 'w') as f:
 
@@ -401,4 +401,72 @@ def save_obj(vertices, faces, filepath):
             for vertex_index in face:
                 f.write(f" {vertex_index + 1}") # 1-indexing
             f.write("\n")
+
+
+def save_multi_obj(vertices: list[list[tuple]], faces: list[list[tuple]], filepath: str, precision=6, verbose=True):
+    """
+    Saves an .obj file with multiple objects.
+
+    vertices: `list[list[tuple]]`
+        The vertices of the different objects. The first
+        axis separates the different objects. The second
+        axis separates different vertices in the same
+        object.
+
+    faces: `list[list[tuple]]`
+        The faces of the different objects. The first
+        axis separates the different objects. The second
+        axis separates different faces in the same
+        object. Must have `len(faces) == len(vertices)`.
+        The indices should be local to their own object.
+        The indices should be 0-indexed.
+
+    filepath: `str`
+        The path at which the file will be saved.
+
+    precision: `int`, optional
+        The number of decimal places with which to save the
+        vertex coordinates. Default is `6`.
+
+    verbose: `bool`, optional
+        Whether status messages will be printed to the console.
+        Default is `True`.
+    """
+
+    # Tells the user the saving is beginning
+    if verbose:
+        print("Saving:", filepath[filepath.rindex("/")+1:])
+
+    # Stores data for the file writing
+    num_vertices = 0
+
+    # Writes to the file
+    with open(filepath, "w") as f:
+
+        # Runs through each object
+        for i, obj_parts in enumerate(zip(vertices, faces)):
+
+            # Stores the parts of the object
+            obj_vertices, obj_faces = obj_parts
+
+            # Writes the object
+            f.write(f"o Object{i}\n")
+
+            # Writes each vertex
+            for vertex in obj_vertices:
+                f.write("v")
+                for coord in vertex:
+                    f.write(f" {np.round(coord, precision)}")
+                f.write("\n")
+
+            # Writes each face
+            for face in obj_faces:
+                f.write("f")
+                for vertex_index in face:
+                    f.write(f" {vertex_index + num_vertices + 1}")
+                f.write("\n")
+
+            # Updates the number of vertices
+            num_vertices += len(obj_vertices)
+
 
