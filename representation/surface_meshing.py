@@ -218,64 +218,63 @@ def generate_face_surface_mesh(material: Metamaterial, node1: int, node2: int, n
     return vertices, faces
 
 
-def generate_metamaterial_surface_mesh(material: Metamaterial) -> tuple[list[tuple], list[tuple]]:
+def generate_metamaterial_surface_mesh(material: Metamaterial) -> tuple[list[list[tuple]], list[list[tuple]]]:
     """
     Generates the mesh for the metamaterial.
 
     material: Metamaterial
         The material for which the mesh will be generated.
 
-    Returns: (list of tuples, list of tuples)
-        The vertex and face list, respectively, as described in 
-        the save_obj() function's specification.
+    Returns: `tuple[list[list[tuple]], list[list[tuple]]]`
+        The first item contains the vertices of each component
+        in the metamaterial mesh, where the first axis
+        separates distinct components, and the second axis
+        separates the coordinates of a component's vertices.
+
+        The second item contains the faces of each component
+        in the metamaterial mesh, where the first axis
+        separates distinct components, and the second axis
+        separates the indices of a component's faces.
     """
 
     # Stores the vertices and faces
-    vertices = []
-    faces = []
-    vertex_count = 0
+    vertices, faces = [], []
 
-    # Generates the edge mesh for each edge
+    # Runs through each edge
     for n1 in range(NUM_NODES):
         for n2 in range(n1+1, NUM_NODES):
 
-            # Skips non-edges
+            # Skips nodes without an edge between them
             if not material.has_edge(n1, n2):
                 continue
 
-            # Adds the vertices from the edge
-            vertex_list, face_list = generate_edge_surface_mesh(material, n1, n2)
-            vertices.extend(vertex_list)
+            # Computes the edge's components
+            edge_vertices, edge_faces = generate_edge_surface_mesh(material, n1, n2)
 
-            # Adds the faces from the edge
-            for face in face_list:
-                faces.append(tuple(map(lambda x: x + vertex_count, face)))
+            # Stores the edge's components
+            vertices.append(edge_vertices)
+            faces.append(edge_faces)
 
-            vertex_count += len(vertex_list)
-
-    # Generates the face mesh for each face
+    # Runs through each face
     for n1 in range(NUM_NODES):
         for n2 in range(n1+1, NUM_NODES):
             for n3 in range(n2+1, NUM_NODES):
 
-                # Skips non-faces
+                # Skips nodes without a face between them
                 if not material.has_face(n1, n2, n3):
                     continue
 
-                # Adds the vertices from the face
-                vertex_list, face_list = generate_face_surface_mesh(material, n1, n2, n3)
-                vertices.extend(vertex_list)
+                # Computes the face's components
+                face_vertices, face_faces = generate_face_surface_mesh(material, n1, n2, n3)
 
-                # Adds the faces from the face
-                for face in face_list:
-                    faces.append(tuple(map(lambda x: x + vertex_count, face)))
-
-                vertex_count += len(vertex_list)
+                # Stores the face's components
+                vertices.append(face_vertices)
+                faces.append(face_faces)
 
     return vertices, faces
 
 
-def generate_metamaterial_grid_surface_mesh(metamaterial: Metamaterial, shape=(1,1,1)) -> tuple[list[tuple], list[tuple]]:
+def generate_metamaterial_grid_surface_mesh(metamaterial: Metamaterial, shape=(1,1,1)) -> tuple[list[list[tuple]], list[list[tuple]]]:
     """
     Generates the mesh for the metamaterial.
 
@@ -287,24 +286,33 @@ def generate_metamaterial_grid_surface_mesh(metamaterial: Metamaterial, shape=(1
         If no gridding (i.e., just the metamaterial by itself), the input
         should be (1,1,1).
 
-    Returns: (list of tuples, list of tuples)
-        The vertex and face list, respectively, as described in 
-        the save_obj() function's specification.
+    Returns: `tuple[list[list[tuple]], list[list[tuple]]]`
+        The first item contains the vertices of each component
+        in the metamaterial mesh, where the first axis
+        separates distinct components, and the second axis
+        separates the coordinates of a component's vertices.
+
+        The second item contains the faces of each component
+        in the metamaterial mesh, where the first axis
+        separates distinct components, and the second axis
+        separates the indices of a component's faces.
     """
 
     # Computes the materials to mesh
     materials = metamaterial_grid(metamaterial, shape)
 
     # Stores values for the meshing
-    vertex_count = 0
     vertices, faces = [], []
 
-    # Meshes each material
+    # Runs through each material
     for material in materials:
-        next_vertices, next_faces = generate_metamaterial_surface_mesh(material)
-        vertices.extend(next_vertices)
-        faces.extend([tuple(map(lambda x: x+vertex_count, face)) for face in next_faces])
-        vertex_count += len(next_vertices)
+
+        # Computes the material's components
+        mat_vertices, mat_faces = generate_metamaterial_surface_mesh(material)
+
+        # Stores the material's components
+        vertices.extend(mat_vertices)
+        faces.extend(mat_faces)
 
     return vertices, faces
 
@@ -387,8 +395,6 @@ def save_obj(vertices: list[tuple], faces: list[tuple], filepath: str):
 
     print("Saving:", filepath[filepath.rindex("/")+1:])
 
-    # vertices, faces = optimize_vertices(vertices, faces)
-
     with open(filepath, 'w') as f:
 
         # Writes each vertex
@@ -450,7 +456,7 @@ def save_multi_obj(vertices: list[list[tuple]], faces: list[list[tuple]], filepa
             obj_vertices, obj_faces = obj_parts
 
             # Writes the object
-            f.write(f"o Object{i}\n")
+            f.write(f"o Component{i}\n")
 
             # Writes each vertex
             for vertex in obj_vertices:
@@ -468,5 +474,9 @@ def save_multi_obj(vertices: list[list[tuple]], faces: list[list[tuple]], filepa
 
             # Updates the number of vertices
             num_vertices += len(obj_vertices)
+
+    # Tells the user the save finihsed
+    if verbose:
+        print("Saved!")
 
 
