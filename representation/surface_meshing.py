@@ -63,9 +63,9 @@ def generate_edge_surface_mesh(material: Metamaterial, node1: int, node2: int) -
                 for theta in range(EDGE_SEGMENTS)
         )
 
-        # Adds the face at the ends of the cylindrical edge
-        if edge == 0 or edge == EDGE_SEGMENTS:
-            faces.append(tuple(i+vertex_count for i in range(EDGE_SEGMENTS)))
+        # # Adds the face at the ends of the cylindrical edge
+        # if edge == 0 or edge == EDGE_SEGMENTS:
+        #     faces.append(tuple(i+vertex_count for i in range(EDGE_SEGMENTS)))
 
         # Adds the faces that connect edge segments
         if edge != 0:
@@ -88,6 +88,58 @@ def generate_edge_surface_mesh(material: Metamaterial, node1: int, node2: int) -
 
         # Updates the vertex count
         vertex_count += EDGE_SEGMENTS
+
+    # Stores the axes for the hemisphere ends
+    x_axes = [np.array(vertices[0])-edge_points[0], np.array(vertices[-EDGE_SEGMENTS])-edge_points[EDGE_SEGMENTS]]
+    y_axes = [np.array(vertices[EDGE_SEGMENTS//4])-edge_points[0], np.array(vertices[EDGE_SEGMENTS//4-EDGE_SEGMENTS])-edge_points[EDGE_SEGMENTS]]
+    z_axes = [edge_points[0]-edge_points[1], edge_points[-1]-edge_points[-2]]
+    z_axes[0] *= THICKNESS/np.linalg.norm(z_axes[0])
+    z_axes[1] *= THICKNESS/np.linalg.norm(z_axes[1])
+
+    # Stores other hemisphere-specific data
+    base_vertices_start = [0,len(vertices)-EDGE_SEGMENTS]
+    centers = [edge_points[0], edge_points[-1]]
+
+    # Runs through each hemisphere
+    for h in range(2):
+
+        # Runs through each theta
+        for th in range(EDGE_SEGMENTS-1, -1, -1):
+            
+            # Handles the north pole
+            if th == 0:
+
+                # Computes the vertex
+                vertices.append(tuple(centers[h]+z_axes[h]))
+
+                # Adds the faces
+                for i in range(EDGE_SEGMENTS):
+                    ring_index = len(vertices)-EDGE_SEGMENTS-1
+                    faces.append((ring_index+i, ring_index+(i+1)%EDGE_SEGMENTS, len(vertices)-1))
+
+            # Handles a non-north pole circumference
+            else:
+
+                # Computes the vertices
+                for phi in range(EDGE_SEGMENTS):
+
+                    # Adjusts theta/phi
+                    theta = th/EDGE_SEGMENTS * np.pi/2
+                    phi = phi/EDGE_SEGMENTS * 2*np.pi
+
+                    # Computes the vertex coordinates
+                    x_coord = x_axes[h]*np.sin(theta)*np.cos(phi)
+                    y_coord = y_axes[h]*np.sin(theta)*np.sin(phi)
+                    z_coord = z_axes[h]*np.cos(theta)
+
+                    # Stores the vertex coordinates
+                    vertices.append(tuple(centers[h]+x_coord+y_coord+z_coord))
+
+                # Adds the faces
+                for i in range(EDGE_SEGMENTS):
+                    ring1_index = len(vertices)-2*EDGE_SEGMENTS if th != EDGE_SEGMENTS-1 else base_vertices_start[h]
+                    ring2_index = len(vertices)-EDGE_SEGMENTS
+                    faces.append((ring1_index+i, ring1_index+(i+1)%EDGE_SEGMENTS, ring2_index+(i+1)%EDGE_SEGMENTS, ring2_index+i))
 
     return vertices, faces
 
