@@ -1,10 +1,89 @@
 import math
+import trimesh
 from representation.rep_class import *
 from representation.generation import *
 
 THICKNESS = 0.02
 VERTICES_PER_EDGE = EDGE_SEGMENTS*2
 VERTICES_PER_FACE = 6
+
+
+def generate_node_surface_mesh(material: Metamaterial, node: int) -> tuple[list[tuple], list[tuple]]:
+    """
+    Generates the vertices and faces for a node of the metamaterial.
+    
+    material: Metamaterial
+        The metamaterial whose edge will be meshed.
+
+    node1: int
+        The node ID for the target node.
+    """
+
+    # Computes the node position
+    center = material.get_node_position(node)
+
+    # Stores the mesh values
+    vertices, faces = [], []
+
+    # Geometric properties of the node mesh
+    node_segments = EDGE_SEGMENTS//2
+    sphere_radius = THICKNESS*101/100
+
+    # Computes angle values
+    def thetas():
+        for i in range(node_segments+1):
+            yield i, i/node_segments * np.pi
+    def phis():
+        for i in range(node_segments):
+            yield i, i/node_segments * 2*np.pi
+
+    # Runs through each point on the surface of the sphere
+    for i,theta in thetas():
+
+        # Computes the z Euclidean coordinate
+        z = np.array([0.,0.,1.]) * sphere_radius * np.cos(theta)
+
+        # Handles all other points in between
+        for j,phi in phis():
+
+            # Computes the Euclidean coordinates
+            x = np.array([1.,0.,0.]) * sphere_radius * np.sin(theta) * np.cos(phi)
+            y = np.array([0.,1.,0.]) * sphere_radius * np.sin(theta) * np.sin(phi)
+
+            # Stores the vertices along the ring
+            vertices.append(tuple(center+x+y+z))
+
+            # Skips redundantly computing the poles
+            if i == 0 or i == node_segments:
+                break
+
+        # Computes the face vertices
+        for j in range(node_segments):
+
+            # Skips when only the north pole point has been added
+            if i == 0:
+                break
+
+            # Handles the faces touching the north pole
+            if i == 1:
+                faces.append((0, 1 + j, 1 + (j+1)%node_segments))
+                continue
+
+            # Handles the faces touching the south pole
+            if i == node_segments:
+                offset = len(vertices)-node_segments-1
+                faces.append((offset + (j+1)%node_segments, offset + j, offset + node_segments))
+                continue
+
+            # Handles all other faces
+            ring1_index = len(vertices)-2*node_segments
+            ring2_index = len(vertices)-node_segments
+            face1 = (ring2_index + (j+1)%node_segments, ring1_index + (j+1)%node_segments, ring1_index + j)
+            face2 = (ring1_index + j, ring2_index + j, ring2_index + (j+1)%node_segments)
+            faces.append(face1)
+            faces.append(face2)
+
+    return vertices, faces
 
 
 def generate_edge_surface_mesh(material: Metamaterial, node1: int, node2: int) -> tuple[list[tuple], list[tuple]]:
@@ -63,16 +142,19 @@ def generate_edge_surface_mesh(material: Metamaterial, node1: int, node2: int) -
                 for theta in range(EDGE_SEGMENTS)
         )
 
-        # # Adds the face at the ends of the cylindrical edge
-        # if edge == 0 or edge == EDGE_SEGMENTS:
-        #     faces.append(tuple(i+vertex_count for i in range(EDGE_SEGMENTS)))
+        # Adds the face at the ends of the cylindrical edge
+        if edge == 0:
+            faces.extend((vertex_count+i+1, vertex_count+i, vertex_count) for i in range(1,EDGE_SEGMENTS-1))
+        elif edge == EDGE_SEGMENTS:
+            faces.extend((vertex_count, vertex_count+i, vertex_count+i+1) for i in range(1,EDGE_SEGMENTS-1))
 
         # Adds the faces that connect edge segments
         if edge != 0:
-            faces.extend(
-                (vertex_count-EDGE_SEGMENTS+i, vertex_count-EDGE_SEGMENTS+(i+1)%EDGE_SEGMENTS, vertex_count+(i+1)%EDGE_SEGMENTS, vertex_count+i)
-                    for i in range(EDGE_SEGMENTS)
-            )
+            for i in range(EDGE_SEGMENTS):
+                face1 = (vertex_count-EDGE_SEGMENTS+i, vertex_count-EDGE_SEGMENTS+(i+1)%EDGE_SEGMENTS, vertex_count+(i+1)%EDGE_SEGMENTS)
+                face2 = (vertex_count+(i+1)%EDGE_SEGMENTS, vertex_count+i, vertex_count-EDGE_SEGMENTS+i)
+                faces.append(face1)
+                faces.append(face2)
 
         # Updates the normals
         if edge != EDGE_SEGMENTS:
@@ -88,58 +170,6 @@ def generate_edge_surface_mesh(material: Metamaterial, node1: int, node2: int) -
 
         # Updates the vertex count
         vertex_count += EDGE_SEGMENTS
-
-    # Stores the axes for the hemisphere ends
-    x_axes = [np.array(vertices[0])-edge_points[0], np.array(vertices[-EDGE_SEGMENTS])-edge_points[EDGE_SEGMENTS]]
-    y_axes = [np.array(vertices[EDGE_SEGMENTS//4])-edge_points[0], np.array(vertices[EDGE_SEGMENTS//4-EDGE_SEGMENTS])-edge_points[EDGE_SEGMENTS]]
-    z_axes = [edge_points[0]-edge_points[1], edge_points[-1]-edge_points[-2]]
-    z_axes[0] *= THICKNESS/np.linalg.norm(z_axes[0])
-    z_axes[1] *= THICKNESS/np.linalg.norm(z_axes[1])
-
-    # Stores other hemisphere-specific data
-    base_vertices_start = [0,len(vertices)-EDGE_SEGMENTS]
-    centers = [edge_points[0], edge_points[-1]]
-
-    # Runs through each hemisphere
-    for h in range(2):
-
-        # Runs through each theta
-        for th in range(EDGE_SEGMENTS-1, -1, -1):
-            
-            # Handles the north pole
-            if th == 0:
-
-                # Computes the vertex
-                vertices.append(tuple(centers[h]+z_axes[h]))
-
-                # Adds the faces
-                for i in range(EDGE_SEGMENTS):
-                    ring_index = len(vertices)-EDGE_SEGMENTS-1
-                    faces.append((ring_index+i, ring_index+(i+1)%EDGE_SEGMENTS, len(vertices)-1))
-
-            # Handles a non-north pole circumference
-            else:
-
-                # Computes the vertices
-                for phi in range(EDGE_SEGMENTS):
-
-                    # Adjusts theta/phi
-                    theta = th/EDGE_SEGMENTS * np.pi/2
-                    phi = phi/EDGE_SEGMENTS * 2*np.pi
-
-                    # Computes the vertex coordinates
-                    x_coord = x_axes[h]*np.sin(theta)*np.cos(phi)
-                    y_coord = y_axes[h]*np.sin(theta)*np.sin(phi)
-                    z_coord = z_axes[h]*np.cos(theta)
-
-                    # Stores the vertex coordinates
-                    vertices.append(tuple(centers[h]+x_coord+y_coord+z_coord))
-
-                # Adds the faces
-                for i in range(EDGE_SEGMENTS):
-                    ring1_index = len(vertices)-2*EDGE_SEGMENTS if th != EDGE_SEGMENTS-1 else base_vertices_start[h]
-                    ring2_index = len(vertices)-EDGE_SEGMENTS
-                    faces.append((ring1_index+i, ring1_index+(i+1)%EDGE_SEGMENTS, ring2_index+(i+1)%EDGE_SEGMENTS, ring2_index+i))
 
     return vertices, faces
 
@@ -289,6 +319,9 @@ def generate_metamaterial_surface_mesh(material: Metamaterial) -> tuple[list[lis
         separates the indices of a component's faces.
     """
 
+    # Stores the nodes that are used
+    used_nodes = set()
+
     # Stores the vertices and faces
     vertices, faces = [], []
 
@@ -299,6 +332,10 @@ def generate_metamaterial_surface_mesh(material: Metamaterial) -> tuple[list[lis
             # Skips nodes without an edge between them
             if not material.has_edge(n1, n2):
                 continue
+
+            # Stores the nodes
+            used_nodes.add(n1)
+            used_nodes.add(n2)
 
             # Computes the edge's components
             edge_vertices, edge_faces = generate_edge_surface_mesh(material, n1, n2)
@@ -316,12 +353,27 @@ def generate_metamaterial_surface_mesh(material: Metamaterial) -> tuple[list[lis
                 if not material.has_face(n1, n2, n3):
                     continue
 
+                # Stores the nodes
+                used_nodes.add(n1)
+                used_nodes.add(n2)
+                used_nodes.add(n3)
+
                 # Computes the face's components
                 face_vertices, face_faces = generate_face_surface_mesh(material, n1, n2, n3)
 
                 # Stores the face's components
                 vertices.append(face_vertices)
                 faces.append(face_faces)
+
+    # Runs through each node
+    for node in used_nodes:
+
+        # Computes the node's components
+        node_vertices, node_faces = generate_node_surface_mesh(material, node)
+
+        # Stores the node's components
+        vertices.append(node_vertices)
+        faces.append(node_faces)
 
     return vertices, faces
 
@@ -431,36 +483,6 @@ def optimize_vertices(vertices: list[tuple], faces: list[tuple]) -> tuple[list[t
     return new_vertices, new_faces
 
 
-def save_obj(vertices: list[tuple], faces: list[tuple], filepath: str):
-    """
-    Saves the .obj file with the given vertices and face vertex indices.
-
-    vertices: list of tuples
-        The vertex (x,y,z) coordinates.
-
-    faces: list of tuples
-        The vertex indices corresponding to each face.
-
-    filepath: str
-        The path at which the file will be saved.
-    """
-
-    print("Saving:", filepath[filepath.rindex("/")+1:])
-
-    with open(filepath, 'w') as f:
-
-        # Writes each vertex
-        for vertex in vertices:
-            f.write(f"v {' '.join(map(str, map(lambda v: np.round(v,5), vertex)))}\n") # Rounds to 5 decimal places
-
-        # Writes each face
-        for face in faces:
-            f.write("f")
-            for vertex_index in face:
-                f.write(f" {vertex_index + 1}") # 1-indexing
-            f.write("\n")
-
-
 def save_multi_obj(vertices: list[list[tuple]], faces: list[list[tuple]], filepath: str, precision=6, verbose=True):
     """
     Saves an .obj file with multiple objects.
@@ -532,3 +554,42 @@ def save_multi_obj(vertices: list[list[tuple]], faces: list[list[tuple]], filepa
         print("Saved!")
 
 
+def union_obj_components(vertices: list[list[tuple]], faces: list[list[tuple]], filepath: str, check_manifold=True):
+    """
+    Takes the union of all the components in the given source .obj
+    file, and stores the union in the given output file.
+
+    vertices: `list[list[tuple]]`
+        The vertices of the different objects. The first
+        axis separates the different objects. The second
+        axis separates different vertices in the same
+        object.
+
+    faces: `list[list[tuple]]`
+        The faces of the different objects. The first
+        axis separates the different objects. The second
+        axis separates different faces in the same
+        object. Must have `len(faces) == len(vertices)`.
+        The indices should be local to their own object.
+        The indices should be 0-indexed.
+
+    filepath: `str`
+        The filepath into which the unioned components will be
+        stored.
+
+    check_manifold: `bool`
+        Whether the resulting mesh will be checked to be a manifold.
+        Is an expensive operation.
+    """
+
+    # Stores each component's mesh
+    component_meshes = [trimesh.Trimesh(vertices=vertices[i], faces=faces[i]) for i in range(len(vertices))]
+
+    # Computes the union of the meshes
+    union_mesh: trimesh.Trimesh = trimesh.boolean.union(component_meshes)
+
+    if check_manifold and not union_mesh.is_watertight:
+        print(f"WARNING: {filepath} is not a manifold mesh.")
+
+    # Exports the mesh
+    union_mesh.export(filepath)
