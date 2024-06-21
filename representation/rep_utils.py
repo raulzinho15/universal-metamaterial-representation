@@ -873,3 +873,4 @@ def sphere_octant_face_params(sphere_center: np.ndarray, node1_pos: np.ndarray, 
         return (sphere_center + s*coeff1 + t*coeff2 + u*coeff3)[np.newaxis,:]
 
     return find_face_params(None, face_function)
+

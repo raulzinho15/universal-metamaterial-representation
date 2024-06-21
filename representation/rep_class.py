@@ -1,5 +1,6 @@
 import numpy as np
 import torch
+from random import randrange
 from representation.utils import triangle_line_intersection
 from representation.rep_utils import *
 
@@ -56,6 +57,10 @@ class Metamaterial:
         # Stores translation transforms
         self.translations = np.zeros((1,3))
 
+        # Stores the displayed planes
+        # The order is as follows: x=0, y=0, z=0, x=1, y=1, z=1
+        self.displayed_planes = np.array([True] * 6)
+
         # Stores already-computed node positions on the cube for computation speed-up
         self.cube_pos = {}
 
@@ -81,12 +86,15 @@ class Metamaterial:
         return (self.translations + (1-point)*self.mirrors + point*(1-self.mirrors)).flatten()
 
 
-    def get_node_position(self, node: int) -> np.ndarray:
+    def get_node_position(self, node: int, transform=True) -> np.ndarray:
         """
         Computes the 3D position of the given node.
 
         node: int
             The ID of the node whose position will be returned.
+
+        transform: `bool`, optional
+            Whether the node's position will have transformations applied.
 
         Returns: ndarray
             The 3D position of the given node.
@@ -99,8 +107,12 @@ class Metamaterial:
         # Gets the position of the node
         point = pseudo_spherical_to_euclidean(self.node_pos[node*3 : (node+1)*3][np.newaxis,:])
 
-        # Returns the transformed position
-        self.cube_pos[node] = self.transform_point(point)
+        # Transforms the position
+        if transform:
+            point = self.transform_point(point)
+
+        # Returns the position
+        self.cube_pos[node] = point
         return self.cube_pos[node]
 
 
@@ -187,6 +199,160 @@ class Metamaterial:
         material.translations += new_translations
 
         return material
+    
+
+    def toggle_plane_display(self, x0=False, x1=False, y0=False, y1=False, z0=False, z1=False):
+        """
+        Toggles the planes to be displayed when meshing the material.
+        Namely, any edges and faces that lie on a non-displayed plane
+        will not be included in the material's mesh.
+
+        x0: `bool`
+            Whether to toggle the x=0 plane's display.
+
+        x1: `bool`
+            Whether to toggle the x=1 plane's display.
+
+        y0: `bool`
+            Whether to toggle the y=0 plane's display.
+
+        y1: `bool`
+            Whether to toggle the y=1 plane's display.
+
+        z0: `bool`
+            Whether to toggle the z=0 plane's display.
+
+        z1: `bool`
+            Whether to toggle the z=1 plane's display.
+        """
+
+        # Creates copy for toggling the plane displays
+        material = self.copy()
+
+        # Stores the plane display toggles
+        display_toggles = np.array([x0, y0, z0, x1, y1, z1])
+
+        # Stores the new plane display properties
+        material.displayed_planes = np.logical_xor(material.displayed_planes, display_toggles)
+
+        return material
+
+
+    def point_is_displayed(self, point: np.ndarray, threshold=1e-4) -> bool:
+        """
+        Checks whether the given point is on a displayed plane.
+
+        point: np.ndarray
+            The point to check.
+
+        threshold: `float`, optional
+            The maximum distance a point can have from a plane
+            to still be considered to be on that plane.
+            Must be positive.
+
+        Returns: `bool`
+            Whether the given point is on a displayed plane.
+        """
+
+        # Checks whether the point is on the planes
+        point_is_on_planes = np.concatenate((np.abs(point) < threshold, np.abs(point-1) < threshold))
+
+        # Checks if the node should be displayed
+        return not (point_is_on_planes * (1-self.displayed_planes)).any()
+    
+
+    def node_is_displayed(self, node: int, threshold=1e-4) -> bool:
+        """
+        Checks whether the given node is on a displayed plane.
+
+        node: int
+            The node ID of the node to check.
+
+        threshold: `float`, optional
+            The maximum distance a point can have from a plane
+            to still be considered to be on that plane.
+            Must be positive.
+
+        Returns: `bool`
+            Whether the given node is on a displayed plane.
+        """
+
+        # Computes the untransformed node position
+        node_pos = self.get_node_position(node)
+
+        # Checks whether the node should be displayed
+        return self.point_is_displayed(node_pos-self.translations.flatten(), threshold=threshold)
+    
+
+    def edge_is_displayed(self, node1: int, node2: int, threshold=1e-4) -> bool:
+        """
+        Checks whether the given edge is on a displayed plane.
+
+        node1: int
+            The node ID of the first node of the edge to check.
+
+        node2: int
+            The node ID of the second node of the edge to check.
+            Must be less than `node1`.
+
+        threshold: `float`, optional
+            The maximum distance a point can have from a plane
+            to still be considered to be on that plane.
+            Must be positive.
+
+        Returns: `bool`
+            Whether the given edge is on a displayed plane.
+        """
+
+        # Prepares the edge point function
+        edge_function = self.compute_edge_points(node1, node2)
+
+        # Computes a pseudo-average point along the edge
+        avg_point = sum(
+            edge_function(randrange(EDGE_SEGMENTS+1)) for _ in range(EDGE_SEGMENTS//4)
+        ) / (EDGE_SEGMENTS//4)
+
+        # Checks whether the edge should be displayed
+        return self.point_is_displayed(avg_point-self.translations.flatten(), threshold=threshold)
+    
+
+    def face_is_displayed(self, node1: int, node2: int, node3: int, threshold=1e-4) -> bool:
+        """
+        Checks whether the given face is on a displayed plane.
+
+        node1: int
+            The node ID of the first node of the face to check.
+            Must be less than other two node IDs.
+
+        node2: int
+            The node ID of the second node of the face to check.
+
+        node3: int
+            The node ID of the third node of the face to check.
+            Must be greater than other two node IDs.
+
+        threshold: `float`, optional
+            The maximum distance a point can have from a plane
+            to still be considered to be on that plane.
+            Must be positive.
+
+        Returns: `bool`
+            Whether the given face is on a displayed plane.
+        """
+
+        # Prepares the face point function
+        face_function = self.compute_face_points(node1, node2, node3)
+
+        # Computes a pseudo-average point along the face
+        avg_point = np.zeros(3)
+        for _ in range(EDGE_SEGMENTS//4):
+            s = randrange(EDGE_SEGMENTS+1)
+            t = randrange(EDGE_SEGMENTS+1-s)
+            avg_point += face_function(s,t)
+        avg_point /= EDGE_SEGMENTS//4
+
+        # Checks whether the face should be displayed
+        return self.point_is_displayed(avg_point-self.translations.flatten(), threshold=threshold)
 
 
     def has_edge(self, node1: int, node2: int) -> bool:
@@ -826,6 +992,9 @@ class Metamaterial:
         # Copies the translate transforms
         material.translations = self.translations.copy()
 
+        # Copies the displayed planes
+        material.displayed_planes = self.displayed_planes.copy()
+
         return material
     
     def from_tensor(rep_tensor: torch.Tensor, random_cutoffs=False):
@@ -859,3 +1028,4 @@ class Metamaterial:
         face_params = numpy_rep[NODE_POS_SIZE + EDGE_ADJ_SIZE + EDGE_PARAMS_SIZE + FACE_ADJ_SIZE : ]
 
         return Metamaterial(node_pos, edge_adj, edge_params, face_adj, face_params)
+    

@@ -188,7 +188,7 @@ def plot_metamaterial(metamaterial: Metamaterial, subplot=None, filename="", ani
         plt.close()
 
 
-def metamaterial_grid(metamaterial, shape):
+def metamaterial_grid(metamaterial: Metamaterial, shape=(1,1,1)):
     """
     Produces a grid of mirrored metamaterials.
 
@@ -208,26 +208,21 @@ def metamaterial_grid(metamaterial, shape):
     materials = [metamaterial]
 
     # Computes the metamaterials along the x axis
-    new_materials = []
-    for dx in range(shape[0]):
-        mirror = dx % 2 == 1
-        new_materials += [material.mirror(x=mirror).translate(dx=dx) for material in materials]
-    materials = new_materials
+    materials = [material.mirror(x=(dx%2 == 1)).translate(dx=dx).toggle_plane_display(x0=(dx != 0))
+                    for material in materials
+                        for dx in range(shape[0])]
 
     # Computes the metamaterials along the y axis
-    new_materials = []
-    for dy in range(shape[1]):
-        mirror = dy % 2 == 1
-        new_materials += [material.mirror(y=mirror).translate(dy=dy) for material in materials]
-    materials = new_materials
+    materials = [material.mirror(y=(dy%2 == 1)).translate(dy=dy).toggle_plane_display(y0=(dy != 0))
+                    for material in materials
+                        for dy in range(shape[1])]
 
     # Computes the metamaterials along the z axis
-    new_materials = []
-    for dz in range(shape[2]):
-        mirror = dz % 2 == 1
-        new_materials += [material.mirror(z=mirror).translate(dz=dz) for material in materials]
+    materials = [material.mirror(z=(dz%2 == 1)).translate(dz=dz).toggle_plane_display(z0=(dz != 0))
+                    for material in materials
+                        for dz in range(shape[2])]
 
-    return new_materials
+    return materials
 
 
 def plot_metamaterial_grid(metamaterial, shape, filename="", animate=False):
