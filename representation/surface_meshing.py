@@ -458,31 +458,6 @@ def generate_metamaterials_zigzag_surface_meshes(metamaterials: list[Metamateria
     return vertices, faces
 
 
-def optimize_vertices(vertices: list[tuple], faces: list[tuple]) -> tuple[list[tuple], list[tuple]]:
-
-    # Stores data structures for removing duplicate vertices
-    unique_vertices = 0
-    new_vertices = []
-    vertex_to_index = {}
-    index_to_index = {}
-
-    # Removes duplicate vertices
-    for i,vertex in enumerate(vertices):
-
-        # First time seeing node
-        if vertex not in vertex_to_index:
-            vertex_to_index[vertex] = unique_vertices
-            unique_vertices += 1
-            new_vertices.append(vertex)
-            
-        index_to_index[i] = vertex_to_index[vertex]
-
-    # Stores the faces with new indices
-    new_faces = [map(lambda x:index_to_index[x], face) for face in faces]
-
-    return new_vertices, new_faces
-
-
 def save_multi_obj(vertices: list[list[tuple]], faces: list[list[tuple]], filepath: str, precision=6, verbose=True):
     """
     Saves an .obj file with multiple objects.
