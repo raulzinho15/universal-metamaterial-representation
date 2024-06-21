@@ -27,7 +27,7 @@ def generate_node_surface_mesh(material: Metamaterial, node: int) -> tuple[list[
 
     # Geometric properties of the node mesh
     node_segments = EDGE_SEGMENTS//2
-    sphere_radius = THICKNESS*101/100
+    sphere_radius = THICKNESS*51/50
 
     # Computes angle values
     def thetas():
@@ -554,7 +554,7 @@ def save_multi_obj(vertices: list[list[tuple]], faces: list[list[tuple]], filepa
         print("Saved!")
 
 
-def union_obj_components(vertices: list[list[tuple]], faces: list[list[tuple]], filepath: str, check_manifold=True):
+def union_obj_components(vertices: list[list[tuple]], faces: list[list[tuple]], filepath: str, check_manifold=True, verbose=True):
     """
     Takes the union of all the components in the given source .obj
     file, and stores the union in the given output file.
@@ -577,10 +577,18 @@ def union_obj_components(vertices: list[list[tuple]], faces: list[list[tuple]], 
         The filepath into which the unioned components will be
         stored.
 
-    check_manifold: `bool`
+    check_manifold: `bool`, optional
         Whether the resulting mesh will be checked to be a manifold.
-        Is an expensive operation.
+        Is an expensive operation. Default is `True`.
+
+    verbose: `bool`, optional
+        Whether status messages will be printed to the console.
+        Default is `True`.
     """
+
+    # Prints a beginning status
+    if verbose:
+        print(f"Taking the union of {filepath}...")
 
     # Stores each component's mesh
     component_meshes = [trimesh.Trimesh(vertices=vertices[i], faces=faces[i]) for i in range(len(vertices))]
@@ -593,3 +601,7 @@ def union_obj_components(vertices: list[list[tuple]], faces: list[list[tuple]], 
 
     # Exports the mesh
     union_mesh.export(filepath)
+
+    # Prints a ending status
+    if verbose:
+        print("Union finished!")
