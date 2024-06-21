@@ -256,7 +256,7 @@ def generate_face_surface_mesh(material: Metamaterial, node1: int, node2: int, n
             point3_index = bezier_triangle_index(s,t+1)*2
 
             # Adds the faces
-            faces.append((point1_index, point2_index, point3_index)) # Bottom face
+            faces.append((point3_index, point2_index, point1_index)) # Bottom face
             faces.append((point1_index+1, point2_index+1, point3_index+1)) # Top face
 
             # Checks for a second face
@@ -267,7 +267,7 @@ def generate_face_surface_mesh(material: Metamaterial, node1: int, node2: int, n
 
                 # Adds the faces
                 faces.append((point2_index, point3_index, point4_index)) # Bottom face
-                faces.append((point2_index+1, point3_index+1, point4_index+1)) # Top face
+                faces.append((point4_index+1, point3_index+1, point2_index+1)) # Top face
 
     # Runs through the edge faces
     for t in range(EDGE_SEGMENTS):
@@ -278,7 +278,11 @@ def generate_face_surface_mesh(material: Metamaterial, node1: int, node2: int, n
             bezier_triangle_index(s,t)*2,
             bezier_triangle_index(s-1,t+1)*2,
             bezier_triangle_index(s-1,t+1)*2+1,
+        ))
+        faces.append((
+            bezier_triangle_index(s-1,t+1)*2+1,
             bezier_triangle_index(s,t)*2+1,
+            bezier_triangle_index(s,t)*2,
         ))
 
         # Stores the t=0 edge faces
@@ -286,15 +290,23 @@ def generate_face_surface_mesh(material: Metamaterial, node1: int, node2: int, n
             bezier_triangle_index(t,0)*2,
             bezier_triangle_index(t+1,0)*2,
             bezier_triangle_index(t+1,0)*2+1,
+        ))
+        faces.append((
+            bezier_triangle_index(t+1,0)*2+1,
             bezier_triangle_index(t,0)*2+1,
+            bezier_triangle_index(t,0)*2,
         ))
 
         # Stores the s=0 edge faces
         faces.append((
-            bezier_triangle_index(0,t)*2,
-            bezier_triangle_index(0,t+1)*2,
             bezier_triangle_index(0,t+1)*2+1,
+            bezier_triangle_index(0,t+1)*2,
+            bezier_triangle_index(0,t)*2,
+        ))
+        faces.append((
+            bezier_triangle_index(0,t)*2,
             bezier_triangle_index(0,t)*2+1,
+            bezier_triangle_index(0,t+1)*2+1,
         ))
 
     return vertices, faces
@@ -319,18 +331,45 @@ def generate_metamaterial_surface_mesh(material: Metamaterial) -> tuple[list[lis
         separates the indices of a component's faces.
     """
 
-    # Stores the nodes that are used
+    # Stores the nodes/edges that are used
     used_nodes = set()
+    used_edges = set()
 
     # Stores the vertices and faces
     vertices, faces = [], []
+
+    # Runs through each face
+    for n1 in range(NUM_NODES):
+        for n2 in range(n1+1, NUM_NODES):
+            for n3 in range(n2+1, NUM_NODES):
+
+                # Skips nodes without a face between them
+                if not material.has_face(n1, n2, n3):
+                    continue
+
+                # Stores the used nodes
+                used_nodes.add(n1)
+                used_nodes.add(n2)
+                used_nodes.add(n3)
+
+                # Stores the used edges
+                used_edges.add((n1,n2))
+                used_edges.add((n1,n3))
+                used_edges.add((n2,n3))
+
+                # Computes the face's components
+                face_vertices, face_faces = generate_face_surface_mesh(material, n1, n2, n3)
+
+                # Stores the face's components
+                vertices.append(face_vertices)
+                faces.append(face_faces)
 
     # Runs through each edge
     for n1 in range(NUM_NODES):
         for n2 in range(n1+1, NUM_NODES):
 
             # Skips nodes without an edge between them
-            if not material.has_edge(n1, n2):
+            if (n1,n2) not in used_edges and not material.has_edge(n1, n2):
                 continue
 
             # Stores the nodes
@@ -343,27 +382,6 @@ def generate_metamaterial_surface_mesh(material: Metamaterial) -> tuple[list[lis
             # Stores the edge's components
             vertices.append(edge_vertices)
             faces.append(edge_faces)
-
-    # Runs through each face
-    for n1 in range(NUM_NODES):
-        for n2 in range(n1+1, NUM_NODES):
-            for n3 in range(n2+1, NUM_NODES):
-
-                # Skips nodes without a face between them
-                if not material.has_face(n1, n2, n3):
-                    continue
-
-                # Stores the nodes
-                used_nodes.add(n1)
-                used_nodes.add(n2)
-                used_nodes.add(n3)
-
-                # Computes the face's components
-                face_vertices, face_faces = generate_face_surface_mesh(material, n1, n2, n3)
-
-                # Stores the face's components
-                vertices.append(face_vertices)
-                faces.append(face_faces)
 
     # Runs through each node
     for node in used_nodes:
@@ -571,6 +589,7 @@ def union_obj_components(vertices: list[list[tuple]], faces: list[list[tuple]], 
     # Computes the union of the meshes
     union_mesh: trimesh.Trimesh = trimesh.boolean.union(component_meshes)
 
+    # Checks for manifold properties
     if check_manifold and not union_mesh.is_watertight:
         print(f"WARNING: {filepath} is not a manifold mesh.")
 
