@@ -603,7 +603,17 @@ def union_obj_components(vertices: list[list[tuple]], faces: list[list[tuple]], 
 
     # Checks for manifold properties
     if check_manifold and not union_mesh.is_watertight:
-        print(f"WARNING: {filepath} is not a manifold mesh.")
+
+        # Tries to fix the mesh
+        union_mesh.remove_degenerate_faces()
+        union_mesh.remove_duplicate_faces()
+        union_mesh.merge_vertices()
+        union_mesh.fill_holes()
+        union_mesh.fix_normals()
+
+        # Warns the user the mesh is still not manifold
+        if not union_mesh.is_watertight:
+            print(f"WARNING: {filepath} is not a manifold mesh.")
 
     # Exports the mesh
     union_mesh.export(filepath)
