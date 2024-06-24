@@ -129,22 +129,26 @@ for n1, n2, n3 in flat_face_nodes:
 
 # Stores the sphere face-node pairings
 sphere_face_nodes = [
-    [8,9,10, np.array([0.,0.,0.])],
-    [4,5,6, np.array([0.,1.,1.])],
-    [0,1,2, np.array([1.,1.,0.])],
+    [8,10,9],
+    [4,5,6],
+    [0,1,2],
 ]
 
 # Computes the sphere face adjacencies/parameters of the metamaterial
-for n1, n2, n3, sphere_center in sphere_face_nodes:
-    n1, n2, n3 = sorted((n1, n2, n3))
+for n1, n2, n3 in sphere_face_nodes:
 
     # Sets up the face adjacency
     face_index = face_adj_index(n1, n2, n3)
     face_adj[face_index] = 1
     face_index *= FACE_BEZIER_COORDS
 
+    # Computes the face normal/center
+    face_normal = np.cross(node_positions[n2]-node_positions[n1], node_positions[n3]-node_positions[n1])
+    face_normal /= np.linalg.norm(face_normal)
+    face_center = triangle_center(node_positions[n1], node_positions[n2], node_positions[n3])
+
     # Stores the face parameters (only works when 1 face point)
-    face_params[face_index : face_index + FACE_BEZIER_COORDS] = sphere_octant_face_params(sphere_center, node_positions[n1], node_positions[n2], node_positions[n3])[0]
+    face_params[face_index : face_index + FACE_BEZIER_COORDS] = face_center + face_normal*0.5
 
 # Creates the metamaterial
 HOLE_BLOCK_SHELL = Metamaterial(node_pos, edge_adj, edge_params, face_adj, face_params)
