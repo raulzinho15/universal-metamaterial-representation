@@ -6,6 +6,7 @@ NUM_NODES = 13 # Non-center nodes plus the single center node
 EDGE_BEZIER_POINTS = 2 # The number of points to describe curved edges
 EDGE_SEGMENTS = 32 # The number of segments to use to mesh edges/faces
 CUBE_CENTER = np.ones(3)/2 # The center of the metamaterial cube
+THICKNESS = 0.1 # The thickness of the metamaterial
 
 # Automatically-chosen properties
 NODE_POS_SIZE = NUM_NODES * 3 # The number of parameters in the node position array
@@ -475,7 +476,6 @@ def find_edge_params(edge_function) -> np.ndarray:
     # Separates the node positions (which are fixed)
     node1_pos = edge_function(0)
     node2_pos = edge_function(EDGE_SEGMENTS)
-
 
     # Computes the effect of the node positions
     node1_effect = BEZIER_CURVE_COEFFICIENTS[1:-1,:1] @ node1_pos

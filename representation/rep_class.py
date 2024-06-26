@@ -6,7 +6,7 @@ from representation.rep_utils import *
 
 class Metamaterial:
 
-    def __init__(self, node_pos: np.ndarray, edge_adj: np.ndarray, edge_params: np.ndarray, face_adj: np.ndarray, face_params: np.ndarray):
+    def __init__(self, node_pos: np.ndarray, edge_adj: np.ndarray, edge_params: np.ndarray, face_adj: np.ndarray, face_params: np.ndarray, thickness=1.0):
         """
         Initializes a metamaterial representation with the given
         representation arrays.
@@ -42,6 +42,10 @@ class Metamaterial:
             groups of FACE_BEZIER_PARAMS coefficients will be associated with the
             edge in the corresponding position. Specifically, the non-edge
             coefficients of the Bezier curve will be set to those values.
+
+        thickness: float, optional
+            The proportion of `THICKNESS` to be used. Must be in `[0,1]`.
+            The default is 1.
         """
 
         # Stores the rep arrays
@@ -50,6 +54,9 @@ class Metamaterial:
         self.edge_params = np.copy(edge_params)
         self.face_adj = np.copy(face_adj)
         self.face_params = np.copy(face_params)
+
+        # Stores the thickness
+        self.thickness = thickness
 
         # Stores mirror transforms
         self.mirrors = np.zeros((1,3))
@@ -139,6 +146,16 @@ class Metamaterial:
         """
 
         return self.node_pos[3*node] * self.node_pos[3*node+1]
+    
+
+    def get_thickness(self) -> float:
+        """
+        Computes the thickness of nodes, edges, and faces on this metamaterial.
+
+        Returns: float
+            The thickness of this metamaterial.
+        """
+        return self.thickness * THICKNESS
     
 
     def mirror(self, x=False, y=False, z=False):

@@ -2,10 +2,7 @@ import math
 import trimesh
 from representation.rep_class import *
 from representation.generation import *
-
-THICKNESS = 0.02
-VERTICES_PER_EDGE = EDGE_SEGMENTS*2
-VERTICES_PER_FACE = 6
+from representation.rep_utils import *
 
 
 def generate_node_surface_mesh(material: Metamaterial, node: int) -> tuple[list[tuple], list[tuple]]:
@@ -27,7 +24,7 @@ def generate_node_surface_mesh(material: Metamaterial, node: int) -> tuple[list[
 
     # Geometric properties of the node mesh
     node_segments = EDGE_SEGMENTS//2
-    sphere_radius = THICKNESS*51/50
+    sphere_radius = material.get_thickness() + 8e-4
 
     # Computes angle values
     def thetas():
@@ -132,13 +129,14 @@ def generate_edge_surface_mesh(material: Metamaterial, node1: int, node2: int) -
     vertex_count = 0
 
     # Runs through each edge point
+    thickness = material.get_thickness() + 4e-4
     for edge in range(EDGE_SEGMENTS+1):
 
         # Adds all of the vertices on the circular face of this edge point
         vertices.extend(
             tuple(edge_points[edge]
-             + np.cos(2*np.pi*theta/EDGE_SEGMENTS) * normal1*THICKNESS
-             + np.sin(2*np.pi*theta/EDGE_SEGMENTS) * normal2*THICKNESS)
+             + np.cos(2*np.pi*theta/EDGE_SEGMENTS) * normal1*thickness
+             + np.sin(2*np.pi*theta/EDGE_SEGMENTS) * normal2*thickness)
                 for theta in range(EDGE_SEGMENTS)
         )
 
@@ -208,6 +206,7 @@ def generate_face_surface_mesh(material: Metamaterial, node1: int, node2: int, n
 
     # Pre-computes the face normals for faster computation
     face_normals = []
+    thickness = material.get_thickness()
     for s,t,u in BEZIER_TRIANGLE_PARAMETERS:
 
         # Stores the base point for the normal
@@ -235,7 +234,7 @@ def generate_face_surface_mesh(material: Metamaterial, node1: int, node2: int, n
         face_normal /= np.linalg.norm(face_normal)
 
         # Stores the face's normal
-        face_normals.append(face_normal*THICKNESS)
+        face_normals.append(face_normal*thickness)
 
     # Stores the vertices and faces
     vertices = []
