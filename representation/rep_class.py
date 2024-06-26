@@ -3,6 +3,7 @@ import torch
 from random import randrange
 from representation.utils import triangle_line_intersection
 from representation.rep_utils import *
+from typing import Self
 
 class Metamaterial:
 
@@ -155,7 +156,24 @@ class Metamaterial:
         Returns: float
             The thickness of this metamaterial.
         """
+
         return self.thickness * THICKNESS
+    
+
+    def set_thickness(self, thickness: float) -> Self:
+        """
+        Makes a copy of this metamaterial with the given thickness.
+
+        thickness: float
+            The thickness to set for the new metamaterial.
+
+        Returns: Metamaterial
+            The new metamaterial with the given thickness.
+        """
+
+        material = self.copy()
+        material.thickness = thickness
+        return material
     
 
     def mirror(self, x=False, y=False, z=False):
@@ -1001,7 +1019,7 @@ class Metamaterial:
         """
 
         # Copies the representation arrays
-        material = Metamaterial(self.node_pos, self.edge_adj, self.edge_params, self.face_adj, self.face_params)
+        material = Metamaterial(self.node_pos, self.edge_adj, self.edge_params, self.face_adj, self.face_params, thickness=self.thickness)
 
         # Copies the mirror transforms
         material.mirrors = self.mirrors.copy()
