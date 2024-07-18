@@ -149,7 +149,7 @@ def reachable_nodes(graph: dict[int, list[int]], starting_node: int) -> dict[int
     return paths
 
 
-def greedy_topology_match(start_adj_matrix: np.ndarray, target_adj_matrix: np.ndarray) -> np.ndarray:
+def greedy_topology_match(start_adj_matrix: np.ndarray, target_adj_matrix: np.ndarray) -> tuple[np.ndarray, list[tuple[int]]]:
     """
     Performs a greedy permutation of `start_adj_matrix` in such a way that
     every step tries to minimize the topology difference (via the edge connections)
@@ -165,12 +165,16 @@ def greedy_topology_match(start_adj_matrix: np.ndarray, target_adj_matrix: np.nd
         Assumes the matrix contains both its upper and lower triangle values, and has
         identical values along the diagonal.
 
-    Returns: `np.ndarray`
-        The permuted adjacency matrix that was greedily matched to `target_adj_matrix`.
+    Returns: `np.ndarray`, `list[tuple[int]]`
+        The first returned item is the permuted adjacency matrix that was greedily
+        matched to `target_adj_matrix`.
+        The second returned item is the sequence of swaps (each relative to the nodes
+        at that point in time, not from the beginning) that led to the found matrix.
     """
 
     # Stores values for the function
     best_matrix = start_adj_matrix.copy()
+    best_swaps = []
     num_nodes = best_matrix.shape[0]
 
     # Continues trying until there are no more greedy choices
@@ -203,11 +207,12 @@ def greedy_topology_match(start_adj_matrix: np.ndarray, target_adj_matrix: np.nd
             break
 
         # Performs the best swap
+        best_swaps.append(best_swap)
         n1, n2 = best_swap
         best_matrix[[n1,n2],:] = best_matrix[[n2,n1],:]
         best_matrix[:,[n1,n2]] = best_matrix[:,[n2,n1]]
 
-    return best_matrix
+    return best_matrix, best_swaps
 
 
 def graph_dict_from_adj_matrix(adj_matrix: np.ndarray) -> dict[int, list]:
