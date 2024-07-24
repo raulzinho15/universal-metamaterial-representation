@@ -98,3 +98,30 @@ def find_line_normals(point1: np.ndarray, point2: np.ndarray) -> tuple[np.ndarra
     normal2 /= np.linalg.norm(normal2)
 
     return normal1, normal2
+
+
+def rotate_around_axis(vector: np.ndarray, axis: np.ndarray, angle: float) -> np.ndarray:
+    """
+    Uses Rodrigues' rotation formula to rotate the given vector
+    by the given amount around the given axis.
+
+    vector: np.ndarray
+        The vector to be rotated.
+
+    axis: np.ndarray
+        The axis around which the vector will be rotated.
+        Assumed to be a unit vector.
+
+    angle: float
+        The angle by which the given vector will be rotated.
+        Assumed to be in radians.
+
+    Returns: np.ndarray
+        The rotated vector.
+    """
+
+    return (
+        vector * np.cos(angle) +
+        np.cross(axis, vector) * np.sin(angle) +
+        axis * np.dot(axis, vector) * (1 - np.cos(angle))
+    )
