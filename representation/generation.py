@@ -457,7 +457,7 @@ def alpha_gen(num):
         yield i/(num-1)
 
 
-def interpolate_part_changes(material: Metamaterial, part_changes: list[tuple[int]], end_node_pos: np.ndarray, end_edge_params: np.ndarray, end_face_params: np.ndarray) -> tuple[Metamaterial, list[Metamaterial]]:
+def interpolate_part_changes(material: Metamaterial, part_changes: list[tuple[int]], end_node_pos: np.ndarray, end_edge_params: np.ndarray) -> tuple[Metamaterial, list[Metamaterial]]:
 
     # Stores the interpolated materials
     materials = []
@@ -466,19 +466,12 @@ def interpolate_part_changes(material: Metamaterial, part_changes: list[tuple[in
     mid1_material = material.copy()
     mid1_material.node_pos = end_node_pos.copy()
     mid1_material.edge_params = end_edge_params.copy()
-    mid1_material.face_params = end_face_params.copy()
 
     # Computes and stores the average node position
     for change in part_changes:
 
         # Stores the edge change nodes
-        if len(change) == 3:
-            n1,n2,_ = change
-            n3 = n2
-
-        # Stores the face change nodes
-        else:
-            n1,n2,n3,_ = change
+        n1,n2,_ = change
 
         # Computes the node positions
         first_node_pos = material.node_pos[n1*3:(n1+1)*3]
@@ -486,34 +479,28 @@ def interpolate_part_changes(material: Metamaterial, part_changes: list[tuple[in
 
         # Computes the average
         avg_node_pos = (first_node_pos + second_node_pos) / 2
-        if n2 != n3:
-            third_node_pos = minimize_node_distance(first_node_pos, material.node_pos[n3*3:(n3+1)*3])
-            avg_node_pos = (2*avg_node_pos + third_node_pos) / 3
 
         # Stores the average
         mid1_material.node_pos[n1*3:(n1+1)*3] = avg_node_pos
         mid1_material.node_pos[n2*3:(n2+1)*3] = avg_node_pos
-        mid1_material.node_pos[n3*3:(n3+1)*3] = avg_node_pos
 
     # Computes the middle material with the edges/faces changed
     mid2_material = mid1_material.copy()
     for change in part_changes:
 
         # Handles an edge change
-        if len(change) == 3:
-            n1,n2,is_removal = change
-            mid2_material.edge_adj[edge_adj_index(n1,n2)] = 0 if is_removal else 1
-            continue
+        n1,n2,is_removal = change
+        mid2_material.edge_adj[edge_adj_index(n1,n2)] = 0 if is_removal else 1
 
-        # Handles a face change
-        n1,n2,n3,is_removal = change
-        mid2_material.face_adj[face_adj_index(n1,n2,n3)] = 0 if is_removal else 1
-
-    # Stores the first half of the interpolated materials
+    # Prepares values for interpolation
     start_vector = material.flatten_rep()
     mid1_material.node_pos = minimize_node_distance(material.node_pos, mid1_material.node_pos)
     end_vector = mid1_material.flatten_rep()
-    materials.extend(Metamaterial.from_tensor(start_vector*(1-alpha) + end_vector*alpha) for alpha in alpha_gen(FRAMES_PER_STEP+1))
+
+    # Generates the interpolated materials
+    for alpha in range(FRAMES_PER_STEP+1):
+        mat = Metamaterial.from_tensor(start_vector*(1-alpha) + end_vector*alpha)
+        materials.append(mat)
 
     return mid2_material, materials
 
@@ -523,11 +510,9 @@ def smooth_interpolation(material1: Metamaterial, material2: Metamaterial) -> li
     # Stores the materials' adjacency matrices
     edge_adj_matrix1 = material1.get_edge_adj_matrix().astype(np.int8)
     edge_adj_matrix2 = material2.get_edge_adj_matrix().astype(np.int8)
-    face_adj_tensor1 = material1.get_face_adj_tensor().astype(np.int8)
-    face_adj_tensor2 = material2.get_face_adj_tensor().astype(np.int8)
 
-    # Finds the best topology match between the two materials
-    edge_adj_matrix1, swaps = greedy_topology_match(edge_adj_matrix1, edge_adj_matrix2) ######### MAKE THIS ALSO SWAP FACE ADJACENCY
+    # Finds an approximately best topology match between the two materials
+    edge_adj_matrix1, swaps = greedy_topology_match(edge_adj_matrix1, edge_adj_matrix2)
 
     # Performs each of the same swaps on the starting metamaterial
     for n1,n2 in swaps:
@@ -539,8 +524,6 @@ def smooth_interpolation(material1: Metamaterial, material2: Metamaterial) -> li
     # Computes the relevant subgraph adjacency matrices
     removed_edge_adj = ((edge_adj_matrix1 - edge_adj_matrix2) == 1).astype(np.int8)
     added_edge_adj = ((edge_adj_matrix2 - edge_adj_matrix1) == 1).astype(np.int8)
-    removed_face_adj = ((face_adj_tensor1 - face_adj_tensor2) == 1).astype(np.int8)
-    added_face_adj = ((face_adj_tensor2 - face_adj_tensor1) == 1).astype(np.int8)
 
     # Stores the interpolated materials
     start_material = material1.copy()
@@ -550,9 +533,7 @@ def smooth_interpolation(material1: Metamaterial, material2: Metamaterial) -> li
     # Finds each edge/face removal/addition
     part_changes = (
         [(n1,n2,False) for n1 in range(NUM_NODES) for n2 in range(n1+1, NUM_NODES) if added_edge_adj[n1,n2] == 1] +
-        [(n1,n2,n3,False) for n1 in range(NUM_NODES) for n2 in range(n1+1, NUM_NODES) for n3 in range(n2+1, NUM_NODES) if added_face_adj[n1,n2,n3] == 1] +
-        [(n1,n2,True) for n1 in range(NUM_NODES) for n2 in range(n1+1, NUM_NODES) if removed_edge_adj[n1,n2] == 1] +
-        [(n1,n2,n3,True) for n1 in range(NUM_NODES) for n2 in range(n1+1, NUM_NODES) for n3 in range(n2+1, NUM_NODES) if removed_face_adj[n1,n2,n3] == 1]
+        [(n1,n2,True) for n1 in range(NUM_NODES) for n2 in range(n1+1, NUM_NODES) if removed_edge_adj[n1,n2] == 1]
     )
 
     # Runs parallelizable part changes concurrently
@@ -568,18 +549,14 @@ def smooth_interpolation(material1: Metamaterial, material2: Metamaterial) -> li
         for i, change in enumerate(part_changes):
 
             # Stores the change parameters
-            if len(change) == 3: # Edge change
-                n1,n2,_ = change
-                n3 = n1
-            else: # Face change
-                n1,n2,n3,_ = change
+            n1,n2,_ = change
 
             # Skips changes affecting already target nodes
-            if n1 in seen_nodes or n2 in seen_nodes or n3 in seen_nodes:
+            if n1 in seen_nodes or n2 in seen_nodes:
                 continue
 
             # Skips currently disconnected nodes
-            if n1 not in connected_nodes and n2 not in connected_nodes and n3 not in connected_nodes:
+            if n1 not in connected_nodes and n2 not in connected_nodes:
                 continue
 
             # Keeps track of the affected nodes
@@ -601,8 +578,6 @@ def smooth_interpolation(material1: Metamaterial, material2: Metamaterial) -> li
     mat2_node_pos = material2.node_pos.copy()
     mat1_edge_params = material1.edge_params.copy()
     mat2_edge_params = material2.edge_params.copy()
-    mat1_face_params = material1.face_params.copy()
-    mat2_face_params = material2.face_params.copy()
 
     # Handles material 2 having more new nodes
     if mat1_nodes < mat2_nodes:
@@ -616,17 +591,9 @@ def smooth_interpolation(material1: Metamaterial, material2: Metamaterial) -> li
                 edge_index = edge_adj_index(n1,n2) * EDGE_BEZIER_COORDS
                 mat1_edge_params[edge_index : edge_index + EDGE_BEZIER_COORDS] = material2.get_edge_params(n1,n2)
 
-        # Copies new face parameters
-        for n1 in range(mat1_nodes, NUM_NODES):
-            for n2 in range(n1):
-                for n3 in range(n2):
-                    face_index = face_adj_index(n1,n2,n3) * FACE_BEZIER_COORDS
-                    mat1_face_params[face_index : face_index + FACE_BEZIER_COORDS] = material2.get_face_params(n1,n2,n3)
-
-        # Stores the updated node positions and edge/face parameters
+        # Stores the updated node positions and edge parameters
         start_material.node_pos = mat1_node_pos
         start_material.edge_params = mat1_edge_params
-        start_material.face_params = mat1_face_params
 
     # Handles material 1 having more new nodes
     else:
@@ -640,29 +607,19 @@ def smooth_interpolation(material1: Metamaterial, material2: Metamaterial) -> li
                 edge_index = edge_adj_index(n1,n2) * EDGE_BEZIER_COORDS
                 mat2_edge_params[edge_index : edge_index + EDGE_BEZIER_COORDS] = material1.get_edge_params(n1,n2)
 
-        # Copies new face parameters
-        for n1 in range(mat2_nodes, NUM_NODES):
-            for n2 in range(n1):
-                for n3 in range(n2):
-                    face_index = face_adj_index(n1,n2,n3) * FACE_BEZIER_COORDS
-                    mat2_face_params[face_index : face_index + FACE_BEZIER_COORDS] = material1.get_face_params(n1,n2,n3)
-
-        # Stores the updated node positions and edge/face parameters
+        # Stores the updated node positions and edge parameters
         material2.node_pos = mat2_node_pos
         material2.edge_params = mat2_edge_params
-        material2.face_params = mat2_face_params
 
     # Computes the intermediate node positions and edge/face parameters
     node_positions = np.stack([mat1_node_pos * (1-alpha) + mat2_node_pos * alpha for alpha in alpha_gen(len(part_change_groups)+2)], axis=0)[1:]
     edge_params = np.stack([mat1_edge_params * (1-alpha) + mat2_edge_params * alpha for alpha in alpha_gen(len(part_change_groups)+2)], axis=0)[1:]
-    face_params = np.stack([mat1_face_params * (1-alpha) + mat2_face_params * alpha for alpha in alpha_gen(len(part_change_groups)+2)], axis=0)[1:]
 
     # Executes each edge change
     for changes in part_change_groups:
-        start_material, next_materials = interpolate_part_changes(start_material, changes, node_positions[0], edge_params[0], face_params[0])
+        start_material, next_materials = interpolate_part_changes(start_material, changes, node_positions[0], edge_params[0])
         node_positions = node_positions[1:]
         edge_params = edge_params[1:]
-        face_params = face_params[1:]
         materials.extend(next_materials[:-1])
 
     # Interpolates everything else if no changes were made
