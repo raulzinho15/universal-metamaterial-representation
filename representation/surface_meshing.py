@@ -113,17 +113,8 @@ def generate_edge_surface_mesh(material: Metamaterial, node1: int, node2: int) -
     vertices = []
     faces = []
 
-    # Computes a starting point for the normal vectors
-    init_dir = edge_points[1] - edge_points[0]
-    init_guess = np.array([1,0,0])
-    if np.linalg.norm(np.cross(init_guess, init_dir)) < 1e-4:
-        init_guess = np.array([0,1,0])
-        
-    # Computes the initial normals
-    normal1 = np.cross(init_dir, init_guess)
-    normal1 /= np.linalg.norm(normal1)
-    normal2 = np.cross(init_dir, normal1)
-    normal2 /= np.linalg.norm(normal2)
+    # Computes the normal vectors
+    normal1, normal2 = find_line_normals(edge_points[0], edge_points[1])
 
     # Stores the number of vertices seen so far
     vertex_count = 0
@@ -157,14 +148,8 @@ def generate_edge_surface_mesh(material: Metamaterial, node1: int, node2: int) -
         # Updates the normals
         if edge != EDGE_SEGMENTS:
 
-            # Computes the direction of the edge segment to be formed
-            edge_dir = edge_points[edge+1] - edge_points[edge]
-
-            # Computes the new normals
-            normal2 = np.cross(edge_dir, normal1)
-            normal2 /= np.linalg.norm(normal2)
-            normal1 = np.cross(normal2, edge_dir)
-            normal1 /= np.linalg.norm(normal1)
+            # Computes the new normal vectors
+            normal1, normal2 = find_line_normals(edge_points[edge], edge_points[edge+1])
 
         # Updates the vertex count
         vertex_count += EDGE_SEGMENTS
