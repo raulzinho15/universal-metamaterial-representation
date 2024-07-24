@@ -277,7 +277,7 @@ def find_connected_components(graph_dict: dict[int, list]) -> list[tuple[int]]:
         reachable = list(reachable_nodes(graph_dict, n).keys())
 
         # Skips trivial connected components
-        if reachable is None:
+        if reachable is None or len(reachable) == 0:
             continue
 
         # Stores the connected component
@@ -288,3 +288,75 @@ def find_connected_components(graph_dict: dict[int, list]) -> list[tuple[int]]:
             nodes_seen.add(node)
 
     return components
+
+
+def is_same_cycle(cycle1: tuple[int], cycle2: tuple[int]) -> bool:
+
+    if len(cycle1) != len(cycle2):
+        return False
+    
+    if cycle1[0] not in cycle2:
+        return False
+    
+    di = cycle2.index(cycle1[0])
+    for i in range(1,len(cycle2)):
+        if cycle1[i] != cycle2[(i+di)%len(cycle2)]:
+            return False
+    
+    return True
+
+
+def find_cycles(graph_dict: dict[int, list], current_path=None, cycles=None) -> list[tuple[int]]:
+    """
+    Finds the cycles in the given graph.
+
+    graph_dict: `dict[int, list]`
+        The dictionary for the graph describing its node connections.
+        Namely, if `graph[i]` has `j`, then node `i` is connected to `j`.
+
+    Returns: `list[tuple[int]]`
+        A list containing the groupings of nodes that form cycles.
+    """
+
+    # Sets up all values if this is the function's first call
+    if current_path is None:
+        
+        # Finds a starting node
+        for node in graph_dict:
+            if len(graph_dict[node]) != 0:
+                current_path = (node,)
+            break
+
+        # Stores the cycles that will be found
+        cycles = []
+
+    # Runs through each reachable node
+    for next_node in graph_dict[current_path[-1]]:
+
+        # Skips immediate loops with the previous node
+        if len(current_path) >= 2 and next_node == current_path[-2]:
+            continue
+
+        # Checks for a cycle
+        if next_node in current_path:
+            new_cycle = current_path[current_path.index(next_node):]
+
+            # Checks if this cycle has already been found
+            already_found = False
+            for other_cycle in cycles:
+
+                # Checks if the cycles match
+                if is_same_cycle(new_cycle, other_cycle) or is_same_cycle(new_cycle, tuple(reversed(other_cycle))):
+                    already_found = True
+                    break
+
+            # Stores the cycle
+            if not already_found:
+                cycles.append(new_cycle)
+            continue
+
+        # Continues searching for cycles if none were found
+        find_cycles(graph_dict, current_path=current_path + (next_node,), cycles=cycles)
+
+    return cycles
+
