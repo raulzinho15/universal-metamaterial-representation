@@ -511,17 +511,7 @@ def flat_edge_params(node1_pos: np.ndarray, node2_pos: np.ndarray) -> np.ndarray
         `find_edge_params`.
     """
 
-    # Prepares the function for computing points along the edge
-    def edge_function(t):
-        
-        # Prepares the Bezier parameter
-        t /= EDGE_SEGMENTS
-
-        # Interpolates between the two edge vertices
-        return ((1-t)*node1_pos + t*node2_pos)[np.newaxis,:]
-    
-    # Computes the best-fit edge parameters
-    return find_edge_params(edge_function)
+    return np.zeros(EDGE_BEZIER_COORDS)
 
 
 # Computes the multinomial coefficients that are relevant for Bezier triangle interpolation
