@@ -474,8 +474,8 @@ class Metamaterial:
         node2_pos = self.get_node_position(node2)[np.newaxis,:]
         
         # Retrieves the edge parameters
-        edge_params = self.get_edge_params(node1, node2).reshape((EDGE_BEZIER_POINTS,3))
-        edge_params = flat_edge_params(node1_pos[0], node2_pos[0]).reshape((EDGE_BEZIER_POINTS,3))
+        edge_params = self.get_edge_params(node1, node2).reshape((EDGE_BEZIER_POINTS,3)) + node1_pos
+        # edge_params = flat_edge_params(node1_pos[0], node2_pos[0]).reshape((EDGE_BEZIER_POINTS,3))
 
         # Appropriately structures all parameters for the Bezier curve
         bezier_params = np.concatenate((node1_pos, edge_params, node2_pos), axis=0)

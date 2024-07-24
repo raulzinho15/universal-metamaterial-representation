@@ -491,7 +491,7 @@ def find_edge_params(edge_function) -> np.ndarray:
 
     # Solves the system for each coordinate
     edge_params = np.concatenate([np.linalg.solve(A.T @ A, A.T @ b[:,i]).reshape(EDGE_BEZIER_POINTS, 1) for i in range(3)], axis=1)
-    return edge_params.flatten()
+    return (edge_params - node1_pos).flatten()
 
 
 def flat_edge_params(node1_pos: np.ndarray, node2_pos: np.ndarray) -> np.ndarray:
