@@ -1,4 +1,5 @@
 import numpy as np
+import math
 
 
 def greedy_topology_match(start_adj_matrix: np.ndarray, target_adj_matrix: np.ndarray) -> tuple[np.ndarray, list[tuple[int]]]:
@@ -65,3 +66,35 @@ def greedy_topology_match(start_adj_matrix: np.ndarray, target_adj_matrix: np.nd
         best_matrix[:,[n1,n2]] = best_matrix[:,[n2,n1]]
 
     return best_matrix, best_swaps
+
+
+LINE_NORMAL_POINT3 = np.array([np.pi, np.e, np.sqrt(2)])
+def find_line_normals(point1: np.ndarray, point2: np.ndarray) -> tuple[np.ndarray]:
+    """
+    Finds consistent normals for the given line.
+
+    point1: np.ndarray
+        The start point on the line.
+
+    point2: np.ndarray
+        The last point on the line.
+
+    Returns: tuple[np.ndarray]
+        The two (normalized) normals of the line. Finds
+        these deterministically for any given line, assuming
+        point1 and point2 are ordered consistently.
+    """
+
+    # Finds the plane vectors
+    vector1 = point2 - point1
+    vector2 = LINE_NORMAL_POINT3 - point1
+
+    # Finds the plane normal
+    normal1 = np.cross(vector1, vector2)
+    normal1 /= np.linalg.norm(normal1)
+
+    # Finds the second normal
+    normal2 = np.cross(vector1, normal1)
+    normal2 /= np.linalg.norm(normal2)
+
+    return normal1, normal2
