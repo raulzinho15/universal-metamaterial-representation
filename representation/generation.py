@@ -498,7 +498,7 @@ def interpolate_part_changes(material: Metamaterial, part_changes: list[tuple[in
     end_vector = mid1_material.flatten_rep()
 
     # Generates the interpolated materials
-    for alpha in range(FRAMES_PER_STEP+1):
+    for alpha in alpha_gen(FRAMES_PER_STEP+1):
         mat = Metamaterial.from_tensor(start_vector*(1-alpha) + end_vector*alpha)
         materials.append(mat)
 
