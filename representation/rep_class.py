@@ -1,7 +1,6 @@
 import numpy as np
 import torch
 from random import randrange
-from representation.utils import triangle_line_intersection
 from representation.rep_utils import *
 from typing import Self
 
@@ -612,104 +611,6 @@ class Metamaterial:
             ind = bezier_triangle_index(s,t)
             return BEZIER_TRIANGLE_COEFFICIENTS[ind,:] @ bezier_params
         return bezier
-
-
-    def remove_invalid_faces(self):
-        """
-        Removes all the faces described in the face adjacency array whose
-        three edges are not encoded in the edge adjacency.
-        """
-
-        # Checks if every face validly has its corresponding 3 edges
-        for n1 in range(NUM_NODES):
-            for n2 in range(n1+1, NUM_NODES):
-                for n3 in range(n2+1, NUM_NODES):
-
-                    # Skips non-face edge triplets
-                    index = face_adj_index(n1, n2, n3)
-                    if not self.face_adj[index]:
-                        continue
-
-                    # Removes the invalid face (i.e., a face with insufficient edges)
-                    if not (self.edge_adj[edge_adj_index(n1, n2)]
-                        and self.edge_adj[edge_adj_index(n1, n3)]
-                        and self.edge_adj[edge_adj_index(n2, n3)]):
-                        self.face_adj[index] = 0
-
-
-    def remove_invalid_edges(self):
-        """
-        Removes all the edges described in the edge adjacency array which
-        intersect with faces described in the face adjacency array.
-        """
-
-        # Runs through each possible face
-        for nf1 in range(NUM_NODES):
-            for nf2 in range(nf1+1, NUM_NODES):
-                for nf3 in range(nf2+1, NUM_NODES):
-
-                    # Skips non-faces
-                    if not self.face_adj[face_adj_index(nf1, nf2, nf3)]:
-                        continue
-
-                    # Runs through each possible edge
-                    face_nodes = (nf1, nf2, nf3)
-                    for ne1 in range(NUM_NODES):
-
-                        # Skips node on the face
-                        if ne1 in face_nodes:
-                            continue
-
-                        for ne2 in range(ne1+1, NUM_NODES):
-
-                            # Skips node on the face
-                            if ne2 in face_nodes:
-                                continue
-
-                            # Skips non-edges
-                            index = edge_adj_index(ne1, ne2)
-                            if not self.edge_adj[index]:
-                                continue
-
-                            # Checks for intersection
-                            positions = [np.array(list(self.get_node_position(n)))
-                                            for n in (nf1, nf2, nf3, ne1, ne2)]
-                            if triangle_line_intersection(*positions):
-                                self.edge_adj[index] = 0
-
-
-    def remove_edges_from_overlaps(self):
-        """
-        Removes edges from the representation that overlap with a face.
-        Mutates the material.
-        """
-
-        # Goes through each face
-        for n1 in range(NUM_NODES):
-            for n2 in range(n1+1, NUM_NODES):
-                for n3 in range(n2+1, NUM_NODES):
-
-                    # Removes the edge-face overlap
-                    if self.has_face(n1, n2, n3):
-                        self.edge_adj[edge_adj_index(n1,n2)] = 0
-                        self.edge_adj[edge_adj_index(n1,n3)] = 0
-                        self.edge_adj[edge_adj_index(n2,n3)] = 0
-
-
-    def remove_faces_from_overlaps(self):
-        """
-        Removes faces from the representation that overlap with an edge.
-        Mutates the material.
-        """
-
-        # Goes through each face
-        for n1 in range(NUM_NODES):
-            for n2 in range(n1+1, NUM_NODES):
-                for n3 in range(n2+1, NUM_NODES):
-
-                    # Removes the edge-face overlap
-                    if self.has_edge(n1, n2) or self.has_edge(n1, n3) or self.has_edge(n2, n3):
-                        self.face_adj[face_adj_index(n1, n2, n3)] = 0
 
 
     def nodes_connected_to(self, node):
