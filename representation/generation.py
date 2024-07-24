@@ -532,8 +532,8 @@ def smooth_interpolation(material1: Metamaterial, material2: Metamaterial) -> li
 
     # Finds each edge/face removal/addition
     part_changes = (
-        [(n1,n2,False) for n1 in range(NUM_NODES) for n2 in range(n1+1, NUM_NODES) if added_edge_adj[n1,n2] == 1] +
-        [(n1,n2,True) for n1 in range(NUM_NODES) for n2 in range(n1+1, NUM_NODES) if removed_edge_adj[n1,n2] == 1]
+        [(n1,n2,False) for n1 in range(NUM_NODES) for n2 in range(n1+1, NUM_NODES) if added_edge_adj[n1,n2]] +
+        [(n1,n2,True) for n1 in range(NUM_NODES) for n2 in range(n1+1, NUM_NODES) if removed_edge_adj[n1,n2]]
     )
 
     # Runs parallelizable part changes concurrently
@@ -571,13 +571,11 @@ def smooth_interpolation(material1: Metamaterial, material2: Metamaterial) -> li
         for i in changed_indices[-1::-1]:
             part_changes.pop(i)
 
-    # Computes properties about the aggregate node positions and edge/face parameters
+    # Computes properties about the aggregate node positions
     mat1_nodes = material1.active_nodes()
     mat2_nodes = material2.active_nodes()
     mat1_node_pos = material1.node_pos.copy()
     mat2_node_pos = material2.node_pos.copy()
-    mat1_edge_params = material1.edge_params.copy()
-    mat2_edge_params = material2.edge_params.copy()
 
     # Handles material 2 having more new nodes
     if mat1_nodes < mat2_nodes:
@@ -585,15 +583,8 @@ def smooth_interpolation(material1: Metamaterial, material2: Metamaterial) -> li
         # Copies new node positions
         mat1_node_pos[mat1_nodes*3:] = mat2_node_pos[mat1_nodes*3:]
 
-        # Copies new edge parameters
-        for n1 in range(mat1_nodes, NUM_NODES):
-            for n2 in range(n1):
-                edge_index = edge_adj_index(n1,n2) * EDGE_BEZIER_COORDS
-                mat1_edge_params[edge_index : edge_index + EDGE_BEZIER_COORDS] = material2.get_edge_params(n1,n2)
-
-        # Stores the updated node positions and edge parameters
+        # Stores the updated node positions
         start_material.node_pos = mat1_node_pos
-        start_material.edge_params = mat1_edge_params
 
     # Handles material 1 having more new nodes
     else:
@@ -601,15 +592,27 @@ def smooth_interpolation(material1: Metamaterial, material2: Metamaterial) -> li
         # Copies new node positions
         mat2_node_pos[mat2_nodes*3:] = mat1_node_pos[mat2_nodes*3:]
 
-        # Copies new edge parameters
-        for n1 in range(mat2_nodes, NUM_NODES):
-            for n2 in range(n1):
+        # Stores the updated node positions
+        material2.node_pos = mat2_node_pos
+
+    # Computes properties about the edge parameters
+    mat1_edge_params = material1.edge_params.copy()
+    mat2_edge_params = material2.edge_params.copy()
+
+    # Runs through each edge
+    for n1 in range(NUM_NODES):
+        for n2 in range(n1+1, NUM_NODES):
+
+            # Handles material 1 uniquely having the edge
+            if removed_edge_adj[n1,n2]:
                 edge_index = edge_adj_index(n1,n2) * EDGE_BEZIER_COORDS
                 mat2_edge_params[edge_index : edge_index + EDGE_BEZIER_COORDS] = material1.get_edge_params(n1,n2)
 
-        # Stores the updated node positions and edge parameters
-        material2.node_pos = mat2_node_pos
-        material2.edge_params = mat2_edge_params
+            # Handles material 1 uniquely having the edge
+            elif added_edge_adj[n1,n2]:
+                edge_index = edge_adj_index(n1,n2) * EDGE_BEZIER_COORDS
+                mat1_edge_params[edge_index : edge_index + EDGE_BEZIER_COORDS] = material2.get_edge_params(n1,n2)
+
 
     # Computes the intermediate node positions and edge/face parameters
     node_positions = np.stack([mat1_node_pos * (1-alpha) + mat2_node_pos * alpha for alpha in alpha_gen(len(part_change_groups)+2)], axis=0)[1:]
