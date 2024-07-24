@@ -73,12 +73,12 @@ class Metamaterial:
         self.cube_pos = {}
 
 
-    def transform_points(self, point: np.ndarray) -> np.ndarray:
+    def transform_points(self, points: np.ndarray) -> np.ndarray:
         """
         Transforms the given point(s) with mirroring and translations
         according to the metamaterial's transforms.
 
-        point: np.ndarray
+        points: np.ndarray
             The point(s) to be transformed. If multiple points,
             then should be a flattened array.
 
@@ -86,12 +86,9 @@ class Metamaterial:
             The transformed point(s) as a flattened array.
         """
 
-        # Reshapes points if more than one point is given
-        if point.shape[0] > 3:
-            point = point.reshape(point.shape[0]//3, 3)
-
         # Applies the transformations
-        return (self.translations + (1-point)*self.mirrors + point*(1-self.mirrors)).flatten() * SCALE
+        points = points.reshape(points.shape[0]//3, 3)
+        return (self.translations + (1-points)*self.mirrors + points*(1-self.mirrors)).flatten() * SCALE
 
 
     def get_node_position(self, node: int, transform=True) -> np.ndarray:
@@ -117,7 +114,7 @@ class Metamaterial:
 
         # Transforms the position
         if transform:
-            point = self.transform_point(point)
+            point = self.transform_points(point)
 
         # Returns the position
         self.cube_pos[node] = point
@@ -437,7 +434,7 @@ class Metamaterial:
 
         # Applies the transform
         if transform:
-            params = self.transform_point(params)
+            params = self.transform_points(params)
 
         return params
 
@@ -473,11 +470,12 @@ class Metamaterial:
 
         # Computes the edge's nodes' positions
         node1, node2 = sorted((node1, node2))
-        node1_pos = self.get_node_position(node1)
-        node2_pos = self.get_node_position(node2)        
+        node1_pos = self.get_node_position(node1)[np.newaxis,:]
+        node2_pos = self.get_node_position(node2)[np.newaxis,:]
         
         # Retrieves the edge parameters
         edge_params = self.get_edge_params(node1, node2).reshape((EDGE_BEZIER_POINTS,3))
+        edge_params = flat_edge_params(node1_pos[0], node2_pos[0]).reshape((EDGE_BEZIER_POINTS,3))
 
         # Appropriately structures all parameters for the Bezier curve
         bezier_params = np.concatenate((node1_pos, edge_params, node2_pos), axis=0)
@@ -553,7 +551,7 @@ class Metamaterial:
 
         # Retrieves the face parameters
         face_index = face_adj_index(node1, node2, node3) * FACE_BEZIER_COORDS
-        return self.transform_point(self.face_params[face_index : face_index + FACE_BEZIER_COORDS])
+        return self.transform_points(self.face_params[face_index : face_index + FACE_BEZIER_COORDS])
 
 
     def get_face_adj_tensor(self) -> np.ndarray:

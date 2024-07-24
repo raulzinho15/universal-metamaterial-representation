@@ -486,7 +486,7 @@ def interpolate_part_changes(material: Metamaterial, part_changes: list[tuple[in
 
         # Computes the average
         avg_node_pos = (first_node_pos + second_node_pos) / 2
-        if n2 == n3:
+        if n2 != n3:
             third_node_pos = minimize_node_distance(first_node_pos, material.node_pos[n3*3:(n3+1)*3])
             avg_node_pos = (2*avg_node_pos + third_node_pos) / 3
 

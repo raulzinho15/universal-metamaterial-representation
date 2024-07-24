@@ -465,7 +465,7 @@ def find_edge_params(edge_function) -> np.ndarray:
     edge_function: (int) -> np.ndarray
         A function that takes in the Bezier parameter in [0,EDGE_SEGMENTS],
         where t=0 corresponds to the initial point and t=1 to the end point.
-        It outputs the corresponding target point on the edge as a 1d numpy
+        It outputs the corresponding target point on the edge as a 1x3 numpy
         array, where the coordinates are along the second axis.
 
     Returns: np.ndarray
@@ -483,7 +483,7 @@ def find_edge_params(edge_function) -> np.ndarray:
     node2_effect = BEZIER_CURVE_COEFFICIENTS[1:-1,-1:] @ node2_pos
 
     # Computes the linear system's target output (the coordinates are on second axis)
-    b = np.stack([edge_function(t) for t in range(1, EDGE_SEGMENTS)], axis=0)
+    b = np.concatenate([edge_function(t) for t in range(1, EDGE_SEGMENTS)], axis=0)
     b -= node1_effect + node2_effect
 
     # Computes the linear system's matrix
@@ -500,10 +500,10 @@ def flat_edge_params(node1_pos: np.ndarray, node2_pos: np.ndarray) -> np.ndarray
     the two given points.
 
     node1_pos: np.ndarray
-        The position of the starting node of the edge.
+        The 1d array position of the starting node of the edge.
 
     node2_pos: np.ndarray
-        The position of the ending node of the edge.
+        The 1d array position of the ending node of the edge.
 
     Returns: np.ndarray
         The edge parameters that produce a straight edge between
@@ -511,7 +511,17 @@ def flat_edge_params(node1_pos: np.ndarray, node2_pos: np.ndarray) -> np.ndarray
         `find_edge_params`.
     """
 
-    return np.zeros(EDGE_BEZIER_COORDS)
+    # Prepares the function for computing points along the edge
+    def edge_function(t):
+
+        # Prepares the Bezier parameter
+        t /= EDGE_SEGMENTS
+
+        # Interpolates between the two edge vertices
+        return ((1-t)*node1_pos + t*node2_pos)[np.newaxis,:]
+
+    # Computes the best-fit edge parameters
+    return find_edge_params(edge_function)
 
 
 # Computes the multinomial coefficients that are relevant for Bezier triangle interpolation
@@ -789,7 +799,7 @@ def circle_quadrant_edge_params(circle_center: np.ndarray, node1_pos: np.ndarray
         t *= np.pi/2
 
         # Returns the interpolated edge point
-        return (circle_center + cos_coeff*np.cos(t) + sin_coeff*np.sin(t))
+        return (circle_center + cos_coeff*np.cos(t) + sin_coeff*np.sin(t))[np.newaxis,:]
     
     return find_edge_params(edge_function)
 
