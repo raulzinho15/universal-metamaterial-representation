@@ -454,7 +454,7 @@ for i in range(1,EDGE_BEZIER_POINTS+1):
     BINOMIAL_COEFFICIENTS[i] = BINOMIAL_COEFFICIENTS[i-1] * (EDGE_BEZIER_POINTS+2-i) // i
 
 # Computes the general coefficients for a Bezier curve
-BEZIER_CURVE_COEFFICIENTS = BINOMIAL_COEFFICIENTS[np.newaxis,:] * BEZIER_MONOMIALS * BEZIER_MONOMIALS[::-1,::-1]
+BEZIER_CURVE_COEFFICIENTS = BINOMIAL_COEFFICIENTS[np.newaxis,1:-1] * BEZIER_MONOMIALS[:,1:-1] * BEZIER_MONOMIALS[::-1,-2:0:-1]
 
 
 def find_edge_params(edge_function) -> np.ndarray:
