@@ -24,7 +24,7 @@ def generate_node_surface_mesh(material: Metamaterial, node: int) -> tuple[list[
 
     # Geometric properties of the node mesh
     node_segments = EDGE_SEGMENTS//2
-    sphere_radius = material.get_thickness() + 8e-4
+    sphere_radius = material.get_thickness() * 51/50
 
     # Computes angle values
     def thetas():
@@ -129,7 +129,7 @@ def generate_edge_surface_mesh(material: Metamaterial, node1: int, node2: int) -
     vertex_count = 0
 
     # Runs through each edge point
-    thickness = material.get_thickness() + 4e-4
+    thickness = material.get_thickness() * 101/100
     for edge in range(EDGE_SEGMENTS+1):
 
         # Adds all of the vertices on the circular face of this edge point
@@ -468,7 +468,6 @@ def generate_metamaterials_zigzag_surface_meshes(metamaterials: list[Metamateria
 
     # Stores values for the function
     vertices, faces = [], []
-    vertex_count = 0
 
     # Places each metamaterial along a zigzag
     for i, material in enumerate(metamaterials):
@@ -481,8 +480,7 @@ def generate_metamaterials_zigzag_surface_meshes(metamaterials: list[Metamateria
         material = material.translate(dx=(dx-square_side//2)*1.5*max(shape), dz=(dz-square_side//2)*1.5*max(shape))
         next_vertices, next_faces = generate_metamaterial_grid_surface_mesh(material, shape)
         vertices.extend(next_vertices)
-        faces.extend([tuple(map(lambda x: x+vertex_count, face)) for face in next_faces])
-        vertex_count += len(next_vertices)
+        faces.extend(next_faces)
 
     return vertices, faces
 
@@ -540,7 +538,7 @@ def save_multi_obj(vertices: list[list[tuple]], faces: list[list[tuple]], filepa
             for vertex in obj_vertices:
                 f.write("v")
                 for coord in vertex:
-                    f.write(f" {np.round(coord, precision)}")
+                    f.write(f" {np.round(coord, precision) / SCALE}")
                 f.write("\n")
 
             # Writes each face
@@ -614,9 +612,15 @@ def union_obj_components(vertices: list[list[tuple]], faces: list[list[tuple]], 
         if not union_mesh.is_watertight:
             print(f"WARNING: {filepath} is not a manifold mesh.")
 
+    # Rescales the vertices
+    rescaled_vertices = np.array(union_mesh.vertices) / SCALE
+    union_mesh = trimesh.Trimesh(vertices=rescaled_vertices, faces=union_mesh.faces)
+
     # Exports the mesh
     union_mesh.export(filepath)
 
     # Prints a ending status
     if verbose:
         print("Union finished!")
+
+    return union_mesh
