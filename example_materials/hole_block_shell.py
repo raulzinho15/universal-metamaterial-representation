@@ -151,4 +151,4 @@ for n1, n2, n3 in sphere_face_nodes:
     face_params[face_index : face_index + FACE_BEZIER_COORDS] = face_center + face_normal*0.5
 
 # Creates the metamaterial
-HOLE_BLOCK_SHELL = Metamaterial(node_pos, edge_adj, edge_params, face_adj, face_params)
+HOLE_BLOCK_SHELL = Metamaterial(node_pos, edge_adj, edge_params, face_adj, face_params, thickness=0.4)

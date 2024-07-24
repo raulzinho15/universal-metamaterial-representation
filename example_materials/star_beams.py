@@ -68,4 +68,4 @@ for n1, n2, n3 in faces_nodes:
     face_params[face_index : face_index+FACE_BEZIER_COORDS] = fit_face_params
 
 # Creates the metamaterial
-STAR_BEAMS = Metamaterial(node_pos, edge_adj, edge_params, face_adj, face_params)
+STAR_BEAMS = Metamaterial(node_pos, edge_adj, edge_params, face_adj, face_params, thickness=0.4)

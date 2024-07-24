@@ -52,4 +52,4 @@ for n1 in range(4):
             face_params[face_index : face_index + FACE_BEZIER_COORDS] = fit_face_params
 
 # Creates the metamaterial
-TETRAHEDRON_SHELL = Metamaterial(node_pos, edge_adj, edge_params, face_adj, face_params)
+TETRAHEDRON_SHELL = Metamaterial(node_pos, edge_adj, edge_params, face_adj, face_params, thickness=0.4)

@@ -6,14 +6,15 @@ node_pos = np.zeros(NODE_POS_SIZE)
 
 # Computes the node positions of the metamaterial
 node_positions = np.array([
-    [1.,  0.,  0.5],
-    [0.5, 0.,  1. ],
-    [0.,  0.5, 1. ],
-    [0.,  1.,  0.5],
-    [0.5, 1.,  0. ],
-    [1.,  0.5, 0. ],
+    [1.,  0.,  0.5], # 0
+    [0.5, 0.,  1. ], # 1
+    [0.,  0.5, 1. ], # 2
+    [0.,  1.,  0.5], # 3
+    [0.5, 1.,  0. ], # 4
+    [1.,  0.5, 0. ], # 5
+    [0.5, 0.5, 0.5], # 6
 ])
-node_pos[:18] = euclidean_to_pseudo_spherical(node_positions)
+node_pos[:21] = euclidean_to_pseudo_spherical(node_positions)
 
 # Prepares the edge adjacencies of the metamaterial
 edge_adj = np.zeros(EDGE_ADJ_SIZE)
@@ -28,9 +29,9 @@ face_adj = np.zeros(FACE_ADJ_SIZE)
 face_params = np.zeros(FACE_PARAMS_SIZE)
 
 # Computes the edge/face parameters of the metamaterial
-n1 = 0
-for n2 in range(1,5):
-    n3 = n2+1
+n1 = 6
+for n2 in range(6):
+    n3 = (n2+1)%6
 
     # Sets up the face adjacency
     face_index = face_adj_index(n1, n2, n3)
@@ -54,4 +55,4 @@ for n2 in range(1,5):
     edge_params[edge3_index : edge3_index + EDGE_BEZIER_COORDS] = fit_edge3_params
 
 # Creates the metamaterial
-HEXAGON_SHELL = Metamaterial(node_pos, edge_adj, edge_params, face_adj, face_params)
+HEXAGON_SHELL = Metamaterial(node_pos, edge_adj, edge_params, face_adj, face_params, thickness=0.4)
