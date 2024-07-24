@@ -91,7 +91,7 @@ class Metamaterial:
             point = point.reshape(point.shape[0]//3, 3)
 
         # Applies the transformations
-        return (self.translations + (1-point)*self.mirrors + point*(1-self.mirrors)).flatten()
+        return (self.translations + (1-point)*self.mirrors + point*(1-self.mirrors)).flatten() * SCALE
 
 
     def get_node_position(self, node: int, transform=True) -> np.ndarray:
@@ -471,11 +471,13 @@ class Metamaterial:
         edge_params = self.get_edge_params(node1, node2).reshape((EDGE_BEZIER_POINTS,3))
         
         # Appropriately structures all parameters for the Bezier curve
-        bezier_params = np.concatenate((node1_pos, edge_params, node2_pos), axis=0)
+        # bezier_params = np.concatenate((node1_pos, edge_params, node2_pos), axis=0)
+        bezier_params = np.concatenate((np.zeros((1,3)), edge_params, np.zeros((1,3))), axis=0)
 
         # Creates the function to compute the edge points
         def bezier(t: int) -> np.ndarray:
-            return BEZIER_CURVE_COEFFICIENTS[t,:] @ bezier_params
+            # return BEZIER_CURVE_COEFFICIENTS[t,:] @ bezier_params
+            return BEZIER_CURVE_COEFFICIENTS[t,:] @ bezier_params + node1_pos[0] * (1-t/EDGE_SEGMENTS) + node2_pos[0] * t/EDGE_SEGMENTS
         return bezier
 
 
@@ -870,7 +872,7 @@ class Metamaterial:
                     self.edge_adj[edge_adj_index(node, n2)] = 0
 
 
-    def reorder_nodes(self, node_order):
+    def reorder_nodes(self, node_order: list[int]):
         """
         Reorders the nodes in the metamaterial. Does not mutate this metamaterial.
 
@@ -919,7 +921,7 @@ class Metamaterial:
         return Metamaterial(reordered_node_pos, reordered_edge_adj, reordered_edge_params, reordered_face_adj, reordered_face_params)
 
 
-    def sort_rep(self):
+    def sort_rep(self) -> Self:
         """
         Sorts the nodes in increasing order by the product of the two rep angles.
 
@@ -937,7 +939,7 @@ class Metamaterial:
         return self.reorder_nodes(sorted_node_indices)
 
 
-    def best_node_match(self, mat2, nodes1, nodes2):
+    def best_node_match(self, mat2: Self, nodes1: int, nodes2: int) -> list[int]:
         """
         Computes the best matching between the first nodes of the given materials.
 
@@ -953,11 +955,11 @@ class Metamaterial:
             The number of nodes from mat2 (from index 0) that will be compared
             in the matching. Must be <= NUM_NODES and >= nodes1.
 
-        Returns: list
+        Returns: list[int]
             The best matching of each selected node in this metamaterial to nodes
-            in mat2. For each output[i] = j, it means mat1's node i should map to
+            in mat2. For each output[i] = j, it means this material's node i should map to
             mat2's node j. Thus, if this list is used to reorder a metamaterial,
-            it should be used on mat2's reorder_nodes() function, not mat1's.
+            it should be used on mat2's reorder_nodes() function, not this material's.
         """
 
         # Stores arrays for the function
@@ -990,11 +992,111 @@ class Metamaterial:
                         pair[node] = favorite
                         break
 
-        # Reverses the pairings to ensure mat1 maps to mat2 nodes
-        # fixed_pair = [0] * nodes1
-        # for node in range(nodes1):
-        #     fixed_pair[pair[node]] = node
         return pair
+    
+
+    def active_nodes(self) -> int:
+        """
+        Computes the number of nodes used by edges and faces in
+        this metamaterial.
+
+        Returns: `int`
+            The number of nodes used by edges and faces in this
+            metamaterial.
+        """
+
+        # Will store the active nodes
+        nodes = set()
+
+        # Finds nodes associated with edges
+        for n1 in range(NUM_NODES):
+            for n2 in range(n1+1, NUM_NODES):
+                if self.has_edge(n1, n2):
+                    nodes.add(n1)
+                    nodes.add(n2)
+
+        # Finds nodes associated with faces
+        for n1 in range(NUM_NODES):
+            for n2 in range(n1+1, NUM_NODES):
+                for n3 in range(n2+1, NUM_NODES):
+                    if self.has_face(n1, n2, n3):
+                        nodes.add(n1)
+                        nodes.add(n2)
+                        nodes.add(n3)
+
+        return len(nodes)
+    
+
+    def greedily_reorder_nodes(self, material: Self):
+
+        # Computes the number of active nodes 
+        nodes1 = self.active_nodes()
+        nodes2 = material.active_nodes()
+
+        # Finds the square distance between each node
+        distances = {(n1,n2) : ((self.get_node_position(n1) - material.get_node_position(n2))**2).sum()
+                        for n1 in range(nodes1)
+                            for n2 in range(nodes2)}
+
+        # Sorts the node pairs by increasing distance
+        node_pairs = sorted([(n1,n2) for n1 in range(nodes1) for n2 in range(nodes2)], key=lambda x: distances[x])
+
+        # Assigns the closest nodes to each other greedily
+        assignments = {}
+        for n1,n2 in node_pairs:
+
+            # Skips already-seen nodes
+            if n1 in assignments.values() or n2 in assignments:
+                continue
+
+            # Stores the assignment
+            assignments[n2] = n1
+
+        # Finds the leftover nodes in the other metamaterial
+        leftovers = set()
+        for n2 in range(nodes2):
+            if n2 not in assignments:
+                leftovers.add(n2)
+
+        # Assigns the closest leftover nodes greedily
+        leftover_assignments = {}   
+        for n1,n2 in node_pairs:
+
+            # Skips already-seen nodes
+            if n2 not in leftovers or n1 in leftover_assignments.values() or n2 in leftover_assignments:
+                continue
+
+            # Stores the assignment
+            leftover_assignments[n2] = n1
+
+        # Creates the new nodes
+        copy = self.copy()
+        for n2 in leftovers:
+            n1 = leftover_assignments[n2]
+            node_pos = self.node_pos[n1*3 : n1*3+3] 
+            copy.node_pos[nodes1*3 : nodes1*3+3] = node_pos
+            for n3 in range(nodes1):
+                if n1 == n3:
+                    continue
+                edge_index = edge_adj_index(nodes1,n3) * EDGE_BEZIER_COORDS
+                copy.edge_params[edge_index : edge_index + EDGE_BEZIER_COORDS] = copy.edge_params[edge_adj_index(n1,n3)*EDGE_BEZIER_COORDS:][:6]
+
+            edge_index = edge_adj_index(n1,nodes1) * EDGE_BEZIER_COORDS
+            copy.edge_params[edge_index : edge_index + EDGE_BEZIER_COORDS] = np.tile(self.get_node_position(n1), EDGE_BEZIER_POINTS)
+            assignments[n2] = nodes1
+            nodes1 += 1
+
+        # Computes the node reordering
+        node_reordering = [i for i in range(NUM_NODES)]
+        for n1,n2 in assignments.items():
+            node_reordering[n1] = n2
+
+        # Reorders the nodes
+        copy = copy.reorder_nodes(node_reordering)
+        copy.edge_adj = material.edge_adj.copy()
+
+        return copy
+
 
 
     def flatten_rep(self, pad_dim=False) -> torch.Tensor:
@@ -1004,13 +1106,13 @@ class Metamaterial:
         pad_dim: bool
             Whether an extra dimension will be added for padding to act as a batch of 1.
         """
-        concatenation = np.concatenate((self.node_pos, self.edge_adj, self.edge_params, self.face_adj, self.face_params))
+        concatenation = np.concatenate((self.node_pos, self.edge_adj, self.edge_params, self.face_adj, self.face_params, np.array([self.thickness])))
         if pad_dim:
             concatenation = concatenation.reshape((1,concatenation.shape[0]))
         return torch.from_numpy(concatenation).type(torch.float32)
 
 
-    def copy(self):
+    def copy(self) -> Self:
         """
         Creates a copy of the Metamaterial.
 
@@ -1032,35 +1134,24 @@ class Metamaterial:
 
         return material
     
-    def from_tensor(rep_tensor: torch.Tensor, random_cutoffs=False):
+    
+    def from_tensor(rep_tensor: torch.Tensor) -> Self:
         """
         Creates a Metamaterial from the given PyTorch tensor.
 
         rep_tensor: Tensor
             A tensor with the representation arrays concatenated together.
-
-        random_cutoffs: bool
-            Whether random cutoffs will be used for determining
-            edge/face existence. If False, then 0.5 is used.
         """
 
         numpy_rep = rep_tensor.detach().reshape(REP_SIZE).numpy()
 
-        if random_cutoffs:
-            np.random.seed(0)
-            edge_cutoffs = np.random.rand(EDGE_ADJ_SIZE)
-            face_cutoffs = np.random.rand(FACE_ADJ_SIZE)
-        else:
-            edge_cutoffs = np.ones(EDGE_ADJ_SIZE) / 2
-            face_cutoffs = np.ones(FACE_ADJ_SIZE) / 2
-
-
         # Stores the individual parts of the rep
         node_pos = numpy_rep[ : NODE_POS_SIZE]
-        edge_adj = (numpy_rep[NODE_POS_SIZE : NODE_POS_SIZE + EDGE_ADJ_SIZE] > edge_cutoffs).astype(float)
+        edge_adj = (numpy_rep[NODE_POS_SIZE : NODE_POS_SIZE + EDGE_ADJ_SIZE] > 0.5).astype(float)
         edge_params = numpy_rep[NODE_POS_SIZE + EDGE_ADJ_SIZE : NODE_POS_SIZE + EDGE_ADJ_SIZE + EDGE_PARAMS_SIZE]
-        face_adj = (numpy_rep[NODE_POS_SIZE + EDGE_ADJ_SIZE + EDGE_PARAMS_SIZE : NODE_POS_SIZE + EDGE_ADJ_SIZE + EDGE_PARAMS_SIZE + FACE_ADJ_SIZE] > face_cutoffs).astype(float)
-        face_params = numpy_rep[NODE_POS_SIZE + EDGE_ADJ_SIZE + EDGE_PARAMS_SIZE + FACE_ADJ_SIZE : ]
+        face_adj = (numpy_rep[NODE_POS_SIZE + EDGE_ADJ_SIZE + EDGE_PARAMS_SIZE : NODE_POS_SIZE + EDGE_ADJ_SIZE + EDGE_PARAMS_SIZE + FACE_ADJ_SIZE] > 0.5).astype(float)
+        face_params = numpy_rep[NODE_POS_SIZE + EDGE_ADJ_SIZE + EDGE_PARAMS_SIZE + FACE_ADJ_SIZE : -1]
+        thickness = numpy_rep[-1]
 
-        return Metamaterial(node_pos, edge_adj, edge_params, face_adj, face_params)
+        return Metamaterial(node_pos, edge_adj, edge_params, face_adj, face_params, thickness=thickness)
     
