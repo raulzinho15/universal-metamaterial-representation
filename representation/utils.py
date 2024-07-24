@@ -74,10 +74,10 @@ def find_line_normals(point1: np.ndarray, point2: np.ndarray) -> tuple[np.ndarra
     Finds consistent normals for the given line.
 
     point1: np.ndarray
-        The start point on the line.
+        The start point on the line. Assumes in the unit cube.
 
     point2: np.ndarray
-        The last point on the line.
+        The last point on the line. Assumes in the unit cube.
 
     Returns: tuple[np.ndarray]
         The two (normalized) normals of the line. Finds
