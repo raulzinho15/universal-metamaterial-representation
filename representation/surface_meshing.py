@@ -109,9 +109,8 @@ def generate_edge_surface_mesh(material: Metamaterial, node1: int, node2: int) -
     # Stores the edge points for faster computation
     edge_points = [edge_points_function(edge) for edge in range(EDGE_SEGMENTS+1)]
 
-    # Stores vertex and face values for the function
-    vertices = []
-    faces = []
+    # Stores vertex/face values for the function
+    vertices, faces = [], []
 
     # Computes the normal vectors
     normal1, normal2 = find_line_normals(edge_points[0], edge_points[1])
@@ -221,9 +220,8 @@ def generate_face_surface_mesh(material: Metamaterial, node1: int, node2: int, n
         # Stores the face's normal
         face_normals.append(face_normal*thickness)
 
-    # Stores the vertices and faces
-    vertices = []
-    faces = []
+    # Stores the vertices/faces
+    vertices, faces = [], []
 
     # Stores each vertex
     for point, normal in zip(face_points, face_normals):
