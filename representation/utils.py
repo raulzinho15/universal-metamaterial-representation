@@ -1,47 +1,5 @@
 import numpy as np
 
-def triangle_line_intersection(tri1: np.ndarray, tri2: np.ndarray, tri3: np.ndarray, line0: np.ndarray, line1: np.ndarray):
-    """
-    Checks whether the given line intersects the given triangle.
-
-    tri1: ndarray
-        A 1-d numpy array with the coordinates of the first vertex
-        of the triangle.
-
-    tri2: ndarray
-        A 1-d numpy array with the coordinates of the second vertex
-        of the triangle.
-
-    tri3: ndarray
-        A 1-d numpy array with the coordinates of the third vertex
-        of the triangle.
-
-    line0: ndarray
-        A 1-d numpy array with the coordinates of the first vertex
-        of the line.
-
-    line1: ndarray
-        A 1-d numpy array with the coordinates of the second vertex
-        of the line.
-
-    Returns: bool
-        Whether the line intersects the triangle.
-    """
-
-    # Sets up the linear system
-    A = np.stack((tri1-tri2, tri1-tri3, line1-line0), axis=1)
-    b = tri1-line0
-
-    # Solves the linear system
-    try:
-        bgt = np.linalg.solve(A, b)
-    except np.linalg.LinAlgError:
-        return False, float('inf')
-
-    # Checks for an intersection
-    beta, gamma, t = bgt
-    return beta+gamma <= 1+1e-4 and beta >= -1e-4 and gamma >= -1e-4 and -1e-4 <= t <= 1+1e-4, t
-
 
 def greedy_topology_match(start_adj_matrix: np.ndarray, target_adj_matrix: np.ndarray) -> tuple[np.ndarray, list[tuple[int]]]:
     """
