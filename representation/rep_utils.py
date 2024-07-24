@@ -454,7 +454,7 @@ for i in range(1,EDGE_BEZIER_POINTS+1):
     BINOMIAL_COEFFICIENTS[i] = BINOMIAL_COEFFICIENTS[i-1] * (EDGE_BEZIER_POINTS+2-i) // i
 
 # Computes the general coefficients for a Bezier curve
-BEZIER_CURVE_COEFFICIENTS = BINOMIAL_COEFFICIENTS[np.newaxis,1:-1] * BEZIER_MONOMIALS[:,1:-1] * BEZIER_MONOMIALS[::-1,-2:0:-1]
+BEZIER_CURVE_COEFFICIENTS = BINOMIAL_COEFFICIENTS[np.newaxis,:] * BEZIER_MONOMIALS * BEZIER_MONOMIALS[::-1,::-1]
 
 
 def find_edge_params(edge_function) -> np.ndarray:
@@ -465,7 +465,7 @@ def find_edge_params(edge_function) -> np.ndarray:
     edge_function: (int) -> np.ndarray
         A function that takes in the Bezier parameter in [0,EDGE_SEGMENTS],
         where t=0 corresponds to the initial point and t=1 to the end point.
-        It outputs the corresponding target point on the edge as a 1x3 numpy
+        It outputs the corresponding target point on the edge as a 1d numpy
         array, where the coordinates are along the second axis.
 
     Returns: np.ndarray
@@ -483,7 +483,7 @@ def find_edge_params(edge_function) -> np.ndarray:
     node2_effect = BEZIER_CURVE_COEFFICIENTS[1:-1,-1:] @ node2_pos
 
     # Computes the linear system's target output (the coordinates are on second axis)
-    b = np.concatenate([edge_function(t) for t in range(1, EDGE_SEGMENTS)], axis=0)
+    b = np.stack([edge_function(t) for t in range(1, EDGE_SEGMENTS)], axis=0)
     b -= node1_effect + node2_effect
 
     # Computes the linear system's matrix
@@ -789,7 +789,7 @@ def circle_quadrant_edge_params(circle_center: np.ndarray, node1_pos: np.ndarray
         t *= np.pi/2
 
         # Returns the interpolated edge point
-        return (circle_center + cos_coeff*np.cos(t) + sin_coeff*np.sin(t))[np.newaxis,:]
+        return (circle_center + cos_coeff*np.cos(t) + sin_coeff*np.sin(t))
     
     return find_edge_params(edge_function)
 

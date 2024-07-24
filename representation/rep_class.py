@@ -73,9 +73,9 @@ class Metamaterial:
         self.cube_pos = {}
 
 
-    def transform_point(self, point: np.ndarray) -> np.ndarray:
+    def transform_points(self, point: np.ndarray) -> np.ndarray:
         """
-        Transforms the given point with mirroring and translations
+        Transforms the given point(s) with mirroring and translations
         according to the metamaterial's transforms.
 
         point: np.ndarray
@@ -104,7 +104,7 @@ class Metamaterial:
         transform: `bool`, optional
             Whether the node's position will have transformations applied.
 
-        Returns: np.=ndarray
+        Returns: np.ndarray
             A 1d numpy array containing the 3D position of the given node.
         """
 
@@ -412,7 +412,7 @@ class Metamaterial:
         return self.edge_adj[edge_adj_index(node1, node2)] == 1
     
 
-    def get_edge_params(self, node1: int, node2: int) -> np.ndarray:
+    def get_edge_params(self, node1: int, node2: int, transform=True) -> np.ndarray:
         """
         Gets the parameters of the edge between the two given nodes.
         Assumes an edge exists between the two nodes.
@@ -423,6 +423,9 @@ class Metamaterial:
         node2: int
             The ID of the second node of the edge.
 
+        transform: `bool`, optional
+            Whether the edge's parameters will have transformations applied.
+
         Returns: np.ndarray
             The edge parameters of the edge, transformed according
             to the metamaterial's transformations.
@@ -431,6 +434,10 @@ class Metamaterial:
         # Retrieves the edge parameters
         edge_index = edge_adj_index(node1, node2) * EDGE_BEZIER_COORDS
         params = self.edge_params[edge_index : edge_index + EDGE_BEZIER_COORDS]
+
+        # Applies the transform
+        if transform:
+            params = self.transform_point(params)
 
         return params
 
@@ -466,26 +473,18 @@ class Metamaterial:
 
         # Computes the edge's nodes' positions
         node1, node2 = sorted((node1, node2))
-        node1_pos = self.get_node_position(node1, transform=False)
-        node2_pos = self.get_node_position(node2, transform=False)
+        node1_pos = self.get_node_position(node1)
+        node2_pos = self.get_node_position(node2)        
+        
+        # Retrieves the edge parameters
+        edge_params = self.get_edge_params(node1, node2).reshape((EDGE_BEZIER_POINTS,3))
 
-        # Computes the coordinate system
-        axis1 = node1_pos - node2_pos
-        axis1 /= np.linalg.norm(axis1)
-        axis2, axis3 = find_line_normals(node1_pos, node2_pos)
-        coord_system = np.stack((axis1, axis2, axis3), axis=1)
-
-        # Retrives the edge parameters
-        edge_params = self.get_edge_params(node1, node2).reshape((EDGE_BEZIER_POINTS,3)).T
-
-        # Computes the Bezier parameters with the transformed coordinates
-        bezier_params = (coord_system @ edge_params).T
+        # Appropriately structures all parameters for the Bezier curve
+        bezier_params = np.concatenate((node1_pos, edge_params, node2_pos), axis=0)
 
         # Creates the function to compute the edge points
         def bezier(t: int) -> np.ndarray:
-            t_norm = t/EDGE_SEGMENTS
-            edge_offset = node1_pos * (1-t_norm) + node2_pos * t_norm
-            return BEZIER_CURVE_COEFFICIENTS[t,:] @ bezier_params + edge_offset
+            return BEZIER_CURVE_COEFFICIENTS[t,:] @ bezier_params
         
         return bezier
 
