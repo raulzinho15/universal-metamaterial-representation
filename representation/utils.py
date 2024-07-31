@@ -67,7 +67,7 @@ def greedy_topology_match(start_adj_matrix: np.ndarray, target_adj_matrix: np.nd
     return best_matrix, best_swaps
 
 
-LINE_NORMAL_POINT3 = np.array([np.pi, np.e, np.sqrt(2)])
+NON_COLINEAR_POINT = np.array([np.pi, np.e, np.sqrt(2)])
 def find_line_normals(point1: np.ndarray, point2: np.ndarray) -> tuple[np.ndarray]:
     """
     Finds consistent normals for the given line.
@@ -86,7 +86,7 @@ def find_line_normals(point1: np.ndarray, point2: np.ndarray) -> tuple[np.ndarra
 
     # Finds the plane vectors
     vector1 = point2 - point1
-    vector2 = LINE_NORMAL_POINT3 - point1
+    vector2 = NON_COLINEAR_POINT - point1
 
     # Finds the plane normal
     normal1 = np.cross(vector1, vector2)
