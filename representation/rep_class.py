@@ -475,7 +475,7 @@ class Metamaterial:
         """
 
         # Computes the edge's nodes' positions
-        node1, node2 = sorted((node1, node2))
+        node1, node2 = sorted((node1, node2), key=lambda n: self.node_ordering[n])
         node1_pos = self.get_node_position(node1)[np.newaxis,:]
         node2_pos = self.get_node_position(node2)[np.newaxis,:]
         
@@ -599,7 +599,7 @@ class Metamaterial:
             return None
 
         # Stores the node positions
-        node1, node2, node3 = sorted((node1, node2, node3))
+        node1, node2, node3 = sorted((node1, node2, node3), key=lambda n: self.node_ordering[n])
         node1_pos = self.get_node_position(node1)[np.newaxis, :]
         node2_pos = self.get_node_position(node2)[np.newaxis, :]
         node3_pos = self.get_node_position(node3)[np.newaxis, :]
