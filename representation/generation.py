@@ -515,11 +515,10 @@ def smooth_interpolation(material1: Metamaterial, material2: Metamaterial) -> li
     edge_adj_matrix1, swaps = greedy_topology_match(edge_adj_matrix1, edge_adj_matrix2)
 
     # Performs each of the same swaps on the starting metamaterial
+    node_order = [i for i in range(NUM_NODES)]
     for n1,n2 in swaps:
-        node_order = [i for i in range(NUM_NODES)]
-        node_order[n1] = n2
-        node_order[n2] = n1
-        material1 = material1.reorder_nodes(node_order)
+        node_order[n1], node_order[n2] = node_order[n2], node_order[n1]
+    material1 = material1.reorder_nodes(node_order)
 
     # Computes the relevant subgraph adjacency matrices
     removed_edge_adj = ((edge_adj_matrix1 - edge_adj_matrix2) == 1).astype(np.int8)
