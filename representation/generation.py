@@ -612,6 +612,9 @@ def smooth_interpolation(material1: Metamaterial, material2: Metamaterial) -> li
                 edge_index = edge_adj_index(n1,n2) * EDGE_BEZIER_COORDS
                 mat1_edge_params[edge_index : edge_index + EDGE_BEZIER_COORDS] = material2.get_edge_params(n1,n2)
 
+    # Stores the updated edge parameters
+    material1.edge_params = mat1_edge_params
+    material2.edge_params = mat2_edge_params
 
     # Computes the intermediate node positions and edge/face parameters
     node_positions = np.stack([mat1_node_pos * (1-alpha) + mat2_node_pos * alpha for alpha in alpha_gen(len(part_change_groups)+2)], axis=0)[1:]
