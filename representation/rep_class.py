@@ -838,7 +838,7 @@ class Metamaterial:
             new_ordering[n] = self.node_ordering[node_order[n]]
         self.node_ordering = new_ordering
 
-        return Metamaterial(reordered_node_pos, reordered_edge_adj, reordered_edge_params, reordered_face_adj, reordered_face_params)
+        return Metamaterial(reordered_node_pos, reordered_edge_adj, reordered_edge_params, reordered_face_adj, reordered_face_params, thickness=self.thickness)
 
 
     def sort_rep(self) -> Self:
