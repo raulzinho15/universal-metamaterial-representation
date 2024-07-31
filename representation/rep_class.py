@@ -443,6 +443,36 @@ class Metamaterial:
             params = self.transform_points(params)
 
         return params
+    
+
+    def rotate_edge_params(self, node1: int, node2: int, axis: np.ndarray, angle: float):
+        """
+        Rotates the edge parameters by the given amount. Does mutate
+        the metamaterial.
+
+        node1: `int`
+            The ID of the first node of the edge.
+
+        node2: `int`
+            The ID of the second node of the edge.
+
+        axis: `ndarray`
+            The axis along which the rotation will happen.
+
+        angle: `float`
+            The angle by which the rotation will happen, according
+            to the right-hand rule.
+        """
+
+        # Stores the edge parameters
+        edge_params = self.get_edge_params(node1, node2).reshape(-1, 3)
+
+        # Rotates the edge params
+        rotated_edge_params = rotate_around_axis(edge_params, axis, angle).flatten()
+
+        # Stores the rotated edge parameters
+        edge_index = edge_adj_index(node1, node2)
+        self.edge_params[edge_index*EDGE_BEZIER_COORDS : (edge_index+1)*EDGE_BEZIER_COORDS] = rotated_edge_params
 
 
     def get_edge_adj_matrix(self) -> np.ndarray:
@@ -1016,7 +1046,6 @@ class Metamaterial:
         copy.edge_adj = material.edge_adj.copy()
 
         return copy
-
 
 
     def flatten_rep(self, pad_dim=False) -> torch.Tensor:
