@@ -24,6 +24,7 @@ edge_params = np.zeros(EDGE_PARAMS_SIZE)
 # Computes the edge adjacencies/parameters of the metamaterial
 for n1 in range(6):
     n2 = (n1+1)%6
+    n1,n2 = sorted((n1,n2))
 
     # Sets up the edge adjacency
     edge_index = edge_adj_index(n1, n2)
