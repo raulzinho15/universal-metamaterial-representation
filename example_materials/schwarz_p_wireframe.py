@@ -31,12 +31,12 @@ for n1 in range(6):
     edge_index *= EDGE_BEZIER_COORDS
 
     # Computes the circle center around which the edge goes
-    if n1 % 2 == 0:
+    if n1 % 2 == 1:
         circle_center = np.zeros(3)
-        circle_center[(n1//2+1)%3] = 1
+        circle_center[(3-n1//2+2)%3] = 1
     else:
         circle_center = np.ones(3)
-        circle_center[(n1//2)%3] = 0
+        circle_center[(3-n1//2+1)%3] = 0
 
     # Computes the edge parameters
     n1, n2 = sorted((n1, n2))
