@@ -1,5 +1,4 @@
 import numpy as np
-import math
 
 
 def greedy_topology_match(start_adj_matrix: np.ndarray, target_adj_matrix: np.ndarray) -> tuple[np.ndarray, list[tuple[int]]]:
@@ -100,28 +99,29 @@ def find_line_normals(point1: np.ndarray, point2: np.ndarray) -> tuple[np.ndarra
     return normal1, normal2
 
 
-def rotate_around_axis(vector: np.ndarray, axis: np.ndarray, angle: float) -> np.ndarray:
+def rotate_around_axis(vectors: np.ndarray, axis: np.ndarray, angle: float) -> np.ndarray:
     """
     Uses Rodrigues' rotation formula to rotate the given vector
     by the given amount around the given axis.
 
     vector: np.ndarray
-        The vector to be rotated.
+        The vector(s) to be rotated, organized into a 2d
+        numpy array in row-major order.
 
     axis: np.ndarray
-        The axis around which the vector will be rotated.
-        Assumed to be a unit vector.
+        The axis around which the vector(s) will be rotated.
+        Assumed to be a 1d array of a unit vector.
 
     angle: float
         The angle by which the given vector will be rotated.
         Assumed to be in radians.
 
     Returns: np.ndarray
-        The rotated vector.
+        The rotated vector(s).
     """
 
     return (
-        vector * np.cos(angle) +
-        np.cross(axis, vector) * np.sin(angle) +
-        axis * np.dot(axis, vector) * (1 - np.cos(angle))
+        vectors * np.cos(angle) +
+        np.cross(axis, vectors) * np.sin(angle) +
+        np.dot(vectors, axis)[:,np.newaxis] @ axis[np.newaxis,:] * (1 - np.cos(angle))
     )
