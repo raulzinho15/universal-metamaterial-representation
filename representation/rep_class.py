@@ -72,6 +72,12 @@ class Metamaterial:
         # Stores already-computed node positions on the cube for computation speed-up
         self.cube_pos = {}
 
+        # Stores the mapping from the original node ordering to the
+        # new space of new ordering, if a node reordering was applied
+        # Meaning: original node node_ordering[i] is now mapped to current node i
+        # (same definition as in the reorder_nodes() function)
+        self.node_ordering = [i for i in range(NUM_NODES)] # Default: each node maps to itself
+
 
     def transform_points(self, points: np.ndarray) -> np.ndarray:
         """
@@ -825,6 +831,12 @@ class Metamaterial:
                     reordered_index = face_adj_index(n1, n2, n3) * FACE_BEZIER_COORDS
                     old_index = face_adj_index(node_order[n1], node_order[n2], node_order[n3]) * FACE_BEZIER_COORDS
                     reordered_face_params[reordered_index:reordered_index+FACE_BEZIER_COORDS] = self.face_params[old_index:old_index+FACE_BEZIER_COORDS]
+
+        # Stores the original node mapping to the new node space
+        new_ordering = [0] * NUM_NODES
+        for n in range(NUM_NODES):
+            new_ordering[n] = self.node_ordering[node_order[n]]
+        self.node_ordering = new_ordering
 
         return Metamaterial(reordered_node_pos, reordered_edge_adj, reordered_edge_params, reordered_face_adj, reordered_face_params)
 
