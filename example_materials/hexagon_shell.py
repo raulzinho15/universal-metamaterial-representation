@@ -65,7 +65,5 @@ for n1 in range(6):
     edge_params[edge2_index : edge2_index + EDGE_BEZIER_COORDS] = fit_edge2_params
     edge_params[edge3_index : edge3_index + EDGE_BEZIER_COORDS] = fit_edge3_params
 
-    print()
-
 # Creates the metamaterial
 HEXAGON_SHELL = Metamaterial(node_pos, edge_adj, edge_params, face_adj, face_params, thickness=0.4)
