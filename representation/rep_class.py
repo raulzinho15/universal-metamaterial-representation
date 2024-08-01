@@ -634,12 +634,13 @@ class Metamaterial:
         node3_pos = self.get_node_position(node3)[np.newaxis, :]
 
         # Stores the edge parameters
-        edge1_params = self.get_edge_params(node1, node2).reshape((EDGE_BEZIER_POINTS, 3))
-        edge2_params = self.get_edge_params(node1, node3).reshape((EDGE_BEZIER_POINTS, 3))
-        edge3_params = self.get_edge_params(node2, node3).reshape((EDGE_BEZIER_POINTS, 3))
+        edge1_params = self.get_edge_params(node1, node2).reshape((EDGE_BEZIER_POINTS, 3)) + node1_pos
+        edge2_params = self.get_edge_params(node1, node3).reshape((EDGE_BEZIER_POINTS, 3)) + node1_pos
+        edge3_params = self.get_edge_params(node2, node3).reshape((EDGE_BEZIER_POINTS, 3)) + node2_pos
         
         # Stores the face parameters
         face_params = self.get_face_params(node1, node2, node3).reshape((FACE_BEZIER_POINTS, 3))
+        face_params = (node1_pos + node2_pos + node3_pos) / 3 # Temporarily overrides to a flat face
 
         # Appropriately structures all parameters for the Bezier curve
         bezier_params = np.concatenate([

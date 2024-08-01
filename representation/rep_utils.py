@@ -726,9 +726,9 @@ def find_face_params(edge_params: np.ndarray | None, face_function):
     else:
         return (
             inferred_params[-FACE_BEZIER_COORDS :],
-            inferred_params[: EDGE_BEZIER_COORDS],
-            inferred_params[EDGE_BEZIER_COORDS : EDGE_BEZIER_COORDS*2],
-            inferred_params[EDGE_BEZIER_COORDS*2 : -FACE_BEZIER_COORDS],
+            inferred_params[: EDGE_BEZIER_COORDS] - np.tile(node1_pos[0], EDGE_BEZIER_POINTS),
+            inferred_params[EDGE_BEZIER_COORDS : EDGE_BEZIER_COORDS*2] - np.tile(node1_pos[0], EDGE_BEZIER_POINTS),
+            inferred_params[EDGE_BEZIER_COORDS*2 : -FACE_BEZIER_COORDS] - np.tile(node2_pos[0], EDGE_BEZIER_POINTS),
         )
 
 

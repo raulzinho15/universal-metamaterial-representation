@@ -445,22 +445,33 @@ def interpolate_part_changes(original_material: Metamaterial, material: Metamate
     for change in part_changes:
 
         # Stores the edge change nodes
-        n1,n2,_ = change
+        if len(change) == 3:
+            n1,n2,_ = change
+            n3 = n2
+        
+        # Stores the face change nodes
+        else:
+            n1,n2,n3,_ = change
 
         # Computes the node positions
         first_node_pos = material.node_pos[n1*3:(n1+1)*3]
         second_node_pos = minimize_node_distance(first_node_pos, material.node_pos[n2*3:(n2+1)*3])
+        third_node_pos = minimize_node_distance(first_node_pos, material.node_pos[n3*3:(n3+1)*3])
 
         # Computes the average
-        avg_node_pos = (first_node_pos + second_node_pos) / 2
+        avg_node_pos = (first_node_pos + second_node_pos) / 2 
+        if n3 != n2: # Adjusts the average for a face change
+            avg_node_pos = (2*avg_node_pos + third_node_pos) / 3
 
         # Stores the average
         mid_material.node_pos[n1*3:(n1+1)*3] = avg_node_pos
         mid_material.node_pos[n2*3:(n2+1)*3] = avg_node_pos
+        mid_material.node_pos[n3*3:(n3+1)*3] = avg_node_pos
 
-        # Zeros the edge parameters between these two nodes
-        edge_index = edge_adj_index(n1,n2)
-        mid_material.edge_params[edge_index*EDGE_BEZIER_COORDS : (edge_index+1)*EDGE_BEZIER_COORDS] = 0
+        # Zeros the edge parameters between nodes
+        for node1,node2 in [(n1,n2), (n2,n3), (n1,n3)]:
+            edge_index = edge_adj_index(node1,node2)
+            mid_material.edge_params[edge_index*EDGE_BEZIER_COORDS : (edge_index+1)*EDGE_BEZIER_COORDS] = 0
 
     # Prepares values for interpolation
     start_vector = material.flatten_rep()
@@ -480,20 +491,26 @@ def interpolate_part_changes(original_material: Metamaterial, material: Metamate
         # Stores the interpolated material
         materials.append(mat)
 
-    # Computes the final material with the edges changed
+    # Computes the final material with the edges/faces changed
     final_material = mid_material.copy()
     for change in part_changes:
 
         # Handles an edge change
-        n1,n2,is_removal = change
-        final_material.edge_adj[edge_adj_index(n1,n2)] = 0 if is_removal else 1
+        if len(change) == 3:
+            n1,n2,is_removal = change
+            final_material.edge_adj[edge_adj_index(n1,n2)] = 0 if is_removal else 1
+            continue
+
+        # Handles a face change
+        n1,n2,n3,is_removal = change
+        final_material.face_adj[face_adj_index(n1,n2,n3)] = 0 if is_removal else 1
 
     return final_material, materials
 
 
 def smooth_interpolation(material1: Metamaterial, material2: Metamaterial) -> list[Metamaterial]:
 
-    # Stores the materials' adjacency matrices
+    # Stores the materials' edge adjacency matrices
     edge_adj_matrix1 = material1.get_edge_adj_matrix().astype(np.int8)
     edge_adj_matrix2 = material2.get_edge_adj_matrix().astype(np.int8)
 
@@ -506,9 +523,17 @@ def smooth_interpolation(material1: Metamaterial, material2: Metamaterial) -> li
         node_order[n1], node_order[n2] = node_order[n2], node_order[n1]
     material1 = material1.reorder_nodes(node_order)
 
-    # Computes the relevant subgraph adjacency matrices
+    # Computes the relevant subgraph edge adjacency matrices
     removed_edge_adj = ((edge_adj_matrix1 - edge_adj_matrix2) == 1).astype(np.int8)
     added_edge_adj = ((edge_adj_matrix2 - edge_adj_matrix1) == 1).astype(np.int8)
+
+    # Stores the materials' face adjacency matrices
+    face_adj_tensor1 = material1.get_face_adj_tensor().astype(np.int8)
+    face_adj_tensor2 = material2.get_face_adj_tensor().astype(np.int8)
+
+    # Computes the relevant subgraph face adjacency matrices
+    removed_face_adj = ((face_adj_tensor1 - face_adj_tensor2) == 1).astype(np.int8)
+    added_face_adj = ((face_adj_tensor2 - face_adj_tensor1) == 1).astype(np.int8)
 
     # Makes material copies to avoid unintended mutations
     start_material = material1.copy()
@@ -516,8 +541,10 @@ def smooth_interpolation(material1: Metamaterial, material2: Metamaterial) -> li
 
     # Finds each edge/face removal/addition
     part_changes = (
-        [(n1,n2,False) for n1 in range(NUM_NODES) for n2 in range(n1+1, NUM_NODES) if added_edge_adj[n1,n2]] +
-        [(n1,n2,True) for n1 in range(NUM_NODES) for n2 in range(n1+1, NUM_NODES) if removed_edge_adj[n1,n2]]
+        [(n1,n2,False)     for n1 in range(NUM_NODES)  for n2 in range(n1+1, NUM_NODES)                                   if added_edge_adj[n1,n2]     ] +
+        [(n1,n2,n3,False)  for n1 in range(NUM_NODES)  for n2 in range(n1+1, NUM_NODES)  for n3 in range(n2+1, NUM_NODES) if added_face_adj[n1,n2,n3]  ] +
+        [(n1,n2,True)      for n1 in range(NUM_NODES)  for n2 in range(n1+1, NUM_NODES)                                   if removed_edge_adj[n1,n2]   ] +
+        [(n1,n2,n3,True)   for n1 in range(NUM_NODES)  for n2 in range(n1+1, NUM_NODES)  for n3 in range(n2+1, NUM_NODES) if removed_face_adj[n1,n2,n3]]
     )
 
     # Runs parallelizable part changes concurrently
@@ -532,22 +559,34 @@ def smooth_interpolation(material1: Metamaterial, material2: Metamaterial) -> li
         # Runs through each edge change
         for i, change in enumerate(part_changes):
 
-            # Stores the change parameters
-            n1,n2,_ = change
+            # Stores the edge change parameters
+            if len(change) == 3:
+                n1,n2,_ = change
+                n3 = n2
+            
+            # Stores the face change parameters
+            else:
+                n1,n2,n3,_ = change
 
             # Skips changes affecting already target nodes
-            if n1 in seen_nodes or n2 in seen_nodes:
+            if n1 in seen_nodes or n2 in seen_nodes or n3 in seen_nodes:
                 continue
 
             # Skips currently disconnected nodes
-            if n1 not in connected_nodes and n2 not in connected_nodes:
+            if n1 not in connected_nodes and n2 not in connected_nodes and n3 not in connected_nodes:
                 continue
 
-            # Keeps track of the affected nodes
+            # Keeps track of the seen nodes
             seen_nodes.add(n1)
             seen_nodes.add(n2)
+            seen_nodes.add(n3)
+
+            # Keeps track of the nodes connected to the main graph
             connected_nodes.add(n1)
             connected_nodes.add(n2)
+            connected_nodes.add(n3)
+
+            # Stores this change as a change to make in the correct order
             changed_indices.append(i)
 
         # Stores all changes in this group
@@ -555,9 +594,11 @@ def smooth_interpolation(material1: Metamaterial, material2: Metamaterial) -> li
         for i in changed_indices[-1::-1]:
             part_changes.pop(i)
 
-    # Computes properties about the aggregate node positions
+    # Stores the number of active nodes in the materials
     mat1_nodes = material1.active_nodes()
     mat2_nodes = material2.active_nodes()
+
+    # Stores the materials' node positions
     mat1_node_pos = material1.node_pos.copy()
     mat2_node_pos = material2.node_pos.copy()
 
@@ -579,7 +620,7 @@ def smooth_interpolation(material1: Metamaterial, material2: Metamaterial) -> li
         # Stores the updated node positions
         material2.node_pos = mat2_node_pos
 
-    # Stores each material's Euclidean coordinates
+    # Stores each material's node positions in Euclidean space
     mat1_euclidean = pseudo_spherical_to_euclidean(mat1_node_pos.reshape((-1,3)))
     mat2_euclidean = pseudo_spherical_to_euclidean(mat2_node_pos.reshape((-1,3)))
 
@@ -635,13 +676,21 @@ def smooth_interpolation(material1: Metamaterial, material2: Metamaterial) -> li
     # Executes each edge change
     materials = []
     for i,changes in enumerate(part_change_groups):
+
+        # Stores the edge lengths to use for this interpolation
         next_edge_lengths = edge_lengths[i*FRAMES_PER_STEP : (i+1)*FRAMES_PER_STEP+1]
+
+        # Computes the interpolation
         start_material, next_materials = interpolate_part_changes(material1, start_material, changes, node_positions[0], edge_params[0], next_edge_lengths)
+
+        # Moves on to the next target properties
         node_positions = node_positions[1:]
         edge_params = edge_params[1:]
+
+        # Stores the interpolated materials
         materials.extend(next_materials[:-1])
 
-    # Interpolates everything else if no changes were made
+    # Computes the final, non-edge/face changing interpolation
     start_vector = start_material.flatten_rep()
     end_vector = material2.flatten_rep()
     for i,alpha in enumerate(alpha_gen(FRAMES_PER_STEP)):
@@ -649,7 +698,7 @@ def smooth_interpolation(material1: Metamaterial, material2: Metamaterial) -> li
         # Creates the interpolated material
         mat: Metamaterial = Metamaterial.from_tensor(start_vector*(1-alpha) + end_vector*alpha)
 
-        # Rotates the edge parameters according to the change since the last material
+        # Rotates the edge parameters
         used_edge_lengths = edge_lengths[len(part_change_groups) * FRAMES_PER_STEP + i]
         rotate_material_edge_params(material1, mat, used_edge_lengths, invert_angle=True)
 
