@@ -29,9 +29,20 @@ face_adj = np.zeros(FACE_ADJ_SIZE)
 face_params = np.zeros(FACE_PARAMS_SIZE)
 
 # Computes the edge/face parameters of the metamaterial
-n1 = 6
-for n2 in range(6):
-    n3 = (n2+1)%6
+n3 = 6
+for n1 in range(6):
+    n2 = (n1+1)%6
+    n1,n2 = sorted((n1,n2))
+
+    # Computes the edge adjacency indices
+    edge1_index = edge_adj_index(n1, n2)
+    edge2_index = edge_adj_index(n1, n3)
+    edge3_index = edge_adj_index(n2, n3)
+
+    # Sets up the edge adjacencies
+    edge_adj[edge1_index] = 1
+    edge_adj[edge2_index] = 1
+    edge_adj[edge3_index] = 1
 
     # Sets up the face adjacency
     face_index = face_adj_index(n1, n2, n3)
@@ -45,14 +56,16 @@ for n2 in range(6):
     face_params[face_index : face_index + FACE_BEZIER_COORDS] = fit_face_params
 
     # Computes the edge parameter indices
-    edge1_index = edge_adj_index(n1, n2) * EDGE_BEZIER_COORDS
-    edge2_index = edge_adj_index(n1, n3) * EDGE_BEZIER_COORDS
-    edge3_index = edge_adj_index(n2, n3) * EDGE_BEZIER_COORDS
+    edge1_index *= EDGE_BEZIER_COORDS
+    edge2_index *= EDGE_BEZIER_COORDS
+    edge3_index *= EDGE_BEZIER_COORDS
 
     # Stores the edge parameters
     edge_params[edge1_index : edge1_index + EDGE_BEZIER_COORDS] = fit_edge1_params
     edge_params[edge2_index : edge2_index + EDGE_BEZIER_COORDS] = fit_edge2_params
     edge_params[edge3_index : edge3_index + EDGE_BEZIER_COORDS] = fit_edge3_params
+
+    print()
 
 # Creates the metamaterial
 HEXAGON_SHELL = Metamaterial(node_pos, edge_adj, edge_params, face_adj, face_params, thickness=0.4)
