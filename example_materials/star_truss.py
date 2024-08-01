@@ -41,6 +41,7 @@ edge_nodes = [
 for n1, n2 in edge_nodes:
 
     # Sets up the edge adjacency
+    n1,n2 = sorted((n1,n2))
     edge_index = edge_adj_index(n1, n2)
     edge_adj[edge_index] = 1
     edge_index *= EDGE_BEZIER_COORDS
