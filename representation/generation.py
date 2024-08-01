@@ -579,21 +579,29 @@ def smooth_interpolation(material1: Metamaterial, material2: Metamaterial) -> li
         # Stores the updated node positions
         material2.node_pos = mat2_node_pos
 
-    # Computes the edge lengths across interpolation
-    edge_lengths = np.zeros((0,EDGE_ADJ_SIZE))
-    for alpha in alpha_gen((len(part_change_groups)+1)*FRAMES_PER_STEP):
+    # Stores each material's Euclidean coordinates
+    mat1_euclidean = pseudo_spherical_to_euclidean(mat1_node_pos.reshape((-1,3)))
+    mat2_euclidean = pseudo_spherical_to_euclidean(mat2_node_pos.reshape((-1,3)))
 
-        # Stores each interpolated node position in Euclidean coordinates
-        interpolated_coords = mat1_node_pos * (1-alpha) + mat2_node_pos * alpha
-        euclidean_coords = pseudo_spherical_to_euclidean(interpolated_coords.reshape((-1,3)))
+    # Stores material1's edge lengths
+    mat1_edge_lengths = np.array([
+        np.sqrt( ((mat1_euclidean[n1] - mat1_euclidean[n2])**2).sum() )
+            for n1 in range(NUM_NODES)
+                for n2 in range(n1+1, NUM_NODES)
+    ])
 
-        # Stores each edge length
-        next_edge_lengths = np.array([[
-            np.sqrt( ((euclidean_coords[n1] - euclidean_coords[n2])**2).sum() )
-                for n1 in range(NUM_NODES)
-                    for n2 in range(n1+1, NUM_NODES)
-        ]])
-        edge_lengths = np.concatenate([edge_lengths, next_edge_lengths], axis=0)
+    # Stores material2's edge lengths
+    mat2_edge_lengths = np.array([
+        np.sqrt( ((mat2_euclidean[n1] - mat2_euclidean[n2])**2).sum() )
+            for n1 in range(NUM_NODES)
+                for n2 in range(n1+1, NUM_NODES)
+    ])
+
+    # Stores the interpolated edge lengths
+    edge_lengths = np.concatenate([
+        [mat1_edge_lengths * (1-alpha) + mat2_edge_lengths * alpha]
+            for alpha in alpha_gen((len(part_change_groups)+1)*FRAMES_PER_STEP)
+    ], axis=0)
 
     # Rotates material2's edge parameters
     rotate_material_edge_params(material1, material2, edge_lengths[-1])

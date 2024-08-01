@@ -38,15 +38,15 @@ for n1 in range(12):
 
     # Computes straight edge parameters for the snowflake tips
     if (n2 // 2) % 2 == 1:
-        fit_edge_params = flat_edge_params(node_positions[n1], node_positions[n2])
+        fit_edge_params = flat_edge_params(node_positions[min(n1,n2)], node_positions[max(n1,n2)])
     
     # Computed curved edge parameters for non-tips
     elif n1 % 4 == 0:
-        pull_point = node_positions[n1].copy()
+        pull_point = node_positions[n1].copy() - node_positions[min(n1,n2)]
         pull_point[(n1//4)%3] -= 0.25
         fit_edge_params = np.concatenate([pull_point] * EDGE_BEZIER_POINTS).flatten()
     elif n2 % 4 == 0:
-        pull_point = node_positions[n2].copy()
+        pull_point = node_positions[n2].copy() - node_positions[min(n1,n2)]
         pull_point[(n2//4+1)%3] -= 0.25
         fit_edge_params = np.concatenate([pull_point] * EDGE_BEZIER_POINTS).flatten()
 
