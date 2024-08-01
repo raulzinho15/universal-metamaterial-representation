@@ -381,7 +381,7 @@ def minimize_node_distance(node_pos1: np.ndarray, node_pos2: np.ndarray) -> np.n
     return new_node_pos
 
 
-def rotate_material_edge_params(material1: Metamaterial, material2: Metamaterial, invert_angle=False) -> Metamaterial:
+def rotate_material_edge_params(material1: Metamaterial, material2: Metamaterial, edge_lengths: np.ndarray, invert_angle=False) -> Metamaterial:
     """
     Rotates the edge parameters in material2 to be in the coordinates
     of the edge parameters in material1. Does mutate material2.
@@ -422,7 +422,7 @@ def rotate_material_edge_params(material1: Metamaterial, material2: Metamaterial
 
             # Scales the edge parameters
             edge_index = edge_adj_index(n1,n2) * EDGE_BEZIER_COORDS
-            material2.edge_params[edge_index : edge_index + EDGE_BEZIER_COORDS] *= mat2_edge_len/mat1_edge_len
+            material2.edge_params[edge_index : edge_index + EDGE_BEZIER_COORDS] *= mat2_edge_len / edge_lengths[edge_adj_index(n1,n2)]
 
             # Rotates material2's edge parameters
             material2.rotate_edge_params(n1, n2, rotation_axis, rotation_angle)
@@ -434,7 +434,7 @@ def alpha_gen(num):
         yield i/(num-1)
 
 
-def interpolate_part_changes(original_material: Metamaterial, material: Metamaterial, part_changes: list[tuple[int]], end_node_pos: np.ndarray, end_edge_params: np.ndarray) -> tuple[Metamaterial, list[Metamaterial]]:
+def interpolate_part_changes(original_material: Metamaterial, material: Metamaterial, part_changes: list[tuple[int|bool]], end_node_pos: np.ndarray, end_edge_params: np.ndarray, edge_lengths: np.ndarray) -> tuple[Metamaterial, list[Metamaterial]]:
 
     # Computes copies for non-mutation
     mid_material = material.copy()
@@ -469,13 +469,13 @@ def interpolate_part_changes(original_material: Metamaterial, material: Metamate
 
     # Generates the interpolated materials
     materials: list[Metamaterial] = []
-    for alpha in alpha_gen(FRAMES_PER_STEP+1):
+    for i,alpha in enumerate(alpha_gen(FRAMES_PER_STEP+1)):
 
         # Creates the interpolated material
         mat: Metamaterial = Metamaterial.from_tensor(start_vector*(1-alpha) + end_vector*alpha)
 
         # Rotates the edge parameters according to the change since the last material
-        rotate_material_edge_params(original_material, mat, invert_angle=True)
+        rotate_material_edge_params(original_material, mat, edge_lengths[i], invert_angle=True)
 
         # Stores the interpolated material
         materials.append(mat)
@@ -513,9 +513,6 @@ def smooth_interpolation(material1: Metamaterial, material2: Metamaterial) -> li
     # Makes material copies to avoid unintended mutations
     start_material = material1.copy()
     material2 = material2.copy()
-
-    # Rotates material2's edge parameters
-    rotate_material_edge_params(material1, material2)
 
     # Finds each edge/face removal/addition
     part_changes = (
@@ -582,6 +579,25 @@ def smooth_interpolation(material1: Metamaterial, material2: Metamaterial) -> li
         # Stores the updated node positions
         material2.node_pos = mat2_node_pos
 
+    # Computes the edge lengths across interpolation
+    edge_lengths = np.zeros((0,EDGE_ADJ_SIZE))
+    for alpha in alpha_gen((len(part_change_groups)+1)*FRAMES_PER_STEP):
+
+        # Stores each interpolated node position in Euclidean coordinates
+        interpolated_coords = mat1_node_pos * (1-alpha) + mat2_node_pos * alpha
+        euclidean_coords = pseudo_spherical_to_euclidean(interpolated_coords.reshape((-1,3)))
+
+        # Stores each edge length
+        next_edge_lengths = np.array([[
+            np.sqrt( ((euclidean_coords[n1] - euclidean_coords[n2])**2).sum() )
+                for n1 in range(NUM_NODES)
+                    for n2 in range(n1+1, NUM_NODES)
+        ]])
+        edge_lengths = np.concatenate([edge_lengths, next_edge_lengths], axis=0)
+
+    # Rotates material2's edge parameters
+    rotate_material_edge_params(material1, material2, edge_lengths[-1])
+
     # Computes properties about the edge parameters
     mat1_edge_params = material1.edge_params.copy()
     mat2_edge_params = material2.edge_params.copy()
@@ -610,8 +626,9 @@ def smooth_interpolation(material1: Metamaterial, material2: Metamaterial) -> li
 
     # Executes each edge change
     materials = []
-    for changes in part_change_groups:
-        start_material, next_materials = interpolate_part_changes(material1, start_material, changes, node_positions[0], edge_params[0])
+    for i,changes in enumerate(part_change_groups):
+        next_edge_lengths = edge_lengths[i*FRAMES_PER_STEP : (i+1)*FRAMES_PER_STEP+1]
+        start_material, next_materials = interpolate_part_changes(material1, start_material, changes, node_positions[0], edge_params[0], next_edge_lengths)
         node_positions = node_positions[1:]
         edge_params = edge_params[1:]
         materials.extend(next_materials[:-1])
@@ -619,13 +636,14 @@ def smooth_interpolation(material1: Metamaterial, material2: Metamaterial) -> li
     # Interpolates everything else if no changes were made
     start_vector = start_material.flatten_rep()
     end_vector = material2.flatten_rep()
-    for alpha in alpha_gen(FRAMES_PER_STEP):
+    for i,alpha in enumerate(alpha_gen(FRAMES_PER_STEP)):
 
         # Creates the interpolated material
         mat: Metamaterial = Metamaterial.from_tensor(start_vector*(1-alpha) + end_vector*alpha)
 
         # Rotates the edge parameters according to the change since the last material
-        rotate_material_edge_params(material1, mat, invert_angle=True)
+        used_edge_lengths = edge_lengths[len(part_change_groups) * FRAMES_PER_STEP + i]
+        rotate_material_edge_params(material1, mat, used_edge_lengths, invert_angle=True)
 
         # Stores the interpolated material
         materials.append(mat)
