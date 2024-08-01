@@ -945,13 +945,13 @@ class Metamaterial:
         return pair
     
 
-    def active_nodes(self) -> int:
+    def active_nodes(self):
         """
         Computes the number of nodes used by edges and faces in
         this metamaterial.
 
-        Returns: `int`
-            The number of nodes used by edges and faces in this
+        Returns: `set`
+            The nodes used by edges and faces in this
             metamaterial.
         """
 
@@ -974,7 +974,7 @@ class Metamaterial:
                         nodes.add(n2)
                         nodes.add(n3)
 
-        return len(nodes)
+        return nodes
     
 
     def flatten_rep(self, pad_dim=False) -> torch.Tensor:
