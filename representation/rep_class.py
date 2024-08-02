@@ -561,7 +561,7 @@ class Metamaterial:
         return False
     
 
-    def get_face_params(self, node1: int, node2: int, node3) -> np.ndarray:
+    def get_face_params(self, node1: int, node2: int, node3: int, transform=True) -> np.ndarray:
         """
         Gets the parameters of the face between the three given nodes.
 
@@ -574,13 +574,22 @@ class Metamaterial:
         node3: int
             The ID of the third node of the face.
 
+        transform: `bool`, optional
+            Whether the edge's parameters will have transformations applied.
+
         Returns: np.ndarray
             The face parameters of the face if it exists, otherwise `None`.
         """
 
         # Retrieves the face parameters
         face_index = face_adj_index(node1, node2, node3) * FACE_BEZIER_COORDS
-        return self.transform_points(self.face_params[face_index : face_index + FACE_BEZIER_COORDS])
+        face_params = self.face_params[face_index : face_index + FACE_BEZIER_COORDS]
+
+        # Applies a transformation, if applicable
+        if transform:
+            face_params = self.transform_points(face_params)
+
+        return face_params
 
 
     def get_face_adj_tensor(self) -> np.ndarray:

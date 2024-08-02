@@ -80,17 +80,16 @@ def rotate_material_edge_params(material1: Metamaterial, material2: Metamaterial
         for n2 in range(n1+1, NUM_NODES):
             
             # Stores the ordering of nodes
-            mat1_node1,mat1_node2 = sorted((n1, n2))
-            mat2_node1,mat2_node2 = sorted((n1, n2))
+            node1,node2 = sorted((n1, n2))
 
             # Stores the material1 edge vector
-            mat1_node1_pos = material1.get_node_position(mat1_node1, transform=False)
-            mat1_node2_pos = material1.get_node_position(mat1_node2, transform=False)
+            mat1_node1_pos = material1.get_node_position(node1, transform=False)
+            mat1_node2_pos = material1.get_node_position(node2, transform=False)
             mat1_edge = mat1_node2_pos - mat1_node1_pos
 
             # Stores the material2 edge vector
-            mat2_node1_pos = material2.get_node_position(mat2_node1, transform=False)
-            mat2_node2_pos = material2.get_node_position(mat2_node2, transform=False)
+            mat2_node1_pos = material2.get_node_position(node1, transform=False)
+            mat2_node2_pos = material2.get_node_position(node2, transform=False)
             mat2_edge = mat2_node2_pos - mat2_node1_pos
 
             # Stores the axis of rotation
@@ -113,7 +112,60 @@ def rotate_material_edge_params(material1: Metamaterial, material2: Metamaterial
             material2.edge_params[edge_index : edge_index + EDGE_BEZIER_COORDS] *= mat2_edge_len / edge_lengths[edge_adj_index(n1,n2)]
 
             # Rotates material2's edge parameters
-            material2.rotate_edge_params(n1, n2, rotation_axis, rotation_angle)
+            material2.rotate_edge_params(node1, node2, rotation_axis, rotation_angle)
+
+
+def transform_material_face_params(material1: Metamaterial, material2: Metamaterial, invert=False) -> Metamaterial:
+    """
+    Transforms the face parameters in material2 to be in the coordinates
+    of the face parameters in material1. Does mutate material2.
+    """
+
+    # Runs through each face
+    for n1 in range(NUM_NODES):
+        for n2 in range(n1+1, NUM_NODES):
+            for n3 in range(n2+1, NUM_NODES):
+
+                # Sorts the nodes
+                node1,node2,node3 = sorted((n1,n2,n3))
+
+                # Stores the material1 edge vectors
+                mat1_node1_pos = material1.get_node_position(node1, transform=False)
+                mat1_node2_pos = material1.get_node_position(node2, transform=False)
+                mat1_node3_pos = material1.get_node_position(node3, transform=False)
+                mat1_edge1 = mat1_node2_pos - mat1_node1_pos
+                mat1_edge2 = mat1_node3_pos - mat1_node1_pos
+
+                # Constructs the material1 coordinate transformation matrix
+                mat1_z_axis = np.cross(mat1_edge1, mat1_edge2)
+                mat1_matrix = np.stack([mat1_edge1, mat1_edge2, mat1_z_axis], axis=1)
+
+                # Stores the material2 edge vectors
+                mat2_node1_pos = material2.get_node_position(node1, transform=False)
+                mat2_node2_pos = material2.get_node_position(node2, transform=False)
+                mat2_node3_pos = material2.get_node_position(node3, transform=False)
+                mat2_edge1 = mat2_node2_pos - mat2_node1_pos
+                mat2_edge2 = mat2_node3_pos - mat2_node1_pos
+
+                # Constructs the material1 coordinate transformation matrix
+                mat2_z_axis = np.cross(mat2_edge1, mat2_edge2)
+                mat2_matrix = np.stack([mat2_edge1, mat2_edge2, mat2_z_axis], axis=1)
+
+                # Computes the transformation
+                old_face_params = material2.get_face_params(node1, node2, node3).reshape((-1,3)).T
+                try:
+                    if invert:
+                        new_face_params = np.linalg.solve(mat1_matrix, old_face_params)
+                        new_face_params = mat2_matrix @ new_face_params
+                    else:
+                        new_face_params = np.linalg.solve(mat2_matrix, old_face_params)
+                        new_face_params = mat1_matrix @ new_face_params
+                except:
+                    new_face_params = np.zeros((FACE_BEZIER_POINTS,3))
+
+                # Stores the new face parameters
+                face_index = face_adj_index(node1, node2, node3) * FACE_BEZIER_COORDS
+                material2.face_params[face_index : face_index+FACE_BEZIER_COORDS] = new_face_params.T.flatten()
 
 
 # Computes values for alpha for interpolation
