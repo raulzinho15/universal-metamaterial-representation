@@ -822,10 +822,3 @@ def smooth_interpolation(material1: Metamaterial, material2: Metamaterial) -> li
 
     return materials
 
-
-    # Change bezier coordinates to be relative to the point along the straight edge/face
-    # that the coordinates are currently at
-    # This will ensure that edge/face parameters interpolate smoothly as node positions
-    # move around, since the axis/plane on which the bezier coordinates will be based on
-    # will rotate with the nodes
-
