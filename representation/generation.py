@@ -8,7 +8,7 @@ from representation.utils import *
 from autoencoder.autoencoder import *
 
 
-FRAMES_PER_STEP = 40
+FRAMES_PER_STEP = 10
 
 
 def random_metamaterial(edge_prob=0.5, face_prob=0.5, grid_spacing=None, connected=False, cyclic=False, wavy_edges=False, validate=False):
