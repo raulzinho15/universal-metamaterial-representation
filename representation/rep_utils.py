@@ -2,7 +2,7 @@ import numpy as np
 from math import factorial
 
 # User-controlled properties
-NUM_NODES = 12 # Non-center nodes plus the single center node
+NUM_NODES = 13 # Non-center nodes plus the single center node
 EDGE_BEZIER_POINTS = 2 # The number of points to describe curved edges
 EDGE_SEGMENTS = 32 # The number of segments to use to mesh edges/faces
 CUBE_CENTER = np.ones(3)/2 # The center of the metamaterial cube
@@ -19,128 +19,6 @@ FACE_BEZIER_POINTS = EDGE_BEZIER_POINTS * (EDGE_BEZIER_POINTS-1) // 2 # The numb
 FACE_BEZIER_COORDS = FACE_BEZIER_POINTS * 3 # The number of face curvature parameters per face
 FACE_PARAMS_SIZE = FACE_ADJ_SIZE * FACE_BEZIER_COORDS # The total number of face curvature parameters
 REP_SIZE = NODE_POS_SIZE + EDGE_ADJ_SIZE + EDGE_PARAMS_SIZE + FACE_ADJ_SIZE + FACE_PARAMS_SIZE + 1 # The total number of parameters in the representation
-
-
-def euclidean_to_spherical(x: float, y: float, z: float) -> np.ndarray:
-    """
-    Converts the given x,y,z Euclidian triplet into spherical coordinates.
-
-    x: float
-        The x-coordinate to be converted.
-
-    y: float
-        The y-coordinate to be converted.
-
-    z: float
-        The z-coordinate to be converted.
-
-    Returns: ndarray
-        The first entry is the angle off the z-axis, normalized to [0,1].
-        The second entry is the angle on the xy plane, normalized to [0,1].
-        If the input coordinate is too close to (0,0,0), returns (0,0).
-    """
-
-    # Computes the radial distance from the center
-    radius = np.sqrt(x**2 + y**2 + z**2)
-
-    # Checks for a non-collapsed radius
-    if radius < 1e-4:
-        return np.zeros(2)
-    
-    # Computes the angles in spherical coordinates
-    theta = np.arccos(z/radius)
-    if np.abs(np.sin(theta)) < 1e-4:
-        phi = 0
-    else:
-        phi = np.arctan2(y/np.sin(theta)/radius, x/np.sin(theta)/radius)
-        phi = phi if phi >= 0 else phi+2*np.pi
-
-    return np.array([theta/np.pi, phi/(2*np.pi)])
-
-
-def spherical_to_euclidean(theta, phi, radius=None) -> np.ndarray:
-    """
-    Converts the given spherical coordinates into Euclidian coordinates.
-
-    theta: float or ndarray
-        The angle off the z-axis, [0, pi].
-
-    phi: float or ndarray
-        The angle on the xy plane, [0, 2pi].
-
-    radius: float or ndarray or None
-        The radius from the spherical center. If None, then
-        assumed to be 1.
- 
-    Returns: ndarray
-        The first entry is the x-coordinate of the point.
-        The second entry is the y-coordinate of the point.
-        The third entry is the z-coordinate of the point.
-    """
-
-    # Fixes the radius if needed
-    if radius is None:
-        if type(theta) == np.ndarray:
-            radius = np.ones(theta.shape)
-        else:
-            radius = 1.
-
-    # Computes the Euclidian coordinates
-    x = radius * np.sin(theta) * np.cos(phi)
-    y = radius * np.sin(theta) * np.sin(phi)
-    z = radius * np.cos(theta)
-
-    return np.array([x,y,z])
-
-
-def project_onto_cube(x: float, y: float, z: float, grid_lines=0, bias_cutoff=1) -> np.ndarray:
-    """
-    Projects the given coordinates onto the surface of the unit cube
-    centered at (0.5, 0.5, 0.5).
-
-    x: float
-        The x-coordinate to project.
-
-    y: float
-        The y-coordinate to project.
-
-    z: float
-        The z-coordinate to project.
-
-    grid_lines: int
-        How many grid lines to bias the points toward. If is 0, no biasing
-        will occur. Must be at least 2 for biasing.
-
-    bias_cutoff: float
-        The cutoff of how proportionally far from the grid center a node must
-        be before it is biased.
-
-    Returns: ndarray
-        The points projected onto the surface of the unit cube.
-    """
-
-    # Projects onto the cube
-    pos = np.array([x,y,z])
-    pos /= np.max(np.abs(pos))
-    pos = (pos + np.ones(3)) / 2
-
-    # Biases the points toward the grid lines
-    if grid_lines:
-
-        # Gets the distance of the node from the center of a grid square
-        grid_lines -= 1
-        dr = (pos*grid_lines) % 1
-        
-        # Computes whether the node is in the bias threshold
-        cutoffs = np.abs(dr - 0.5) <= (0.5 * bias_cutoff)
-
-        # Computes the biased position of the node
-        scaled_pos_int = (pos*grid_lines)//1
-        normalized_grid_dist = (dr - (1-bias_cutoff)/2)/bias_cutoff
-        pos = cutoffs * (scaled_pos_int + normalized_grid_dist) + (1-cutoffs) * np.round(pos * grid_lines, decimals=0)
-        pos /= grid_lines
-
-    return pos
 
 
 def euclidean_to_pseudo_spherical(points: np.ndarray) -> np.ndarray:
