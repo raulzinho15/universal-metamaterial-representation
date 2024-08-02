@@ -722,10 +722,10 @@ def find_face_params(edge_params: np.ndarray | None, face_function):
 
     # Returns the correctly formatted parameters
     if edge_params is not None:
-        return inferred_params
+        return inferred_params - np.tile(node1_pos[0], FACE_BEZIER_POINTS)
     else:
         return (
-            inferred_params[-FACE_BEZIER_COORDS :],
+            inferred_params[-FACE_BEZIER_COORDS :] - np.tile(node1_pos[0], FACE_BEZIER_POINTS),
             inferred_params[: EDGE_BEZIER_COORDS] - np.tile(node1_pos[0], EDGE_BEZIER_POINTS),
             inferred_params[EDGE_BEZIER_COORDS : EDGE_BEZIER_COORDS*2] - np.tile(node1_pos[0], EDGE_BEZIER_POINTS),
             inferred_params[EDGE_BEZIER_COORDS*2 : -FACE_BEZIER_COORDS] - np.tile(node2_pos[0], EDGE_BEZIER_POINTS),
@@ -842,7 +842,7 @@ def sphere_octant_face_params(sphere_center: np.ndarray, node1_pos: np.ndarray, 
         parameter. Must have a node index in its metamaterial 
         between the other given nodes.
 
-    node1_pos: np.ndarray
+    node3_pos: np.ndarray
         The position of the node corresponding to the third Bezier
         parameter. Must have a node index in its metamaterial higher
         than the other given nodes.

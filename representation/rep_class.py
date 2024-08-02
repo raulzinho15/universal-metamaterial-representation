@@ -633,8 +633,7 @@ class Metamaterial:
         edge3_params = self.get_edge_params(node2, node3).reshape((EDGE_BEZIER_POINTS, 3)) + node2_pos
         
         # Stores the face parameters
-        face_params = self.get_face_params(node1, node2, node3).reshape((FACE_BEZIER_POINTS, 3))
-        face_params = (node1_pos + node2_pos + node3_pos) / 3 # Temporarily overrides to a flat face
+        face_params = self.get_face_params(node1, node2, node3).reshape((FACE_BEZIER_POINTS, 3)) + node1_pos
 
         # Appropriately structures all parameters for the Bezier curve
         bezier_params = np.concatenate([
@@ -878,6 +877,27 @@ class Metamaterial:
                 # Stores the flipped edge parameters
                 edge_index = edge_adj_index(inverse_mapping[n1], inverse_mapping[n2]) * EDGE_BEZIER_COORDS
                 reordered_edge_params[edge_index : edge_index+EDGE_BEZIER_COORDS] = flipped_edge_params
+
+        # Flips any necessary face parameters
+        for n1 in range(NUM_NODES):
+            for n2 in range(n1+1, NUM_NODES):
+                for n3 in range(n2+1, NUM_NODES):
+
+                    # Skips if a flip is not needed
+                    if inverse_mapping[n1] == min(inverse_mapping[n] for n in [n1,n2,n3]):
+                        continue
+
+                    # Computes the flip
+                    global_face_params = self.get_face_params(n1,n2,n3).reshape((-1,3)) + self.get_node_position(n1)[np.newaxis,:]
+                    if inverse_mapping[n2] < inverse_mapping[n3]:
+                        flipped_face_params = global_face_params - self.get_node_position(n2)[np.newaxis,:]
+                    else:
+                        flipped_face_params = global_face_params - self.get_node_position(n3)[np.newaxis,:]
+                    ########### IF MORE THAN ONE BEZIER FACE POINT IS USED, MUST CONSIDER HOW TO RE-PERMUTE THE PARAMETERS
+
+                    # Stores the flipped face parameters
+                    face_index = face_adj_index(inverse_mapping[n1], inverse_mapping[n2], inverse_mapping[n3]) * FACE_BEZIER_COORDS
+                    reordered_face_params[face_index : face_index+FACE_BEZIER_COORDS] = flipped_face_params
 
         # Creates the new metamaterial
         new_material = self.copy()
