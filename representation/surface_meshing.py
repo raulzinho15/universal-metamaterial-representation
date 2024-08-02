@@ -315,7 +315,6 @@ def generate_metamaterial_surface_mesh(material: Metamaterial) -> tuple[list[lis
 
     # Stores the nodes/edges that are used
     used_nodes = set()
-    used_edges = set()
 
     # Stores the vertices and faces
     vertices, faces = [], []
@@ -333,16 +332,6 @@ def generate_metamaterial_surface_mesh(material: Metamaterial) -> tuple[list[lis
                 if not material.face_is_displayed(n1, n2, n3):
                     continue
 
-                # Stores the used nodes
-                used_nodes.add(n1)
-                used_nodes.add(n2)
-                used_nodes.add(n3)
-
-                # Stores the used edges
-                used_edges.add((n1,n2))
-                used_edges.add((n1,n3))
-                used_edges.add((n2,n3))
-
                 # Computes the face's components
                 face_vertices, face_faces = generate_face_surface_mesh(material, n1, n2, n3)
 
@@ -355,7 +344,7 @@ def generate_metamaterial_surface_mesh(material: Metamaterial) -> tuple[list[lis
         for n2 in range(n1+1, NUM_NODES):
 
             # Skips nodes without an edge between them, except when this needs to be overriden
-            if (n1,n2) not in used_edges and not material.has_edge(n1, n2):
+            if not material.has_edge(n1, n2):
                 continue
 
             # Skips edges on non-displayed planes
