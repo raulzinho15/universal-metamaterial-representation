@@ -232,6 +232,9 @@ def interpolate_part_changes(original_material: Metamaterial, material: Metamate
         # Rotates the edge parameters according to the change since the last material
         rotate_material_edge_params(original_material, mat, edge_lengths[i], invert_angle=True)
 
+        # Transforms the face parameters similarly
+        transform_material_face_params(original_material, mat, invert=True)
+
         # Stores the interpolated material
         materials.append(mat)
 
@@ -277,6 +280,9 @@ def interpolate_part_changes(original_material: Metamaterial, material: Metamate
         # Rotates the edge parameters according to the change since the last material
         rotate_material_edge_params(original_material, mat, edge_lengths[FRAMES_PER_STEP+i], invert_angle=True)
 
+        # Transforms the face parameters similarly
+        transform_material_face_params(original_material, mat, invert=True)
+
         # Stores the interpolated material
         materials.append(mat)
 
@@ -286,8 +292,6 @@ def interpolate_part_changes(original_material: Metamaterial, material: Metamate
 def smooth_interpolation(material1: Metamaterial, material2: Metamaterial) -> list[Metamaterial]:
 
     ### TODO: Ensure that when edges/faces are removed, they do not form a disconnected component
-
-    ### TODO: Properly rotate face parameters when interpolating them
 
     # Stores the materials' edge adjacency matrices
     edge_adj_matrix1 = material1.get_edge_adj_matrix().astype(np.int8)
@@ -348,7 +352,7 @@ def smooth_interpolation(material1: Metamaterial, material2: Metamaterial) -> li
 
     # Runs parallelizable part changes concurrently
     part_change_groups = []
-    connected_nodes = all_active_nodes.copy()
+    connected_nodes = mat1_nodes.copy()
     while part_changes:
 
         # Stores values for the edge change groups
@@ -508,19 +512,47 @@ def smooth_interpolation(material1: Metamaterial, material2: Metamaterial) -> li
     for n1 in range(NUM_NODES):
         for n2 in range(n1+1, NUM_NODES):
 
+            # Stores the index of the edge parameters
+            edge_index = edge_adj_index(n1,n2) * EDGE_BEZIER_COORDS
+
             # Handles material1 uniquely having the edge
             if removed_edge_adj[n1,n2]:
-                edge_index = edge_adj_index(n1,n2) * EDGE_BEZIER_COORDS
                 mat2_edge_params[edge_index : edge_index + EDGE_BEZIER_COORDS] = material1.get_edge_params(n1,n2)
 
             # Handles material2 uniquely having the edge
             elif added_edge_adj[n1,n2]:
-                edge_index = edge_adj_index(n1,n2) * EDGE_BEZIER_COORDS
                 mat1_edge_params[edge_index : edge_index + EDGE_BEZIER_COORDS] = material2.get_edge_params(n1,n2)
 
     # Stores the updated edge parameters
     material1.edge_params = mat1_edge_params
     material2.edge_params = mat2_edge_params
+
+    # Transforms the face parameters similarly
+    transform_material_face_params(material1, material2)
+
+    # Computes properties about the face parameters
+    mat1_face_params = material1.face_params.copy()
+    mat2_face_params = material2.face_params.copy()
+
+    # Runs through each face
+    for n1 in range(NUM_NODES):
+        for n2 in range(n1+1, NUM_NODES):
+            for n3 in range(n2+1, NUM_NODES):
+                    
+                # Stores the index of the face parameters
+                face_index = face_adj_index(n1,n2,n3) * FACE_BEZIER_COORDS
+
+                # Handles material1 uniquely having the face
+                if removed_face_adj[n1,n2,n3]:
+                    mat2_face_params[face_index : face_index + FACE_BEZIER_COORDS] = material1.get_face_params(n1,n2,n3)
+
+                # Handles material2 uniquely having the face
+                elif added_face_adj[n1,n2,n3]:
+                    mat1_face_params[face_index : face_index + FACE_BEZIER_COORDS] = material2.get_face_params(n1,n2,n3)
+
+    # Stores the updated face parameters
+    material1.face_params = mat1_face_params
+    material2.face_params = mat2_face_params
 
     # Stores the starting material
     start_material = material1.copy()
@@ -557,6 +589,9 @@ def smooth_interpolation(material1: Metamaterial, material2: Metamaterial) -> li
 
         # Rotates the edge parameters
         rotate_material_edge_params(material1, mat, edge_lengths[i], invert_angle=True)
+
+        # Transforms the face parameters similarly
+        transform_material_face_params(material1, mat, invert=True)
 
         # Stores the interpolated material
         materials.append(mat)
