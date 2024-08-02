@@ -108,10 +108,20 @@ flat_face_nodes = [
 for n1, n2, n3 in flat_face_nodes:
     n1, n2, n3 = sorted((n1, n2, n3))
 
-    # Stores the edge indices
-    edge1_index = edge_adj_index(n1, n2) * EDGE_BEZIER_COORDS
-    edge2_index = edge_adj_index(n1, n3) * EDGE_BEZIER_COORDS
-    edge3_index = edge_adj_index(n2, n3) * EDGE_BEZIER_COORDS
+    # Computes the edge adjacency indices
+    edge1_index = edge_adj_index(n1, n2)
+    edge2_index = edge_adj_index(n1, n3)
+    edge3_index = edge_adj_index(n2, n3)
+
+    # Sets up the edge adjacencies
+    edge_adj[edge1_index] = 1
+    edge_adj[edge2_index] = 1
+    edge_adj[edge3_index] = 1
+
+    # Computes the edge parameter indices
+    edge1_index *= EDGE_BEZIER_COORDS
+    edge2_index *= EDGE_BEZIER_COORDS
+    edge3_index *= EDGE_BEZIER_COORDS
 
     # Retrieves the edge parameters
     edge1_params = edge_params[edge1_index : edge1_index+EDGE_BEZIER_COORDS].reshape((EDGE_BEZIER_POINTS, 3))
@@ -124,7 +134,7 @@ for n1, n2, n3 in flat_face_nodes:
     face_index *= FACE_BEZIER_COORDS
 
     # Stores the face parameters (only works when 1 face point)
-    face_params[face_index : face_index + FACE_BEZIER_COORDS] = triangle_center(node_positions[n1], node_positions[n2], node_positions[n3])
+    face_params[face_index : face_index + FACE_BEZIER_COORDS] = triangle_center(node_positions[n1], node_positions[n2], node_positions[n3]) - node_positions[n1]
 
 
 # Stores the sphere face-node pairings
@@ -137,6 +147,16 @@ sphere_face_nodes = [
 # Computes the sphere face adjacencies/parameters of the metamaterial
 for n1, n2, n3 in sphere_face_nodes:
 
+    # Computes the edge adjacency indices
+    edge1_index = edge_adj_index(n1, n2)
+    edge2_index = edge_adj_index(n1, n3)
+    edge3_index = edge_adj_index(n2, n3)
+
+    # Sets up the edge adjacencies
+    edge_adj[edge1_index] = 1
+    edge_adj[edge2_index] = 1
+    edge_adj[edge3_index] = 1
+
     # Sets up the face adjacency
     face_index = face_adj_index(n1, n2, n3)
     face_adj[face_index] = 1
@@ -148,7 +168,7 @@ for n1, n2, n3 in sphere_face_nodes:
     face_center = triangle_center(node_positions[n1], node_positions[n2], node_positions[n3])
 
     # Stores the face parameters (only works when 1 face point)
-    face_params[face_index : face_index + FACE_BEZIER_COORDS] = face_center + face_normal*0.5
+    face_params[face_index : face_index + FACE_BEZIER_COORDS] = face_center + face_normal*0.5 - node_positions[min(n1,n2,n3)]
 
 # Creates the metamaterial
 HOLE_BLOCK_SHELL = Metamaterial(node_pos, edge_adj, edge_params, face_adj, face_params, thickness=0.4)
