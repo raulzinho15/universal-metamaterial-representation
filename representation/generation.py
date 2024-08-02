@@ -866,7 +866,7 @@ def baseline_interpolation(material1: Metamaterial, material2: Metamaterial, ste
             # Handles setting the threshold for a face change
             else:
                 face_index = face_adj_index(*change)
-                material.edge_adj[face_index] = material2.has_face(*change) if alpha > threshold else material1.has_face(*change)
+                material.face_adj[face_index] = material2.has_face(*change) if alpha > threshold else material1.has_face(*change)
 
         # Stores the interpolated material
         materials.append(material)
