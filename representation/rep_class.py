@@ -72,12 +72,6 @@ class Metamaterial:
         # Stores already-computed node positions on the cube for computation speed-up
         self.cube_pos = {}
 
-        # Stores the mapping from the original node ordering to the
-        # new space of new ordering, if a node reordering was applied
-        # Meaning: original node node_ordering[i] is now mapped to current node i
-        # (same definition as in the reorder_nodes() function)
-        self.node_ordering = [i for i in range(NUM_NODES)] # Default: each node maps to itself
-
 
     def transform_points(self, points: np.ndarray) -> np.ndarray:
         """
@@ -505,7 +499,7 @@ class Metamaterial:
         """
 
         # Computes the edge's nodes' positions
-        node1, node2 = sorted((node1, node2), key=lambda n: self.node_ordering[n])
+        node1, node2 = sorted((node1, node2))
         node1_pos = self.get_node_position(node1)[np.newaxis,:]
         node2_pos = self.get_node_position(node2)[np.newaxis,:]
         
@@ -628,7 +622,7 @@ class Metamaterial:
             return None
 
         # Stores the node positions
-        node1, node2, node3 = sorted((node1, node2, node3), key=lambda n: self.node_ordering[n])
+        node1, node2, node3 = sorted((node1, node2, node3))
         node1_pos = self.get_node_position(node1)[np.newaxis, :]
         node2_pos = self.get_node_position(node2)[np.newaxis, :]
         node3_pos = self.get_node_position(node3)[np.newaxis, :]
@@ -818,12 +812,13 @@ class Metamaterial:
 
     def reorder_nodes(self, node_order: list[int]):
         """
-        Reorders the nodes in the metamaterial. Does not mutate this metamaterial.
+        Reorders the nodes in the metamaterial. Does NOT mutate this metamaterial.
 
         node_order: list or tuple
             The new ordering of the nodes, where for each node_order[i] = j,
             the j-th current node of the metamaterial will become the i-th
             node of the reordered metamaterial.
+            In simple terms, this maps the new node ID to the old node ID.
 
         Returns: Metamaterial
             The metamaterial with the reordered nodes.
@@ -862,13 +857,37 @@ class Metamaterial:
                     old_index = face_adj_index(node_order[n1], node_order[n2], node_order[n3]) * FACE_BEZIER_COORDS
                     reordered_face_params[reordered_index:reordered_index+FACE_BEZIER_COORDS] = self.face_params[old_index:old_index+FACE_BEZIER_COORDS]
 
-        # Stores the original node mapping to the new node space
-        new_ordering = [0] * NUM_NODES
-        for n in range(NUM_NODES):
-            new_ordering[n] = self.node_ordering[node_order[n]]
-        self.node_ordering = new_ordering
+        # Computes the inverse node mapping (maps old node # to new node #)
+        inverse_mapping = [0] * NUM_NODES
+        for node in range(NUM_NODES):
+            inverse_mapping[node_order[node]] = node
 
-        return Metamaterial(reordered_node_pos, reordered_edge_adj, reordered_edge_params, reordered_face_adj, reordered_face_params, thickness=self.thickness)
+        # Flips any necessary edge parameters
+        for n1 in range(NUM_NODES):
+            for n2 in range(n1+1, NUM_NODES):
+
+                # Skips if a flip is not needed
+                if inverse_mapping[n1] < inverse_mapping[n2]:
+                    continue
+
+                # Computes the flip
+                global_edge_params = self.get_edge_params(n1,n2).reshape((-1,3)) + self.get_node_position(n1)[np.newaxis,:]
+                flipped_edge_params = global_edge_params - self.get_node_position(n2)[np.newaxis,:]
+                flipped_edge_params = flipped_edge_params[::-1].flatten()
+
+                # Stores the flipped edge parameters
+                edge_index = edge_adj_index(inverse_mapping[n1], inverse_mapping[n2]) * EDGE_BEZIER_COORDS
+                reordered_edge_params[edge_index : edge_index+EDGE_BEZIER_COORDS] = flipped_edge_params
+
+        # Creates the new metamaterial
+        new_material = self.copy()
+        new_material.node_pos = reordered_node_pos
+        new_material.edge_adj = reordered_edge_adj
+        new_material.edge_params = reordered_edge_params
+        new_material.face_adj = reordered_face_adj
+        new_material.face_params = reordered_face_params
+
+        return new_material
 
 
     def sort_rep(self) -> Self:
