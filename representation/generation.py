@@ -1,6 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
-from random import random, choice
+from random import random, choice, shuffle
 
 from representation.rep_class import *
 from representation.rep_utils import *
@@ -821,4 +821,59 @@ def smooth_interpolation(material1: Metamaterial, material2: Metamaterial) -> li
         materials.append(mat)
 
     return materials
+
+
+def baseline_interpolation(material1: Metamaterial, material2: Metamaterial, steps: int) -> list[Metamaterial]:
+
+    # Stores the materials' edge adjacency matrices
+    edge_adj1 = material1.get_edge_adj_matrix()
+    edge_adj2 = material2.get_edge_adj_matrix()
+
+    # Stores the materials' face adjacency tensors
+    face_adj1 = material1.get_face_adj_tensor()
+    face_adj2 = material2.get_face_adj_tensor()
+
+    # Finds all the edge/face changes
+    edge_changes = np.abs(edge_adj1-edge_adj2) == 1
+    face_changes = np.abs(face_adj1-face_adj2) == 1
+
+    # Accumulates all the changes
+    part_changes = (
+        [(n1,n2)    for n1 in range(NUM_NODES)  for n2 in range(n1+1, NUM_NODES)                                    if edge_changes[n1,n2]   ] +
+        [(n1,n2,n3) for n1 in range(NUM_NODES)  for n2 in range(n1+1, NUM_NODES)  for n3 in range(n2+1, NUM_NODES)  if face_changes[n1,n2,n3]] 
+    )
+    shuffle(part_changes)
+
+    # Stores the edge/face cutoff thresholds
+    thresholds = [((i+1) / len(part_changes) - 1e-4) for i in range(len(part_changes))]
+
+    # Stores the vectors for interpolation
+    start_vector = material1.flatten_rep()
+    end_vector = material2.flatten_rep()
+
+    # Runs through the interpolation
+    materials: list[Metamaterial] = []
+    for alpha in alpha_gen(steps):
+
+        # Computes the interpolated material
+        material: Metamaterial = Metamaterial.from_tensor(start_vector * (1-alpha) + end_vector * alpha)
+
+        # Updates the edge/face adjacencies according to the custom cutoffs
+        for threshold,change in zip(thresholds, part_changes):
+
+            # Handles setting the threshold for an edge change
+            if len(change) == 2:
+                edge_index = edge_adj_index(*change)
+                material.edge_adj[edge_index] = material2.has_edge(*change) if alpha > threshold else material1.has_edge(*change)
+            
+            # Handles setting the threshold for a face change
+            else:
+                face_index = face_adj_index(*change)
+                material.edge_adj[face_index] = material2.has_face(*change) if alpha > threshold else material1.has_face(*change)
+
+        # Stores the interpolated material
+        materials.append(material)
+
+    return materials
+
 
