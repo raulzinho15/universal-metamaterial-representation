@@ -713,9 +713,6 @@ def smooth_interpolation(material1: Metamaterial, material2: Metamaterial) -> li
         for i in changed_indices[-1::-1]:
             part_changes.pop(i)
 
-    for group in part_change_groups:
-        print(group)
-
     # Stores the materials' node positions
     mat1_node_pos = material1.node_pos.copy()
     mat2_node_pos = material2.node_pos.copy()
