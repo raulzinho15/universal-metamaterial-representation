@@ -8,7 +8,7 @@ from representation.utils import *
 from autoencoder.autoencoder import *
 
 
-FRAMES_PER_STEP = 10
+FRAMES_PER_STEP = 40
 
 
 def random_metamaterial(edge_prob=0.5, face_prob=0.5, grid_spacing=None, connected=False, cyclic=False, wavy_edges=False, validate=False):
@@ -545,9 +545,6 @@ def interpolate_part_changes(original_material: Metamaterial, material: Metamate
 
 def smooth_interpolation(material1: Metamaterial, material2: Metamaterial) -> list[Metamaterial]:
 
-    ########### MAKE FACES ALSO CAUSE EDGE CHANGES, BUT SIMULTANEOUSLY
-    ########### BE SURE TO STILL ALLOW INDEPENDENT EDGE CHANGES WHEN EDGES ARE NOT ASSOCIATED WITH A 
-    
     # Stores the materials' edge adjacency matrices
     edge_adj_matrix1 = material1.get_edge_adj_matrix().astype(np.int8)
     edge_adj_matrix2 = material2.get_edge_adj_matrix().astype(np.int8)
