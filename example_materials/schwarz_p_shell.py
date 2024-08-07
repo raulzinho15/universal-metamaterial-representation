@@ -125,12 +125,16 @@ edge_params[edge_index : edge_index+EDGE_BEZIER_COORDS] = fit_edge_params.flatte
 
 
 edge_index = edge_adj_index(3,6) * EDGE_BEZIER_COORDS
-edge_params[edge_index : edge_index+EDGE_BEZIER_COORDS] = 1-edge_params[edge_adj_index(0,6)*EDGE_BEZIER_COORDS : edge_adj_index(0,6)*EDGE_BEZIER_COORDS+EDGE_BEZIER_COORDS]
+other_edge_params = edge_params[edge_adj_index(0,6)*EDGE_BEZIER_COORDS : edge_adj_index(0,6)*EDGE_BEZIER_COORDS+EDGE_BEZIER_COORDS]
+other_edge_params = 1 - (other_edge_params + np.tile(node_positions[0], EDGE_BEZIER_POINTS)) - np.tile(node_positions[3], EDGE_BEZIER_POINTS)
+edge_params[edge_index : edge_index+EDGE_BEZIER_COORDS] = other_edge_params
 
 
 
 edge_index = edge_adj_index(4,6) * EDGE_BEZIER_COORDS
-edge_params[edge_index : edge_index+EDGE_BEZIER_COORDS] = 1-edge_params[edge_adj_index(1,6)*EDGE_BEZIER_COORDS : edge_adj_index(1,6)*EDGE_BEZIER_COORDS+EDGE_BEZIER_COORDS]
+other_edge_params = edge_params[edge_adj_index(1,6)*EDGE_BEZIER_COORDS : edge_adj_index(1,6)*EDGE_BEZIER_COORDS+EDGE_BEZIER_COORDS]
+other_edge_params = 1 - (other_edge_params + np.tile(node_positions[1], EDGE_BEZIER_POINTS)) - np.tile(node_positions[4], EDGE_BEZIER_POINTS)
+edge_params[edge_index : edge_index+EDGE_BEZIER_COORDS] = other_edge_params
 
 
 
@@ -148,7 +152,7 @@ face_adj[face_index] = 1
 face_index *= FACE_BEZIER_COORDS
 face_normal = np.cross(node_positions[6]-node_positions[1], node_positions[2]-node_positions[1])
 face_normal /= np.linalg.norm(face_normal)
-fit_face_params: np.ndarray = curved_ellipse_point(np.pi/3, np.pi/8) + face_normal * 0.05
+fit_face_params: np.ndarray = curved_ellipse_point(np.pi/3, np.pi/8) - node_positions[1] + face_normal * 0.05
 
 face_params[face_index : face_index + FACE_BEZIER_COORDS] = fit_face_params
 
@@ -166,7 +170,7 @@ face_index = face_adj_index(0,1,6)
 face_adj[face_index] = 1
 face_index *= FACE_BEZIER_COORDS
 
-face_params[face_index : face_index + FACE_BEZIER_COORDS] = curved_ellipse_point(np.pi/6, np.pi/4)
+face_params[face_index : face_index + FACE_BEZIER_COORDS] = curved_ellipse_point(np.pi/6, np.pi/4) - node_positions[0]
 
 
 
@@ -174,7 +178,7 @@ face_index = face_adj_index(2,3,6)
 face_adj[face_index] = 1
 face_index *= FACE_BEZIER_COORDS
 
-face_params[face_index : face_index + FACE_BEZIER_COORDS] = 1-fit_face_params.reshape((-1,3))[:,[2,1,0]].flatten()
+face_params[face_index : face_index + FACE_BEZIER_COORDS] = 1-(fit_face_params.reshape((-1,3))[:,[2,1,0]].flatten() + node_positions[0]) - node_positions[2]
 
 
 
@@ -182,7 +186,7 @@ face_index = face_adj_index(4,5,6)
 face_adj[face_index] = 1
 face_index *= FACE_BEZIER_COORDS
 
-face_params[face_index : face_index + FACE_BEZIER_COORDS] = 1-fit_face_params
+face_params[face_index : face_index + FACE_BEZIER_COORDS] = 1-(fit_face_params + node_positions[1]) - node_positions[4]
 
 
 
@@ -190,11 +194,17 @@ face_index = face_adj_index(3,4,6)
 face_adj[face_index] = 1
 face_index *= FACE_BEZIER_COORDS
 
-face_params[face_index : face_index + FACE_BEZIER_COORDS] = 1-curved_ellipse_point(np.pi/6, np.pi/4)
+face_params[face_index : face_index + FACE_BEZIER_COORDS] = 1-curved_ellipse_point(np.pi/6, np.pi/4) - node_positions[3]
 
 
 
 
 # Creates the metamaterial
-SCHWARZ_P_SHELL = Metamaterial(node_pos, edge_adj, edge_params, face_adj, face_params)
+SCHWARZ_P_SHELL = Metamaterial(node_pos, edge_adj, edge_params, face_adj, face_params, thickness=0.4)
 
+
+
+for n1 in range(NUM_NODES):
+    for n2 in range(n1+1, NUM_NODES):
+        if SCHWARZ_P_SHELL.has_some_face(n1,n2):
+            SCHWARZ_P_SHELL.edge_adj[edge_adj_index(n1,n2)] = 1
