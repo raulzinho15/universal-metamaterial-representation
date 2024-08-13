@@ -500,18 +500,18 @@ class Metamaterial:
 
         # Computes the edge's nodes' positions
         node1, node2 = sorted((node1, node2))
-        node1_pos = self.get_node_position(node1)[np.newaxis,:]
-        node2_pos = self.get_node_position(node2)[np.newaxis,:]
+        node1_pos = self.get_node_position(node1, transform=False)[np.newaxis,:]
+        node2_pos = self.get_node_position(node2, transform=False)[np.newaxis,:]
         
         # Retrieves the edge parameters
-        edge_params = self.get_edge_params(node1, node2).reshape((EDGE_BEZIER_POINTS,3)) + node1_pos
+        edge_params = self.get_edge_params(node1, node2, transform=False).reshape((EDGE_BEZIER_POINTS,3)) + node1_pos
 
         # Appropriately structures all parameters for the Bezier curve
         bezier_params = np.concatenate((node1_pos, edge_params, node2_pos), axis=0)
 
         # Creates the function to compute the edge points
         def bezier(t: int) -> np.ndarray:
-            return BEZIER_CURVE_COEFFICIENTS[t,:] @ bezier_params
+            return self.transform_points(BEZIER_CURVE_COEFFICIENTS[t,:] @ bezier_params)
         
         return bezier
 
@@ -632,17 +632,17 @@ class Metamaterial:
 
         # Stores the node positions
         node1, node2, node3 = sorted((node1, node2, node3))
-        node1_pos = self.get_node_position(node1)[np.newaxis, :]
-        node2_pos = self.get_node_position(node2)[np.newaxis, :]
-        node3_pos = self.get_node_position(node3)[np.newaxis, :]
+        node1_pos = self.get_node_position(node1, transform=False)[np.newaxis, :]
+        node2_pos = self.get_node_position(node2, transform=False)[np.newaxis, :]
+        node3_pos = self.get_node_position(node3, transform=False)[np.newaxis, :]
 
         # Stores the edge parameters
-        edge1_params = self.get_edge_params(node1, node2).reshape((EDGE_BEZIER_POINTS, 3)) + node1_pos
-        edge2_params = self.get_edge_params(node1, node3).reshape((EDGE_BEZIER_POINTS, 3)) + node1_pos
-        edge3_params = self.get_edge_params(node2, node3).reshape((EDGE_BEZIER_POINTS, 3)) + node2_pos
+        edge1_params = self.get_edge_params(node1, node2, transform=False).reshape((EDGE_BEZIER_POINTS, 3)) + node1_pos
+        edge2_params = self.get_edge_params(node1, node3, transform=False).reshape((EDGE_BEZIER_POINTS, 3)) + node1_pos
+        edge3_params = self.get_edge_params(node2, node3, transform=False).reshape((EDGE_BEZIER_POINTS, 3)) + node2_pos
         
         # Stores the face parameters
-        face_params = self.get_face_params(node1, node2, node3).reshape((FACE_BEZIER_POINTS, 3)) + node1_pos
+        face_params = self.get_face_params(node1, node2, node3, transform=False).reshape((FACE_BEZIER_POINTS, 3)) + node1_pos
 
         # Appropriately structures all parameters for the Bezier curve
         bezier_params = np.concatenate([
@@ -654,7 +654,7 @@ class Metamaterial:
         # Creates the function to compute the face points
         def bezier(s: int, t: int) -> np.ndarray:
             ind = bezier_triangle_index(s,t)
-            return BEZIER_TRIANGLE_COEFFICIENTS[ind,:] @ bezier_params
+            return self.transform_points(BEZIER_TRIANGLE_COEFFICIENTS[ind,:] @ bezier_params)
         return bezier
 
 
