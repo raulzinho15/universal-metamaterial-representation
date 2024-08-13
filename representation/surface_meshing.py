@@ -596,3 +596,123 @@ def union_obj_components(vertices: list[list[tuple]], faces: list[list[tuple]], 
         print("Union finished!")
 
     return union_mesh
+
+
+def estimate_volume(material: Metamaterial) -> float:
+    """
+    Estimates the volume of the given metamaterial with the process
+    currently used for meshing its surface.
+
+    material: `Metamaterial`
+        The material whose volume will be estimated.
+
+    Returns: `float`
+        The estimated volume of the given metamaterial.
+    """
+
+    # Stores the total volume
+    total_volume = 0
+
+    # Computes the volume due to the nodes using sphere volume
+    total_volume += 4 / 3 * np.pi * material.get_thickness() ** 3 * len(material.active_nodes()) / 2# (nodes show at most 1/2 of themselves)
+
+    # Computes the volume due to the edges
+    for n1 in range(NUM_NODES):
+        for n2 in range(n1+1, NUM_NODES):
+
+            # Skips non-edges
+            if not material.has_edge(n1,n2):
+                continue
+                    
+            # Computes the points along the edge
+            edge_points_function = material.compute_edge_points(n1, n2)
+            edge_points = [edge_points_function(edge) for edge in range(EDGE_SEGMENTS+1)]
+
+            # Accounts for this edge's volume using cylinder volume
+            total_volume += sum(np.linalg.norm(edge_points[edge+1] - edge_points[edge])
+                                    for edge in range(EDGE_SEGMENTS)) * np.pi * material.get_thickness() ** 2 * (0.5 if material.has_some_face(n1,n2) else 1)
+            
+    # Computes the volume due to faces
+    for n1 in range(NUM_NODES):
+        for n2 in range(n1+1, NUM_NODES):
+            for n3 in range(n2+1, NUM_NODES):
+
+                # Skips non-faces
+                if not material.has_face(n1,n2,n3):
+                    continue
+
+                # Computes points along the face
+                face_points_function = material.compute_face_points(n1,n2,n3)
+                face_points = [
+                    face_points_function(s,t)
+                        for s,t,u in BEZIER_TRIANGLE_PARAMETERS
+                ]
+
+                # Computes each triangle mesh's volume contribution
+                for s in range(EDGE_SEGMENTS):
+                    for t in range(EDGE_SEGMENTS-s):
+
+                        # Stores the point indices
+                        point1 = face_points[bezier_triangle_index(s,t)]
+                        point2 = face_points[bezier_triangle_index(s+1,t)]
+                        point3 = face_points[bezier_triangle_index(s,t+1)]
+
+                        # Accounts for the volume
+                        face_area = np.linalg.norm(np.cross(point2-point1, point3-point1)) # Computes parallelogram area
+                        total_volume += face_area * material.get_thickness() * 2
+
+    return total_volume
+
+
+def estimate_surface_area(material: Metamaterial) -> float:
+    """
+    Estimates the surface area of the given metamaterial with the process
+    currently used for meshing its surface.
+
+    material: `Metamaterial`
+        The material whose surface area will be estimated.
+
+    Returns: `float`
+        The estimated surface area of the given metamaterial.
+    """
+
+    # Stores the total surface area
+    total_surface_area = 0
+
+    # Computes the surface area due to the nodes using sphere surface area
+    total_surface_area += 4 * np.pi * material.get_thickness() ** 2 * len(material.active_nodes()) / 2 # (nodes show at most 1/2 of themselves)
+
+    # Computes the surface area due to the edges
+    for n1 in range(NUM_NODES):
+        for n2 in range(n1+1, NUM_NODES):
+
+            # Skips non-edges
+            if not material.has_edge(n1,n2):
+                continue
+                    
+            # Computes the points along the edge
+            edge_points_function = material.compute_edge_points(n1, n2)
+            edge_points = [edge_points_function(edge) for edge in range(EDGE_SEGMENTS+1)]
+
+            # Accounts for this edge's surface area using cylinder surface area (excludes cylinder ends since nodes always overtake them)
+            total_surface_area += sum(np.linalg.norm(edge_points[edge+1] - edge_points[edge])
+                                    for edge in range(EDGE_SEGMENTS)) * 2 * np.pi * material.get_thickness() * (0.5 if material.has_some_face(n1,n2) else 1)
+            
+    # Computes the surface area due to faces
+    for n1 in range(NUM_NODES):
+        for n2 in range(n1+1, NUM_NODES):
+            for n3 in range(n2+1, NUM_NODES):
+
+                # Skips non-faces
+                if not material.has_face(n1,n2,n3):
+                    continue
+
+                # Computes the face's mesh
+                vertices, faces = generate_face_surface_mesh(material, n1, n2, n3)
+                np_vertices = [np.array(vertex) for vertex in vertices]
+
+                # Computes each triangle mesh's area
+                total_surface_area += sum(np.linalg.norm(np.cross(np_vertices[v2]-np_vertices[v1], np_vertices[v3]-np_vertices[v1]))
+                                                for v1,v2,v3 in faces[:-6*EDGE_SEGMENTS]) / 2 # Excludes edge face meshes
+
+    return total_surface_area
