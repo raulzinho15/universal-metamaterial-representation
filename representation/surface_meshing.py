@@ -147,8 +147,14 @@ def generate_edge_surface_mesh(material: Metamaterial, node1: int, node2: int) -
         # Updates the normals
         if edge != EDGE_SEGMENTS:
 
-            # Computes the new normal vectors
-            normal1, normal2 = find_line_normals(edge_points[edge], edge_points[edge+1])
+            # Computes the direction of the edge segment to be formed
+            edge_dir = edge_points[edge+1] - edge_points[edge]
+
+            # Computes the new normals
+            normal2 = np.cross(edge_dir, normal1)
+            normal2 /= np.linalg.norm(normal2)
+            normal1 = np.cross(normal2, edge_dir)
+            normal1 /= np.linalg.norm(normal1)
 
         # Updates the vertex count
         vertex_count += EDGE_SEGMENTS

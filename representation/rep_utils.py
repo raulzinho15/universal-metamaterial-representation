@@ -4,7 +4,7 @@ from math import factorial
 # User-controlled properties
 NUM_NODES = 13 # Non-center nodes plus the single center node
 EDGE_BEZIER_POINTS = 2 # The number of points to describe curved edges
-EDGE_SEGMENTS = 32 # The number of segments to use to mesh edges/faces
+EDGE_SEGMENTS = 16 # The number of segments to use to mesh edges/faces
 CUBE_CENTER = np.ones(3)/2 # The center of the metamaterial cube
 SCALE = 1
 THICKNESS = 0.1 * SCALE # The thickness of the metamaterial
