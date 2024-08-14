@@ -94,8 +94,8 @@ def edge_function(t, node):
 
 last = edge_function(0,1)
 distances = np.zeros(0)
-for i in range(1,EDGE_SEGMENTS*16+1):
-    this = edge_function(i/16,1)
+for v in range(1,EDGE_SEGMENTS*16+1):
+    this = edge_function(v/16,1)
     distances = np.concatenate((distances, np.array([np.sqrt(((last-this)**2).sum())])))
     last = this
 distances /= distances.sum()
@@ -103,10 +103,10 @@ distances /= distances.sum()
 index_mapping = {0:0, EDGE_SEGMENTS:EDGE_SEGMENTS}
 length = 0
 t = 1
-for i in range(1,EDGE_SEGMENTS*16):
-    length += distances[i]
+for v in range(1,EDGE_SEGMENTS*16):
+    length += distances[v]
     if length > t/EDGE_SEGMENTS - 1e-4:
-        index_mapping[t] = i/16
+        index_mapping[t] = v/16
         t += 1
         if t == EDGE_SEGMENTS:
             break
