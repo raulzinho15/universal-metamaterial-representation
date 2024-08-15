@@ -81,9 +81,6 @@ class Metamaterial:
             [1,1,1],
         ], dtype=np.float32)
 
-        # Stores already-computed node positions on the cube for computation speed-up
-        self.cube_pos = {}
-
 
     def transform_points(self, points: np.ndarray) -> np.ndarray:
         """
@@ -156,10 +153,6 @@ class Metamaterial:
             A 1d numpy array containing the 3D position of the given node.
         """
 
-        # Uses a pre-computed node position
-        if node in self.cube_pos:
-            return self.cube_pos[node]
-
         # Gets the position of the node
         point = pseudo_spherical_to_euclidean(self.node_pos[node*3 : (node+1)*3][np.newaxis,:]).flatten()
 
@@ -168,8 +161,7 @@ class Metamaterial:
             point = self.transform_points(point)
 
         # Returns the position
-        self.cube_pos[node] = point
-        return self.cube_pos[node]
+        return point
 
 
     def get_node_positions(self) -> np.ndarray:
