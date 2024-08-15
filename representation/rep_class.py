@@ -1082,6 +1082,33 @@ class Metamaterial:
         return nodes
     
 
+    def planes_covered(self, node: int) -> list[int]:
+        """
+        Finds the boundary planes covered by the given node.
+
+        node: `int`
+            The node whose coverage will be checked.
+
+        Returns: `list[int]`
+            The planes covered by this node, ordered similarly
+            as in `self.displayed_planes`. Namely, 0 corresponds
+            to x=0, 1 to y=0, then z=0, x=1, y=1, and z=1.
+        """
+
+        # Computes the node's raw position
+        position = self.get_node_position(node, transform=False)
+
+        # Computes the covered planes
+        return (
+            ([0] if np.abs(position[0])   < 1e-4 else []) +
+            ([1] if np.abs(position[1])   < 1e-4 else []) +
+            ([2] if np.abs(position[2])   < 1e-4 else []) +
+            ([3] if np.abs(position[0]-1) < 1e-4 else []) +
+            ([4] if np.abs(position[1]-1) < 1e-4 else []) +
+            ([5] if np.abs(position[2]-1) < 1e-4 else [])
+        )
+    
+
     def flatten_rep(self, pad_dim=False) -> torch.Tensor:
         """
         Computes the flattened array representation of the metamaterial.
