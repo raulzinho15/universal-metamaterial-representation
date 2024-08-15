@@ -187,12 +187,12 @@ def interpolate_part_changes(original_material: Metamaterial, material: Metamate
 
         # Stores the edge change nodes
         if len(change) == 3:
-            n1,n2,_ = change
+            n1,n2,is_removal = change
             n3 = n2
         
         # Stores the face change nodes
         else:
-            n1,n2,n3,_ = change
+            n1,n2,n3,is_removal = change
 
         # Computes the node positions
         first_node_pos = pre_change_material.node_pos[n1*3:(n1+1)*3]
@@ -508,14 +508,8 @@ def smooth_interpolation(material1: Metamaterial, material2: Metamaterial):
                 for n2 in range(n1+1, NUM_NODES)
     ])
 
-    # Stores the interpolated edge lengths
-    edge_lengths = np.concatenate([
-        [mat1_edge_lengths * (1-alpha) + mat2_edge_lengths * alpha]
-            for alpha in alpha_gen((2*len(part_change_groups)+1)*FRAMES_PER_STEP)
-    ], axis=0)
-
     # Rotates material2's edge parameters
-    rotate_material_edge_params(material1, material2, edge_lengths[-1])
+    rotate_material_edge_params(material1, material2, mat2_edge_lengths)
 
     # Computes properties about the edge parameters
     mat1_edge_params = material1.edge_params.copy()
@@ -570,17 +564,45 @@ def smooth_interpolation(material1: Metamaterial, material2: Metamaterial):
     # Stores the starting material
     start_material = material1.copy()
 
-    # Computes the intermediate node positions and edge/face parameters
+    # Adjusts the second material's positions to minimize motion
     adjusted_mat2_node_pos = minimize_node_distance(mat1_node_pos, mat2_node_pos)
+
+    # Computes the changed node positions
+    changed_node_positions = mat1_node_pos.copy()[np.newaxis,:]
+    for node in range(NUM_NODES):
+
+        # Computes the particular node's position
+        mat1_position = mat1_node_pos[node*3:(node+1)*3]
+        mat2_position = adjusted_mat2_node_pos[node*3:(node+1)*3]
+
+        # Stores a changed node position
+        if np.abs(mat1_position - mat2_position).sum() > 1e-4:
+            next_node_positions = changed_node_positions[-1:].copy()
+            next_node_positions[0,node*3:(node+1)*3] = mat2_position
+            changed_node_positions = np.concatenate([changed_node_positions, next_node_positions])
+    
+    # Stores the trivial mat1 and mat2 node positions
+    changed_node_positions = changed_node_positions[1:-1]
+
+    # Redoes the part change groups
+    part_change_groups = part_change_groups[:switch_index] + [[] for _ in range(changed_node_positions.shape[0])] + part_change_groups[switch_index:]
+
+    # Computes the intermediate node positions and edge/face parameters
     node_positions = np.concatenate([
         np.array([mat1_node_pos] * switch_index),
+        changed_node_positions,
         np.array([adjusted_mat2_node_pos] * (len(part_change_groups)-switch_index))
     ], axis=0)
     edge_params = np.stack([mat1_edge_params * (1-alpha) + mat2_edge_params * alpha for alpha in alpha_gen(len(part_change_groups)+2)], axis=0)[1:]
     face_params = np.stack([mat1_face_params * (1-alpha) + mat2_face_params * alpha for alpha in alpha_gen(len(part_change_groups)+2)], axis=0)[1:]
 
+    # Stores the interpolated edge lengths
+    edge_lengths = np.concatenate([
+        [mat1_edge_lengths * (1-alpha) + mat2_edge_lengths * alpha]
+            for alpha in alpha_gen((2*len(part_change_groups)+1)*FRAMES_PER_STEP)
+    ], axis=0)
+
     # Executes each edge change
-    materials = []
     for i,changes in enumerate(part_change_groups):
 
         # Stores the edge lengths to use for this interpolation
@@ -596,9 +618,6 @@ def smooth_interpolation(material1: Metamaterial, material2: Metamaterial):
         face_params = face_params[1:]
 
         yield from next_materials
-
-        # Stores the interpolated materials
-        # materials.extend(next_materials)
 
     # Computes the final, non-edge/face changing interpolation
     start_vector = start_material.flatten_rep()
@@ -617,9 +636,6 @@ def smooth_interpolation(material1: Metamaterial, material2: Metamaterial):
 
         # Stores the interpolated material
         yield mat
-        # materials.append(mat)
-
-    # return materials
 
 
 def baseline_interpolation(material1: Metamaterial, material2: Metamaterial, steps: int) -> list[Metamaterial]:
