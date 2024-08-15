@@ -337,9 +337,6 @@ def generate_metamaterial_surface_mesh(material: Metamaterial, being_painted=Fal
         separates the indices of a component's faces.
     """
 
-    # Stores the nodes/edges that are used
-    used_nodes = set()
-
     # Stores the vertices and faces
     vertices, faces = [], []
 
@@ -375,10 +372,6 @@ def generate_metamaterial_surface_mesh(material: Metamaterial, being_painted=Fal
             if not material.edge_is_displayed(n1, n2):
                 continue
 
-            # Stores the nodes
-            used_nodes.add(n1)
-            used_nodes.add(n2)
-
             # Computes the edge's components
             edge_vertices, edge_faces = generate_edge_surface_mesh(material, n1, n2, being_painted=being_painted)
 
@@ -387,7 +380,7 @@ def generate_metamaterial_surface_mesh(material: Metamaterial, being_painted=Fal
             faces.append(edge_faces)
 
     # Runs through each node
-    for node in used_nodes:
+    for node in material.active_nodes():
 
         # Skips nodes on non-displayed planes
         if not material.node_is_displayed(node):
@@ -489,7 +482,7 @@ def generate_metamaterials_zigzag_surface_meshes(metamaterials: list[Metamateria
     return vertices, faces
 
 
-def save_multi_obj(vertices: list[list[tuple]], faces: list[list[tuple]], filepath: str, precision=6, verbose=True):
+def save_multi_obj(vertices: list[list[tuple]], faces: list[list[tuple]], filepath: str, precision=6, verbose=True, one_component=False):
     """
     Saves an .obj file with multiple objects.
 
@@ -517,6 +510,10 @@ def save_multi_obj(vertices: list[list[tuple]], faces: list[list[tuple]], filepa
     verbose: `bool`, optional
         Whether status messages will be printed to the console.
         Default is `True`.
+
+    one_component: `bool`, optional
+        Whether only one component should be meshed, despite any
+        vertex/face separation in the input.
     """
 
     # Tells the user the saving is beginning
@@ -536,7 +533,8 @@ def save_multi_obj(vertices: list[list[tuple]], faces: list[list[tuple]], filepa
             obj_vertices, obj_faces = obj_parts
 
             # Writes the object
-            f.write(f"o Component{i}\n")
+            if i == 0 or not one_component:
+                f.write(f"o Component{i}\n")
 
             # Writes each vertex
             for vertex in obj_vertices:
