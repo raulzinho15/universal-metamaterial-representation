@@ -5,7 +5,7 @@ from representation.generation import *
 from representation.rep_utils import *
 
 
-def generate_node_surface_mesh(material: Metamaterial, node: int) -> tuple[list[tuple], list[tuple]]:
+def generate_node_surface_mesh(material: Metamaterial, node: int, being_painted=False) -> tuple[list[tuple], list[tuple]]:
     """
     Generates the vertices and faces for a node of the metamaterial.
     
@@ -14,10 +14,16 @@ def generate_node_surface_mesh(material: Metamaterial, node: int) -> tuple[list[
 
     node1: int
         The node ID for the target node.
+
+    being_painted: `bool`, optional
+        Whether this metamaterial is being painted on a geometry.
+        If `True`, assumes this material is part of a 2x2x2 grid.
     """
 
     # Computes the node position
     center = material.get_node_position(node)
+    if being_painted:
+        center = material.transform_along_boundary(center)
 
     # Stores the mesh values
     vertices, faces = [], []
@@ -83,7 +89,7 @@ def generate_node_surface_mesh(material: Metamaterial, node: int) -> tuple[list[
     return vertices, faces
 
 
-def generate_edge_surface_mesh(material: Metamaterial, node1: int, node2: int) -> tuple[list[tuple], list[tuple]]:
+def generate_edge_surface_mesh(material: Metamaterial, node1: int, node2: int, being_painted=False) -> tuple[list[tuple], list[tuple]]:
     """
     Generates the vertices and faces for an edge of the metamaterial.
     
@@ -96,6 +102,10 @@ def generate_edge_surface_mesh(material: Metamaterial, node1: int, node2: int) -
     node2: int
         The node ID for the other node defining the edge.
 
+    being_painted: `bool`, optional
+        Whether this metamaterial is being painted on a geometry.
+        If `True`, assumes this material is part of a 2x2x2 grid.
+
     Returns: (list of tuples of floats, list of tuples of ints)
         The first entry is a list of the vertex (x,y,z) coordinates.
         The second is a list containing each face's corresponding vertices,
@@ -104,7 +114,7 @@ def generate_edge_surface_mesh(material: Metamaterial, node1: int, node2: int) -
     """
 
     # Computes the points along the edge
-    edge_points_function = material.compute_edge_points(node1, node2)
+    edge_points_function = material.compute_edge_points(node1, node2, being_painted=being_painted)
 
     # Stores the edge points for faster computation
     edge_points = [edge_points_function(edge) for edge in range(EDGE_SEGMENTS+1)]
@@ -162,7 +172,7 @@ def generate_edge_surface_mesh(material: Metamaterial, node1: int, node2: int) -
     return vertices, faces
 
 
-def generate_face_surface_mesh(material: Metamaterial, node1: int, node2: int, node3: int) -> tuple[list[tuple], list[tuple]]:
+def generate_face_surface_mesh(material: Metamaterial, node1: int, node2: int, node3: int, being_painted=False) -> tuple[list[tuple], list[tuple]]:
     """
     Generates the vertices and faces for a face of the metamaterial.
     
@@ -178,6 +188,10 @@ def generate_face_surface_mesh(material: Metamaterial, node1: int, node2: int, n
     node3: int
         The node ID of the last node defining the face.
 
+    being_painted: `bool`, optional
+        Whether this metamaterial is being painted on a geometry.
+        If `True`, assumes this material is part of a 2x2x2 grid.
+
     Returns: (list of tuples of floats, list of tuples of ints)
         The first entry is a list of the vertex (x,y,z) coordinates.
         The second is a list containing each face's corresponding vertices,
@@ -186,7 +200,7 @@ def generate_face_surface_mesh(material: Metamaterial, node1: int, node2: int, n
     """
 
     # Creates function for computing face points
-    face_points_function = material.compute_face_points(node1, node2, node3)
+    face_points_function = material.compute_face_points(node1, node2, node3, being_painted=being_painted)
 
     # Pre-computes the face points for faster computation
     face_points = [
@@ -300,12 +314,16 @@ def generate_face_surface_mesh(material: Metamaterial, node1: int, node2: int, n
     return vertices, faces
 
 
-def generate_metamaterial_surface_mesh(material: Metamaterial) -> tuple[list[list[tuple]], list[list[tuple]]]:
+def generate_metamaterial_surface_mesh(material: Metamaterial, being_painted=False) -> tuple[list[list[tuple]], list[list[tuple]]]:
     """
     Generates the mesh for the metamaterial.
 
     material: Metamaterial
         The material for which the mesh will be generated.
+
+    being_painted: `bool`, optional
+        Whether this metamaterial is being painted on a geometry.
+        If `True`, assumes this material is part of a 2x2x2 grid.
 
     Returns: `tuple[list[list[tuple]], list[list[tuple]]]`
         The first item contains the vertices of each component
@@ -339,7 +357,7 @@ def generate_metamaterial_surface_mesh(material: Metamaterial) -> tuple[list[lis
                     continue
 
                 # Computes the face's components
-                face_vertices, face_faces = generate_face_surface_mesh(material, n1, n2, n3)
+                face_vertices, face_faces = generate_face_surface_mesh(material, n1, n2, n3, being_painted=being_painted)
 
                 # Stores the face's components
                 vertices.append(face_vertices)
@@ -362,7 +380,7 @@ def generate_metamaterial_surface_mesh(material: Metamaterial) -> tuple[list[lis
             used_nodes.add(n2)
 
             # Computes the edge's components
-            edge_vertices, edge_faces = generate_edge_surface_mesh(material, n1, n2)
+            edge_vertices, edge_faces = generate_edge_surface_mesh(material, n1, n2, being_painted=being_painted)
 
             # Stores the edge's components
             vertices.append(edge_vertices)
@@ -376,7 +394,7 @@ def generate_metamaterial_surface_mesh(material: Metamaterial) -> tuple[list[lis
             continue
 
         # Computes the node's components
-        node_vertices, node_faces = generate_node_surface_mesh(material, node)
+        node_vertices, node_faces = generate_node_surface_mesh(material, node, being_painted=being_painted)
 
         # Stores the node's components
         vertices.append(node_vertices)
@@ -385,7 +403,7 @@ def generate_metamaterial_surface_mesh(material: Metamaterial) -> tuple[list[lis
     return vertices, faces
 
 
-def generate_metamaterial_grid_surface_mesh(metamaterial: Metamaterial, shape=(1,1,1)) -> tuple[list[list[tuple]], list[list[tuple]]]:
+def generate_metamaterial_grid_surface_mesh(metamaterial: Metamaterial, shape=(1,1,1), being_painted=False) -> tuple[list[list[tuple]], list[list[tuple]]]:
     """
     Generates the mesh for the metamaterial.
 
@@ -396,6 +414,10 @@ def generate_metamaterial_grid_surface_mesh(metamaterial: Metamaterial, shape=(1
         The amount in the x, y, and z directions to grid the metamaterial.
         If no gridding (i.e., just the metamaterial by itself), the input
         should be (1,1,1).
+
+    being_painted: `bool`, optional
+        Whether this metamaterial is being painted on a geometry.
+        If `True`, assumes this material is part of a 2x2x2 grid.
 
     Returns: `tuple[list[list[tuple]], list[list[tuple]]]`
         The first item contains the vertices of each component
@@ -409,6 +431,10 @@ def generate_metamaterial_grid_surface_mesh(metamaterial: Metamaterial, shape=(1
         separates the indices of a component's faces.
     """
 
+    # Defaults the shape when being painted
+    if being_painted:
+        shape = (2,2,2)
+
     # Computes the materials to mesh
     materials = metamaterial_grid(metamaterial, shape)
 
@@ -419,7 +445,7 @@ def generate_metamaterial_grid_surface_mesh(metamaterial: Metamaterial, shape=(1
     for material in materials:
 
         # Computes the material's components
-        mat_vertices, mat_faces = generate_metamaterial_surface_mesh(material)
+        mat_vertices, mat_faces = generate_metamaterial_surface_mesh(material, being_painted=being_painted)
 
         # Stores the material's components
         vertices.extend(mat_vertices)

@@ -69,6 +69,18 @@ class Metamaterial:
         # The order is as follows: x=0, y=0, z=0, x=1, y=1, z=1
         self.displayed_planes = np.array([True] * 6)
 
+        # Stores the boundary points of the material
+        self.boundaries = np.array([
+            [0,0,0],
+            [1,0,0],
+            [0,0,1],
+            [1,0,1],
+            [0,1,0],
+            [1,1,0],
+            [0,1,1],
+            [1,1,1],
+        ], dtype=np.float32)
+
         # Stores already-computed node positions on the cube for computation speed-up
         self.cube_pos = {}
 
@@ -89,6 +101,45 @@ class Metamaterial:
         # Applies the transformations
         points = points.reshape(points.shape[0]//3, 3)
         return (self.translations + (1-points)*self.mirrors + points*(1-self.mirrors)).flatten() * SCALE
+    
+
+    def set_boundaries(self, boundaries: np.ndarray):
+        """
+        Sets this material's boundaries.
+
+        boundaries: `np.ndarray`
+            The boundaries to be set.
+        """
+        self.boundaries = boundaries.copy()
+
+
+    def transform_along_boundary(self, point: np.ndarray) -> np.ndarray:
+        """
+        Transforms the given point along the boundary of the metamaterial.
+        Assumes this material is part of a 2x2x2 grid, and thus the point's
+        coordinates are in [0,2],
+
+        point: `np.ndarray`
+            The point to be transformed.
+
+        Returns: `np.ndarray`
+            The transformed point
+        """
+
+        # Normalizes the point
+        dx,dy,dz = point / 2
+
+        # Computes the transformation
+        return (
+            (1-dx) * (1-dy) * (1-dz) * self.boundaries[0] +
+            dx     * (1-dy) * (1-dz) * self.boundaries[1] +
+            (1-dx) * (1-dy) * dz     * self.boundaries[2] +
+            dx     * (1-dy) * dz     * self.boundaries[3] +
+            (1-dx) * dy     * (1-dz) * self.boundaries[4] +
+            dx     * dy     * (1-dz) * self.boundaries[5] +
+            (1-dx) * dy     * dz     * self.boundaries[6] +
+            dx     * dy     * dz     * self.boundaries[7]
+        )
 
 
     def get_node_position(self, node: int, transform=True) -> np.ndarray:
@@ -483,7 +534,7 @@ class Metamaterial:
                             for n2 in range(NUM_NODES)]).astype(float)
     
 
-    def compute_edge_points(self, node1: int, node2: int):
+    def compute_edge_points(self, node1: int, node2: int, being_painted=False):
         """
         Computes the coordinates of the points that make up an edge.
 
@@ -492,6 +543,10 @@ class Metamaterial:
 
         node2: int
             The node ID of the second node of the edge.
+
+        being_painted: `bool`, optional
+            Whether this metamaterial is being painted on a geometry.
+            If `True`, assumes this material is part of a 2x2x2 grid.
 
         Returns: function or None
             A function giving the coordinate of the edge point for a given t
@@ -511,7 +566,10 @@ class Metamaterial:
 
         # Creates the function to compute the edge points
         def bezier(t: int) -> np.ndarray:
-            return self.transform_points(BEZIER_CURVE_COEFFICIENTS[t,:] @ bezier_params)
+            bezier_point = self.transform_points(BEZIER_CURVE_COEFFICIENTS[t,:] @ bezier_params)
+            if being_painted:
+                bezier_point = self.transform_along_boundary(bezier_point)
+            return bezier_point
         
         return bezier
 
@@ -608,7 +666,7 @@ class Metamaterial:
                                 for n3 in range(NUM_NODES)]).astype(float)
     
 
-    def compute_face_points(self, node1: int, node2: int, node3: int):
+    def compute_face_points(self, node1: int, node2: int, node3: int, being_painted=False):
         """
         Computes the coordinates of the points that make up a face.
 
@@ -620,6 +678,10 @@ class Metamaterial:
 
         node3: int
             The node ID of the third node of the face.
+
+        being_painted: `bool`, optional
+            Whether this metamaterial is being painted on a geometry.
+            If `True`, assumes this material is part of a 2x2x2 grid.
 
         Returns: function or None
             A function giving the coordinate of the face point for a given s,t
@@ -654,7 +716,10 @@ class Metamaterial:
         # Creates the function to compute the face points
         def bezier(s: int, t: int) -> np.ndarray:
             ind = bezier_triangle_index(s,t)
-            return self.transform_points(BEZIER_TRIANGLE_COEFFICIENTS[ind,:] @ bezier_params)
+            bezier_point = self.transform_points(BEZIER_TRIANGLE_COEFFICIENTS[ind,:] @ bezier_params)
+            if being_painted:
+                bezier_point = self.transform_along_boundary(bezier_point)
+            return bezier_point
         return bezier
 
 
@@ -1057,6 +1122,9 @@ class Metamaterial:
 
         # Copies the displayed planes
         material.displayed_planes = self.displayed_planes.copy()
+
+        # Copies the boundaries
+        material.boundaries = self.boundaries.copy()
 
         return material
     
