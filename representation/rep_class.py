@@ -1099,14 +1099,26 @@ class Metamaterial:
         position = self.get_node_position(node, transform=False)
 
         # Computes the covered planes
-        return (
-            ([0] if np.abs(position[0])   < 1e-4 else []) +
-            ([1] if np.abs(position[1])   < 1e-4 else []) +
-            ([2] if np.abs(position[2])   < 1e-4 else []) +
-            ([3] if np.abs(position[0]-1) < 1e-4 else []) +
-            ([4] if np.abs(position[1]-1) < 1e-4 else []) +
-            ([5] if np.abs(position[2]-1) < 1e-4 else [])
-        )
+        return [
+            plane for plane in range(6)
+                if np.abs(position[plane%3] - plane//3) < 1e-4
+        ]
+    
+
+    def nodes_on_plane(self, plane: int) -> list[int]:
+        """
+        Finds which nodes are on the given plane.
+
+        plane: `int`
+            The plane to be checked for nodes, ordered similarly
+            as in `self.displayed_planes`. Namely, 0 corresponds
+            to x=0, 1 to y=0, then z=0, x=1, y=1, and z=1.
+
+        Returns: `list[int]`
+            The nodes found on this plane.
+        """
+        return [node for node in range(NUM_NODES)
+                    if np.abs(self.get_node_position(node, transform=False)[plane%3] - plane//3) < 1e-4]
     
 
     def flatten_rep(self, pad_dim=False) -> torch.Tensor:
