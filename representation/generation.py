@@ -182,17 +182,26 @@ def interpolate_part_changes(original_material: Metamaterial, material: Metamate
     pre_change_material.edge_params = (material.edge_params + end_edge_params) / 2
     pre_change_material.face_params = (material.face_params + end_face_params) / 2
 
-    # Computes and stores the average node position and the edge parameters
-    for change in part_changes:
+    # Computes the planes not covered by other nodes
+    change_nodes = list(part_changes[0][:-1])
+    covered_planes = set()
+    for node in material.active_nodes():
+        if node in change_nodes:
+            continue
+        covered_planes.update(material.planes_covered(node))
+    uncovered_planes = [plane for plane in range(6) if plane not in covered_planes]
+
+    # Computes and stores the average node position and the edge/face parameters
+    if len(part_changes[0]) > 2:
 
         # Stores the edge change nodes
-        if len(change) == 3:
-            n1,n2,is_removal = change
+        if len(part_changes[0]) == 3:
+            n1,n2,is_removal = part_changes[0]
             n3 = n2
         
         # Stores the face change nodes
         else:
-            n1,n2,n3,is_removal = change
+            n1,n2,n3,is_removal = part_changes[0]
 
         # Computes the node positions
         first_node_pos = pre_change_material.node_pos[n1*3:(n1+1)*3]
@@ -203,6 +212,15 @@ def interpolate_part_changes(original_material: Metamaterial, material: Metamate
         avg_node_pos = (first_node_pos + second_node_pos) / 2 
         if n3 != n2: # Adjusts the average for a face change
             avg_node_pos = (2*avg_node_pos + third_node_pos) / 3
+        
+        # Computes the points that keeps the planes covered
+        if len(uncovered_planes) != 0:
+
+            # Forces the point to be on the desired planes
+            euclidean_pos = pseudo_spherical_to_euclidean(avg_node_pos[np.newaxis,:])
+            for plane in uncovered_planes:
+                euclidean_pos[0,plane%3] = plane//3
+            avg_node_pos = euclidean_to_pseudo_spherical(euclidean_pos)
 
         # Stores the average
         pre_change_material.node_pos[n1*3:(n1+1)*3] = avg_node_pos
@@ -229,6 +247,20 @@ def interpolate_part_changes(original_material: Metamaterial, material: Metamate
 
         # Creates the interpolated material
         mat: Metamaterial = Metamaterial.from_tensor(start_vector*(1-alpha) + end_vector*alpha)
+        
+        # Computes the points that keeps the planes covered
+        if len(uncovered_planes) != 0:
+            for node in change_nodes:
+
+                # Forces the point to be on the desired planes
+                euclidean_pos = mat.get_node_position(node, transform=False)
+                for plane in material.planes_covered(node):
+                    if plane in uncovered_planes:
+                        euclidean_pos[plane%3] = plane//3
+                node_pos = euclidean_to_pseudo_spherical(euclidean_pos[np.newaxis,:])
+
+                # Stores the forced position
+                mat.node_pos[node*3:(node+1)*3] = node_pos
 
         # Rotates the edge parameters according to the change since the last material
         rotate_material_edge_params(original_material, mat, edge_lengths[i], invert_angle=True)
@@ -245,6 +277,10 @@ def interpolate_part_changes(original_material: Metamaterial, material: Metamate
 
     # Computes the edge/face adjacency for the post-change material
     for change in part_changes:
+
+        # Skips a node movement
+        if len(change) == 2:
+            continue
 
         # Handles an edge change
         if len(change) == 3:
@@ -278,6 +314,20 @@ def interpolate_part_changes(original_material: Metamaterial, material: Metamate
 
         # Creates the interpolated material
         mat: Metamaterial = Metamaterial.from_tensor(start_vector*(1-alpha) + end_vector*alpha)
+        
+        # Computes the points that keeps the planes covered
+        if len(uncovered_planes) != 0:
+            for node in change_nodes:
+
+                # Forces the point to be on the desired planes
+                euclidean_pos = mat.get_node_position(node, transform=False)
+                for plane in material.planes_covered(node):
+                    if plane in uncovered_planes:
+                        euclidean_pos[plane%3] = plane//3
+                node_pos = euclidean_to_pseudo_spherical(euclidean_pos[np.newaxis,:])
+
+                # Stores the forced position
+                mat.node_pos[node*3:(node+1)*3] = node_pos
 
         # Rotates the edge parameters according to the change since the last material
         rotate_material_edge_params(original_material, mat, edge_lengths[FRAMES_PER_STEP+i], invert_angle=True)
@@ -569,6 +619,7 @@ def smooth_interpolation(material1: Metamaterial, material2: Metamaterial):
 
     # Computes the changed node positions
     changed_node_positions = mat1_node_pos.copy()[np.newaxis,:]
+    changed_nodes = []
     for node in range(NUM_NODES):
 
         # Computes the particular node's position
@@ -580,12 +631,13 @@ def smooth_interpolation(material1: Metamaterial, material2: Metamaterial):
             next_node_positions = changed_node_positions[-1:].copy()
             next_node_positions[0,node*3:(node+1)*3] = mat2_position
             changed_node_positions = np.concatenate([changed_node_positions, next_node_positions])
+            changed_nodes.append([(node,None)])
     
     # Stores the trivial mat1 and mat2 node positions
     changed_node_positions = changed_node_positions[1:-1]
 
-    # Redoes the part change groups
-    part_change_groups = part_change_groups[:switch_index] + [[] for _ in range(changed_node_positions.shape[0])] + part_change_groups[switch_index:]
+    # Redoes the part change groups with the changed nodes
+    part_change_groups = part_change_groups[:switch_index] + changed_nodes + part_change_groups[switch_index+1:]
 
     # Computes the intermediate node positions and edge/face parameters
     node_positions = np.concatenate([
