@@ -1,6 +1,7 @@
 import torch
 from torch import nn
 from torch.utils.data import DataLoader
+from representation.rep_utils import *
 
 
 class MetamaterialAE(nn.Module):
@@ -9,7 +10,7 @@ class MetamaterialAE(nn.Module):
     the metamaterial autoencoder.
     """
 
-    def __init__(self, input_size: int, is_variational=False):
+    def __init__(self, is_variational=False):
         """
         Constructs a metamaterial autoencoder with the given properties.
 
@@ -19,7 +20,7 @@ class MetamaterialAE(nn.Module):
         super().__init__()
 
         # Network sizes
-        self.input_size = input_size
+        self.input_size = REP_SIZE
         self.hidden_size = self.input_size*4
         self.latent_size = self.input_size
 
@@ -90,15 +91,15 @@ class MetamaterialAE(nn.Module):
         return self.decode(self.encode(x))
 
 
-def run_epoch(model: MetamaterialAE, dataloader: DataLoader, loss_fn, optim: None | torch.optim.Adam = None, train=True, verbose=True, report_frequency=200) -> float:
+def train_epoch(model: MetamaterialAE, dataloader: DataLoader, loss_fn, optim, verbose=True, report_frequency=200) -> float:
     """
-    Runs an epoch on the model with the given data.
+    Runs a training epoch on the model with the given data.
 
-    model: MetamaterialAutoencoder
+    model: `MetamaterialAE`
         The model to be used.
 
-    dataloader: DataLoader
-        The data from a MetamaterialDataset to use.
+    dataloader: `DataLoader`
+        The training data to use.
 
     loss_fn:
         The loss function to use.
@@ -106,17 +107,14 @@ def run_epoch(model: MetamaterialAE, dataloader: DataLoader, loss_fn, optim: Non
     optim:
         The optimizer to use in training.
 
-    train: bool
-        Whether the model will be trained or not.
-
-    verbose: bool
+    verbose: `bool`, optional
         Whether batch progress will output to the terminal.
 
-    report_frequency: int
+    report_frequency: `int`, optional
         The number of batches between which reports will be printed if
         the verbose option is chosen.
 
-    Returns: float
+    Returns: `float`
         The loss from the epoch.
     """
 
@@ -128,10 +126,7 @@ def run_epoch(model: MetamaterialAE, dataloader: DataLoader, loss_fn, optim: Non
     total_loss = 0
 
     # Sets up the model's mode
-    if train:
-        model.train()
-    else:
-        model.eval()
+    model.train()
 
     # Runs through each batch
     for batch, (X,y), in enumerate(dataloader):
@@ -144,17 +139,95 @@ def run_epoch(model: MetamaterialAE, dataloader: DataLoader, loss_fn, optim: Non
         total_loss += loss.item() * X.shape[0]
 
         # Runs backpropagation and gradient descent
-        if train:
-            loss.backward()
-            optim.step()
-            optim.zero_grad()
+        loss.backward()
+        optim.step()
+        optim.zero_grad()
 
         # Prints the loss when the report frequency is met
         samples_used += X.shape[0]
-        if verbose and batch % report_frequency == 0:
+        if verbose and (batch+1) % report_frequency == 0:
             print(f"Loss: {(total_loss / samples_used):>7f} [{samples_used}/{dataset_size}]")
     
     return total_loss
+
+
+def test_epoch(model: MetamaterialAE, dataloader: DataLoader, loss_fn, verbose=False, report_frequency=200) -> tuple[float]:
+    """
+    Runs a testing epoch on the model with the given data.
+
+    model: `MetamaterialAE`
+        The model to be used.
+
+    dataloader: `DataLoader`
+        The testing data to use.
+
+    loss_fn:
+        The loss function to use.
+
+    verbose: `bool`, optional
+        Whether batch progress will output to the terminal.
+
+    report_frequency: `int`, optional
+        The number of batches between which reports will be printed if
+        the verbose option is chosen.
+
+    Returns: `tuple[float]`
+        1) The loss from the epoch.
+        2) The average absolute node position error.
+        3) The fraction of edges correctly decoded.
+        4) The average absolute edge parameters error.
+    """
+
+    # Computes the size of the dataset
+    dataset_size = len(dataloader.dataset)
+
+    # Prepares values for the epoch
+    samples_used = 0
+    total_loss = 0
+    node_pos_error = 0
+    correct_edges = 0
+    edge_params_error = 0
+
+    # Sets up the model's mode
+    model.eval()
+
+    # Runs through each batch
+    for batch, (X,y), in enumerate(dataloader):
+
+        # Computes the forward pass
+        decoding = model(X)
+
+        # Computes the loss
+        loss: torch.Tensor = loss_fn(decoding, y)
+        total_loss += loss.item() * X.shape[0]
+
+        # Computes the average absolute error in node positions
+        y_nodes = y[:NODE_POS_SIZE]
+        decoding_nodes = decoding[:NODE_POS_SIZE]
+        node_pos_error += torch.sum(torch.abs(y_nodes-decoding_nodes)) / NODE_POS_SIZE
+
+        # Computes the proportion of edges that were decoded correctly
+        y_edges = y[NODE_POS_SIZE:][:EDGE_ADJ_SIZE]
+        decoding_edges = decoding[NODE_POS_SIZE:][:EDGE_ADJ_SIZE]
+        correct_edges += torch.sum(torch.abs(decoding_edges-y_edges) < 0.5).item() / EDGE_ADJ_SIZE
+
+        # Computes the average absolute error in edge parameters
+        y_edge_params = y[NODE_POS_SIZE+EDGE_ADJ_SIZE:][:EDGE_PARAMS_SIZE]
+        decoding_edge_params = decoding[NODE_POS_SIZE+EDGE_ADJ_SIZE:][:EDGE_PARAMS_SIZE]
+        edge_params_error += torch.sum(torch.abs(y_edge_params-decoding_edge_params)) / EDGE_PARAMS_SIZE
+
+        # Prints the loss when the report frequency is met
+        samples_used += X.shape[0]
+        if verbose and (batch+1) % report_frequency == 0:
+            print(f"Loss: {(total_loss / samples_used):>7f} [{samples_used}/{dataset_size}]")
+    
+    # Averages the output values
+    total_loss /= samples_used
+    node_pos_error /= samples_used
+    correct_edges /= samples_used
+    edge_params_error /= samples_used
+
+    return total_loss, node_pos_error, correct_edges, edge_params_error
 
 
 def load_model(filepath):
