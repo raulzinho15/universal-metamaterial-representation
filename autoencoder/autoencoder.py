@@ -1,7 +1,6 @@
 import torch
 from torch import nn
 from torch.utils.data import DataLoader
-from representation.rep_utils import *
 from representation.rep_class import *
 
 
@@ -143,7 +142,7 @@ def run_epoch(model: MetamaterialAE, dataloader: DataLoader, loss_fn, optim: Non
 
         # Computes the loss
         loss: torch.Tensor = loss_fn(decoding, y)
-        total_loss += loss.item()
+        total_loss += loss.item() * X.shape[0]
 
         # Runs backpropagation and gradient descent
         if train:
