@@ -26,7 +26,7 @@ def random_trusses(num_samples: int, num_nodes: int, num_edges: int):
     Generates random truss metamaterials based on the given attributes.
     The metamaterials are generated such that:
         1) It has no disconnected components.
-        2) Every face in the unit cube has at least one node. (IMPLEMENTED WHEN >=6 NODES)
+        2) Every face in the unit cube has at least one node.
         3) The material has the number of active nodes specified.
         4) The material is a truss (i.e., has only flat edges).
         5) All nodes are on the face of the unit cube.
@@ -69,7 +69,7 @@ def random_trusses(num_samples: int, num_nodes: int, num_edges: int):
 
     # Generates new node positions until enough are valid
     while node_pos.shape[0] != num_samples:
-        new_node_coords = torch.rand((num_samples*5,NODE_POS_SIZE//3,3))
+        new_node_coords = torch.rand((num_samples,NODE_POS_SIZE//3,3))
 
         # Sets unused nodes to (0,0,0) in pseudo-spherical coordinates
         new_node_coords[:,num_nodes:] = 0.5
