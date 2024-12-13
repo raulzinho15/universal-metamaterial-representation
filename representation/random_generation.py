@@ -5,7 +5,7 @@ import random
 from representation.rep_utils import *
 
 
-def random_trusses(num_samples: int, num_nodes: int, edge_prob: float):
+def random_trusses(num_samples: int, num_nodes: int, num_edges: int):
     """
     Generates random truss metamaterials based on the given attributes.
     The metamaterials are generated such that:
@@ -22,8 +22,9 @@ def random_trusses(num_samples: int, num_nodes: int, edge_prob: float):
         The exact number of nodes to use in every sample.
         Must be at least 2.
 
-    edge_prob: `float`
-        The probability of an edge existing.
+    num_edges: `int`
+        The exact number of edges to use in every sample.
+        Must be at least `num_nodes-1`.
 
     Returns: `torch.Tensor`
         A `(N,R)` tensor with the random samples of truss
@@ -33,15 +34,9 @@ def random_trusses(num_samples: int, num_nodes: int, edge_prob: float):
     """
 
     # Checks for valid parameters
-    assert num_nodes > 1, "No edges can be made with less than 2 nodes."
-
-    # Computes the mask for edges to exclude
-    # edges beyond those on the specified nodes
-    edge_mask = torch.tensor([[
-        1 if n1 < num_nodes and n2 < num_nodes else 0
-            for n1 in range(NUM_NODES)
-                for n2 in range(n1+1, NUM_NODES)
-    ]])
+    assert num_nodes >= 2, f"No edges can be made with {num_nodes} nodes."
+    assert num_nodes == 6, "num_nodes different from 6 is currently not supported."
+    assert num_edges >= num_nodes-1, f"No truss with {num_nodes} nodes can be made with {num_edges} edges."
 
 
     ### NODE POSITIONS
@@ -63,7 +58,7 @@ def random_trusses(num_samples: int, num_nodes: int, edge_prob: float):
     ### EDGE ADJACENCIES
 
     # Initializes the random edge adjacencies
-    edge_adj = (torch.rand((num_samples,EDGE_ADJ_SIZE)) < edge_prob) * edge_mask
+    edge_adj = torch.zeros((num_samples,EDGE_ADJ_SIZE))
 
     # Stores the edge indices for each node
     nodes_to_edge = torch.tensor([[edge_adj_index(n1,n2) for n2 in range(num_nodes)] for n1 in range(num_nodes)])
@@ -76,6 +71,14 @@ def random_trusses(num_samples: int, num_nodes: int, edge_prob: float):
         other_node = node_perms[base_indices,torch.randint(0,n,(num_samples,))]
         edge_index = nodes_to_edge[this_node,other_node]
         edge_adj[base_indices,edge_index] = 1
+
+    # Adds the remaining edges
+    num_total_edges = num_nodes * (num_nodes-1) // 2
+    edge_perms = torch.stack([torch.randperm(num_total_edges) for _ in range(num_samples)])
+    edge_indices = torch.tensor([edge_adj_index(n1,n2) for n1 in range(num_nodes) for n2 in range(n1+1, num_nodes)])
+    for i in range(num_total_edges):
+        edge_adj[base_indices,edge_indices[edge_perms[:,i]]] += 1 * ((edge_adj > 0).sum(dim=1) < num_edges)
+    edge_adj = (edge_adj > 0).to(torch.float32)
 
 
     ### EDGE PARAMETERS
