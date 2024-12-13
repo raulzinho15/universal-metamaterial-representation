@@ -1,11 +1,27 @@
 import torch
 import numpy as np
-import time
 import random
 from representation.rep_utils import *
 
+# Stores the face combinations that are compatible
+COMPATIBLE_FACES = torch.tensor([
+    [0, 1, 2], [0, 1, 5], [0, 4, 2], [0, 4, 5], 
+    [3, 1, 2], [3, 1, 5], [3, 4, 2], [3, 4, 5],
+    [0, 2, 1], [0, 2, 4], [0, 5, 1], [0, 5, 4],
+    [3, 2, 1], [3, 2, 4], [3, 5, 1], [3, 5, 4],
+    [1, 0, 2], [1, 0, 5], [1, 3, 2], [1, 3, 5],
+    [4, 0, 2], [4, 0, 5], [4, 3, 2], [4, 3, 5],
+    [1, 2, 0], [1, 2, 3], [1, 5, 0], [1, 5, 3],
+    [4, 2, 0], [4, 2, 3], [4, 5, 0], [4, 5, 3],
+    [2, 0, 1], [2, 0, 4], [2, 3, 1], [2, 3, 4],
+    [5, 0, 1], [5, 0, 4], [5, 3, 1], [5, 3, 4],
+    [2, 1, 0], [2, 1, 3], [2, 4, 0], [2, 4, 3],
+    [5, 1, 0], [5, 1, 3], [5, 4, 0], [5, 4, 3],
+])
+NUM_FACE_COMBINATIONS = COMPATIBLE_FACES.shape[0]
 
-def random_trusses(num_samples: int, num_nodes: int, num_edges: torch.Tensor):
+
+def random_trusses(num_samples: int, num_nodes: int, num_edges: int):
     """
     Generates random truss metamaterials based on the given attributes.
     The metamaterials are generated such that:
@@ -37,25 +53,53 @@ def random_trusses(num_samples: int, num_nodes: int, num_edges: torch.Tensor):
 
     # Checks for valid parameters
     assert num_nodes >= 2, f"No edges can be made with {num_nodes} nodes."
-    assert num_nodes == 6, "num_nodes different from 6 is currently not supported."
-    assert (num_edges >= num_nodes-1).all(), f"No truss with {num_nodes} nodes can be made with less than {num_nodes-1} edges."
+    assert num_nodes <= NUM_NODES, f"The representation cannot handle {num_nodes} nodes with its chosen hyperparameters."
+    assert num_nodes * (num_nodes - 1) // 2 >= num_edges >= num_nodes-1, f"No truss with {num_nodes} nodes can be made with {num_edges} edges."
 
 
     ### NODE POSITIONS
 
-    # Initializes the random node positions
-    node_coords = torch.rand((num_samples,NODE_POS_SIZE//3,3))
+    # # Initializes the random node positions
+    node_pos = torch.zeros((0,NODE_POS_SIZE//3,3))
+    node_coords = torch.zeros((0,NODE_POS_SIZE//3,3))
 
-    # Sets unused nodes to (0,0,0) in pseudo-spherical coordinates
-    node_coords[:,num_nodes:] = 0.5
+    # Stores values for indexing
+    rows = torch.arange(num_samples).view(-1, 1).expand(num_samples, num_nodes)
+    cols = torch.arange(num_nodes).view(1, -1).expand(num_samples, num_nodes)
 
-    # Ensures that each face has at least one node
-    node_coords[:,[0,1,2],[0,1,2]] = 0 # x,y,z = 0 (ASSUMES 6 NODES!!!!!!!!!!)
-    node_coords[:,[3,4,5],[0,1,2]] = 1 # x,y,z = 1 (ASSUMES 6 NODES!!!!!!!!!!)
+    # Generates new node positions until enough are valid
+    while node_pos.shape[0] != num_samples:
+        new_node_coords = torch.rand((num_samples*5,NODE_POS_SIZE//3,3))
 
-    # Stores the pseudo-spherical coordinates
-    node_pos = euclidean_to_pseudo_spherical_torch(node_coords).reshape((num_samples,-1))
-    
+        # Sets unused nodes to (0,0,0) in pseudo-spherical coordinates
+        new_node_coords[:,num_nodes:] = 0.5
+
+        # Chooses the face combination for each node
+        combination_indices = torch.randint(0, NUM_FACE_COMBINATIONS, (num_samples,num_nodes))
+        face_combinations = COMPATIBLE_FACES[combination_indices]
+
+        # Ensures that each node is on a face
+        face_probs = [1.0, 0.25, 0.05]
+        for face in range(3):
+            old_val = new_node_coords[rows, cols, face_combinations[:,:,face]%3]
+            probs = torch.rand((num_samples, num_nodes)) < face_probs[face]
+            new_node_coords[rows, cols, face_combinations[:,:,face]%3] = (
+                old_val * torch.logical_not(probs) + (face_combinations[:,:,face] // 3) * probs
+            )
+
+        # Ensures that each face has at least one node
+        valid_nodes = new_node_coords[:,:,[0,1,2,0,1,2]] == torch.tensor([[[0,0,0,1,1,1]]])
+        valid_nodes = torch.nonzero(valid_nodes.any(dim=1).all(dim=1))[:,0]
+
+        # Stores only the valid samples
+        cutoff = num_samples-node_pos.shape[0]
+        new_node_coords = new_node_coords[valid_nodes][:cutoff]
+        node_coords = torch.cat([node_coords, new_node_coords])
+        node_pos = torch.cat([node_pos, euclidean_to_pseudo_spherical_torch(new_node_coords)])
+
+    # Properly flattens the node position
+    node_pos = node_pos.reshape((num_samples,-1))
+
 
     ### EDGE ADJACENCIES
 
@@ -67,7 +111,7 @@ def random_trusses(num_samples: int, num_nodes: int, num_edges: torch.Tensor):
 
     # Ensures each node is included in one connected component
     node_perms = torch.stack([torch.randperm(num_nodes) for _ in range(num_samples)])
-    base_indices = [i for i in range(num_samples)]
+    base_indices = torch.arange(num_samples)
     for n in range(1,num_nodes):
         this_node = node_perms[:,n]
         other_node = node_perms[base_indices,torch.randint(0,n,(num_samples,))]
