@@ -11,46 +11,44 @@ class MetamaterialAE(nn.Module):
     the metamaterial autoencoder.
     """
 
-    def __init__(self, hidden_size_scale=2, latent_size_scale=2, is_variational=False):
+    def __init__(self, is_variational=False):
         """
         Constructs a metamaterial autoencoder with the given properties.
-
-        hidden_size_scale: int
-            The amount by which to scale the fixed input size to
-            reach the hidden size.
-
-        latent_size_scale: int
-            The amount by which to scale the fixed input size to
-            reach the latent size. If the autoencoder is chosen to
-            be variational, this shoul be chosen such that the
-            latent size will be even.
 
         is_variational: bool
             Whether the autoencoder is a variational autoencoder or not.
         """
         super().__init__()
 
-        # Computes the sizes of the autoencoder's neural networks.
+        # Network sizes
         self.input_size = REP_SIZE
-        self.hidden_size = round(self.input_size * hidden_size_scale)
-        self.latent_size = round(self.input_size * latent_size_scale)
+        self.hidden_size = self.input_size*4
+        self.latent_size = self.input_size
 
         # Encoder
         self.encoder_stack = nn.Sequential(
-            nn.Linear(self.input_size, self.hidden_size),
+            nn.Linear(in_features=self.input_size, out_features=self.hidden_size),
             nn.ReLU(),
-            nn.Linear(self.hidden_size, self.hidden_size),
+            nn.Linear(in_features=self.hidden_size, out_features=self.hidden_size),
             nn.ReLU(),
-            nn.Linear(self.hidden_size, self.latent_size),
+            nn.Linear(in_features=self.hidden_size, out_features=self.hidden_size),
+            nn.ReLU(),
+            nn.Linear(in_features=self.hidden_size, out_features=self.hidden_size),
+            nn.ReLU(),
+            nn.Linear(in_features=self.hidden_size, out_features=self.latent_size),
         )
 
         # Decoder
         self.decoder_stack = nn.Sequential(
-            nn.Linear(self.latent_size // (2 if is_variational else 1), self.hidden_size),
+            nn.Linear(in_features=self.latent_size, out_features=self.hidden_size),
             nn.ReLU(),
-            nn.Linear(self.hidden_size, self.hidden_size),
+            nn.Linear(in_features=self.hidden_size, out_features=self.hidden_size),
             nn.ReLU(),
-            nn.Linear(self.hidden_size, self.input_size),
+            nn.Linear(in_features=self.hidden_size, out_features=self.hidden_size),
+            nn.ReLU(),
+            nn.Linear(in_features=self.hidden_size, out_features=self.hidden_size),
+            nn.ReLU(),
+            nn.Linear(in_features=self.hidden_size, out_features=self.input_size),
         )
 
 
@@ -94,7 +92,7 @@ class MetamaterialAE(nn.Module):
         return self.decode(self.encode(x))
 
 
-def run_epoch(model: MetamaterialAE, dataloader: DataLoader, loss_fn, optim=None, train=True, verbose=True, report_frequency=200) -> float:
+def run_epoch(model: MetamaterialAE, dataloader: DataLoader, loss_fn, optim: None | torch.optim.Adam = None, train=True, verbose=True, report_frequency=200) -> float:
     """
     Runs an epoch on the model with the given data.
 
@@ -144,7 +142,7 @@ def run_epoch(model: MetamaterialAE, dataloader: DataLoader, loss_fn, optim=None
         decoding = model(X)
 
         # Computes the loss
-        loss = loss_fn(decoding, y)
+        loss: torch.Tensor = loss_fn(decoding, y)
         total_loss += loss.item()
 
         # Runs backpropagation and gradient descent
@@ -180,3 +178,4 @@ def load_model(filepath):
     model.eval()
 
     return model
+

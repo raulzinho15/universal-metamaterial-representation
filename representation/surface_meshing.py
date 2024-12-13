@@ -540,7 +540,7 @@ def save_multi_obj(vertices: list[list[tuple]], faces: list[list[tuple]], filepa
             for vertex in obj_vertices:
                 f.write("v")
                 for coord in vertex:
-                    f.write(f" {np.round(coord, precision) / SCALE}")
+                    f.write(f" {np.round(coord, precision)}")
                 f.write("\n")
 
             # Writes each face
@@ -556,6 +556,305 @@ def save_multi_obj(vertices: list[list[tuple]], faces: list[list[tuple]], filepa
     # Tells the user the save finihsed
     if verbose:
         print("Saved!")
+
+
+def find_contained_voxels(start_voxel: tuple[int], contains_function, resolution=50):
+
+    # Stores the node's voxels
+    seen_voxels = set()
+    queue = [start_voxel]
+
+    # Runs through each adjacent voxel
+    while queue:
+
+        # Stores the current voxel
+        current_voxel = queue.pop()
+        seen_voxels.add(current_voxel)
+
+        # Checks if the current voxel is inside
+        x,y,z = current_voxel
+        voxel_point = ((x + 0.5)/resolution, (y + 0.5)/resolution, (z + 0.5)/resolution)
+        if not contains_function(voxel_point):
+            continue
+        yield current_voxel
+
+        # Queues the adjacent voxels
+        for dx in [-1,1]:
+            if (x+dx,y,z) not in seen_voxels:
+                queue.append((x+dx,y,z))
+            if (x,y+dx,z) not in seen_voxels:
+                queue.append((x,y+dx,z))
+            if (x,y,z+dx) not in seen_voxels:
+                queue.append((x,y,z+dx))
+
+
+import time
+def voxelize_material(material: Metamaterial, filepath: str, resolution=50, verbose=True):
+
+    # Stores the voxel coordinates
+    all_voxels = set()
+
+    # Runs through each node
+    for node in material.active_nodes():
+        if verbose:
+            print(f"Node {node}")
+
+        # Computes the node's internal voxels
+        vertices, faces = generate_node_surface_mesh(material, node)
+        node_mesh = trimesh.Trimesh(vertices=vertices, faces=faces)
+        start_point = material.get_node_position(node)
+        start_voxel = tuple(map(int, np.round(start_point * resolution)))
+        contains_function = lambda x:node_mesh.contains([x])[0]
+        all_voxels.update(find_contained_voxels(start_voxel, contains_function, resolution=resolution))
+
+    # Runs through each edge
+    for n1 in range(NUM_NODES):
+        for n2 in range(n1+1,NUM_NODES):
+            
+            # Skips non-edge
+            if not material.has_edge(n1,n2):
+                continue
+            
+            if verbose:
+                print(f"Edge ({n1},{n2})")
+                
+            # Computes the edge's internal voxels
+            vertices, faces = generate_edge_surface_mesh(material, n1, n2)
+            edge_mesh = trimesh.Trimesh(vertices=vertices, faces=faces)
+            start_point = material.compute_edge_points(n1,n2)(EDGE_SEGMENTS//2)
+            start_voxel = tuple(map(int, np.round(start_point * resolution)))
+            contains_function = lambda x:edge_mesh.contains([x])[0]
+            all_voxels.update(find_contained_voxels(start_voxel, contains_function, resolution=resolution))
+
+    # Runs through each face
+    for n1 in range(NUM_NODES):
+        for n2 in range(n1+1,NUM_NODES):
+            for n3 in range(n2+1,NUM_NODES):
+            
+                # Skips non-face
+                if not material.has_face(n1,n2,n3):
+                    continue
+                
+                if verbose:
+                    print(f"Face ({n1},{n2},{n3})")
+                    
+                # Computes the face's internal voxels
+                start_time = time.time()
+                vertices, faces = generate_face_surface_mesh(material, n1, n2, n3)
+                face_mesh = trimesh.Trimesh(vertices=vertices, faces=faces)
+                start_point = material.compute_face_points(n1,n2,n3)(EDGE_SEGMENTS//3,EDGE_SEGMENTS//3)
+                start_voxel = tuple(map(int, np.round(start_point * resolution)))
+                contains_function = lambda x:face_mesh.contains([x])[0]
+                all_voxels.update(find_contained_voxels(start_voxel, contains_function, resolution=resolution))
+                print(time.time()-start_time)
+
+    # Fixes non-manifold edges
+    target_voxels = all_voxels
+    while True:
+        new_voxels = set()
+        for voxel in target_voxels:
+
+            for i in range(3):
+                for dx in [-1,1]:
+                    for dy in [-1,1]:
+
+                        # Computes the diagonal voxel
+                        diagonal = list(voxel)
+                        diagonal[(i+1)%3] += dx
+                        diagonal[(i+2)%3] += dy
+                        diagonal = tuple(diagonal)
+
+                        # Computes the first adjacent voxel
+                        adj1 = list(voxel)
+                        adj1[(i+1)%3] += dx
+                        adj1 = tuple(adj1)
+
+                        # Computes the second adjacent voxel
+                        adj2 = list(voxel)
+                        adj2[(i+2)%3] += dy
+                        adj2 = tuple(adj2)
+
+                        # Fixes if non-manifold
+                        if diagonal in all_voxels and adj1 not in all_voxels and adj2 not in all_voxels:
+                            new_voxels.add(adj1)
+                            new_voxels.add(adj2)
+
+        # Stores the new voxels
+        all_voxels.update(voxel for voxel in new_voxels)
+        target_voxels = new_voxels
+
+        # Stops if no voxels are left
+        if len(target_voxels) == 0:
+            break
+
+    # Stores the voxels
+    with open(filepath, "w") as f:
+        for x,y,z in all_voxels:
+            f.write(f"{x} {y} {z}\n")
+
+
+def voxels_to_surface(voxel_filepath: str, obj_filepath: str, resolution=50):
+
+    # Stores the voxels
+    voxels = set()
+    with open(voxel_filepath, "r") as f:
+        line = f.readline()
+        while len(line) > 0:
+            x,y,z = map(int, line[:-1].split(" "))
+            voxels.add((x,y,z))
+            line = f.readline()
+
+    # Stores data about the mesh
+    num_vertices = 0
+    vertex_index = {}
+    vertices, faces = [], []
+
+    # Stores the vertices in a non-duplicating manner
+    for voxel in voxels:
+        x,y,z = voxel
+
+        # Checks each voxel vertex coordinate
+        for dx in range(2):
+            for dy in range(2):
+                for dz in range(2):
+
+                    # Checks this point
+                    vertex = (x+dx,y+dy,z+dz)
+                    if vertex not in vertex_index:
+                        vertex_index[vertex] = num_vertices
+                        vertices.append(tuple(map(lambda x:x/resolution, vertex)))
+                        num_vertices += 1
+
+    # Adds the cube faces
+    for voxel in voxels:
+            x,y,z = voxel
+
+            # Handles the x=0 face
+            if (x-1,y,z) not in voxels:
+                faces.append((
+                    vertex_index[(x,y,z+1)],
+                    vertex_index[(x,y+1,z+1)],
+                    vertex_index[(x,y+1,z)],
+                    vertex_index[(x,y,z)],
+                ))
+            
+            # Handles the y=0 face
+            if (x,y-1,z) not in voxels:
+                faces.append((
+                    vertex_index[(x,y,z)],
+                    vertex_index[(x+1,y,z)],
+                    vertex_index[(x+1,y,z+1)],
+                    vertex_index[(x,y,z+1)],
+                ))
+            
+            # Handles the z=0 face
+            if (x,y,z-1) not in voxels:
+                faces.append((
+                    vertex_index[(x,y,z)],
+                    vertex_index[(x,y+1,z)],
+                    vertex_index[(x+1,y+1,z)],
+                    vertex_index[(x+1,y,z)],
+                ))
+            
+            # Handles the x=1 face
+            if (x+1,y,z) not in voxels:
+                faces.append((
+                    vertex_index[(x+1,y,z)],
+                    vertex_index[(x+1,y+1,z)],
+                    vertex_index[(x+1,y+1,z+1)],
+                    vertex_index[(x+1,y,z+1)],
+                ))
+            
+            # Handles the y=1 face
+            if (x,y+1,z) not in voxels:
+                faces.append((
+                    vertex_index[(x,y+1,z+1)],
+                    vertex_index[(x+1,y+1,z+1)],
+                    vertex_index[(x+1,y+1,z)],
+                    vertex_index[(x,y+1,z)],
+                ))
+            
+            # Handles the z=1 face
+            if (x,y,z+1) not in voxels:
+                faces.append((
+                    vertex_index[(x,y,z+1)],
+                    vertex_index[(x,y+1,z+1)],
+                    vertex_index[(x+1,y+1,z+1)],
+                    vertex_index[(x+1,y,z+1)],
+                ))
+
+    save_multi_obj([vertices], [faces], obj_filepath)
+
+
+
+
+def voxel_to_obj(voxel_filepath: str, obj_filepath: str, resolution=50):
+
+    # Stores the vertices and faces of the obj mesh
+    vertices, faces = [], []
+
+    # Stores each vertex of the voxel cubes
+    num_vertices = 0
+    vertex_index = {}
+    
+    # Goes through each voxel
+    with open(voxel_filepath, "r") as f:
+        line = f.readline()
+        while len(line) > 0:
+            x,y,z = map(int, line[:-1].split(" "))
+            line = f.readline()
+
+            # Checks each vertex coordinate
+            for dx in range(2):
+                for dy in range(2):
+                    for dz in range(2):
+
+                        # Checks this point
+                        vertex = (x+dx,y+dy,z+dz)
+                        if vertex not in vertex_index:
+                            vertex_index[vertex] = num_vertices
+                            vertices.append(tuple(map(lambda x:x/resolution, vertex)))
+                            num_vertices += 1
+
+            # Adds the cube faces
+            faces.append(( # x=0
+                vertex_index[(x,y,z)],
+                vertex_index[(x,y+1,z)],
+                vertex_index[(x,y+1,z+1)],
+                vertex_index[(x,y,z+1)],
+            ))
+            faces.append(( # y=0
+                vertex_index[(x,y,z)],
+                vertex_index[(x+1,y,z)],
+                vertex_index[(x+1,y,z+1)],
+                vertex_index[(x,y,z+1)],
+            ))
+            faces.append(( # z=0
+                vertex_index[(x,y,z)],
+                vertex_index[(x,y+1,z)],
+                vertex_index[(x+1,y+1,z)],
+                vertex_index[(x+1,y,z)],
+            ))
+            faces.append(( # x=1
+                vertex_index[(x+1,y,z)],
+                vertex_index[(x+1,y+1,z)],
+                vertex_index[(x+1,y+1,z+1)],
+                vertex_index[(x+1,y,z+1)],
+            ))
+            faces.append(( # y=1
+                vertex_index[(x,y+1,z)],
+                vertex_index[(x+1,y+1,z)],
+                vertex_index[(x+1,y+1,z+1)],
+                vertex_index[(x,y+1,z+1)],
+            ))
+            faces.append(( # z=1
+                vertex_index[(x,y,z+1)],
+                vertex_index[(x,y+1,z+1)],
+                vertex_index[(x+1,y+1,z+1)],
+                vertex_index[(x+1,y,z+1)],
+            ))
+
+    save_multi_obj([[tuple(map(lambda x:x/resolution, vertex)) for vertex in vertices]], [faces], obj_filepath)
 
 
 def union_obj_components(vertices: list[list[tuple]], faces: list[list[tuple]], filepath: str, check_manifold=True, verbose=True):
@@ -615,7 +914,7 @@ def union_obj_components(vertices: list[list[tuple]], faces: list[list[tuple]], 
             print(f"WARNING: {filepath} is not a manifold mesh.")
 
     # Rescales the vertices
-    rescaled_vertices = np.array(union_mesh.vertices) / SCALE
+    rescaled_vertices = np.array(union_mesh.vertices)
     union_mesh = trimesh.Trimesh(vertices=rescaled_vertices, faces=union_mesh.faces)
 
     # Exports the mesh

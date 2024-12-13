@@ -97,7 +97,7 @@ class Metamaterial:
 
         # Applies the transformations
         points = points.reshape(points.shape[0]//3, 3)
-        return (self.translations + (1-points)*self.mirrors + points*(1-self.mirrors)).flatten() * SCALE
+        return (self.translations + (1-points)*self.mirrors + points*(1-self.mirrors)).flatten()
     
 
     def set_boundaries(self, boundaries: np.ndarray):

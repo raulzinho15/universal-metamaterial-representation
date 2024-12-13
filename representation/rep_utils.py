@@ -1,4 +1,5 @@
 import numpy as np
+import torch
 from math import factorial
 
 # User-controlled properties
@@ -6,8 +7,8 @@ NUM_NODES = 13 # Non-center nodes plus the single center node
 EDGE_BEZIER_POINTS = 2 # The number of points to describe curved edges
 EDGE_SEGMENTS = 8 # The number of segments to use to mesh edges/faces
 CUBE_CENTER = np.ones(3)/2 # The center of the metamaterial cube
-SCALE = 1
-THICKNESS = 0.1 * SCALE # The thickness of the metamaterial
+# SCALE = 1
+THICKNESS = 0.1 # The thickness of the metamaterial
 
 # Automatically-chosen properties
 NODE_POS_SIZE = NUM_NODES * 3 # The number of parameters in the node position array
@@ -80,6 +81,61 @@ def euclidean_to_pseudo_spherical(points: np.ndarray) -> np.ndarray:
     ], axis=1).flatten()
 
 
+def euclidean_to_pseudo_spherical_torch(points: torch.Tensor) -> torch.Tensor:
+    """
+    Computes the psuedo-spherical coordinates of the given Euclidean points.
+
+    points: `torch.Tensor`
+        A `(K,N,3)` tensor with 3D `(x,y,z)` Euclidean coordinates.
+        `K` is the number of metamaterial samples.
+        `N` is the number of nodes in the metamaterial.
+        Assumes points are in [0,1].
+
+    Returns: `torch.Tensor`
+        A `(K,N,3)` tensor with 3D `(radius, theta, phi)` pseudo-spherical
+        coordinates.
+        `K` is the number of metamaterial samples.
+        `N` is the number of nodes in the metamaterial.
+        All values are linearly normalized to be in [0,1].
+        At a radius of 0, the point is at `CUBE_CENTER`. At a radius
+        of 1, the point is on the surface of the cube. Everything in
+        between varies linearly. The `theta` and `phi` values are as
+        conventionally defined for spherical coordinates, normalized
+        to [0,1].
+    """
+
+    # Stores the indices for the different coordinates
+    x_index, y_index, z_index = 0, 1, 2
+
+    # Transforms the points to be centered at the origin
+    points = points*2 - 1
+
+    # Computes the actual radii
+    radius = torch.sqrt((points**2).sum(dim=2)) # (K,N)
+
+    # Computes the pseudo radii of the points
+    pseudo_radius = torch.abs(points).max(dim=2)[0] # (K,N)
+
+    # Computes theta, forcing the center to have theta=0
+    theta = torch.arccos(points[:,:,z_index]/radius)
+    theta = torch.nan_to_num(theta)
+    theta /= np.pi
+
+    # Computes phi, forcing the center to have phi=0
+    phi = torch.arctan2(
+        points[:,:,y_index]/torch.sin(theta)/radius,
+        points[:,:,x_index]/torch.sin(theta)/radius,
+    )
+    phi = (phi + 2*np.pi) % (2*np.pi)
+    phi = torch.nan_to_num(phi)
+    phi /= 2*np.pi
+
+    # Returns the pseudo-spherical coordinates in a stack
+    return torch.stack([
+        pseudo_radius, theta, phi
+    ], dim=2)
+
+
 def pseudo_spherical_to_euclidean(points: np.ndarray) -> np.ndarray:
     """
     Computes the Euclidean coordinates, of the given pseudo-spherical
@@ -92,9 +148,9 @@ def pseudo_spherical_to_euclidean(points: np.ndarray) -> np.ndarray:
         of a particular point. Assumes the `radius` value is a value in
         [0,1]. At a radius of 0, the point is at `CUBE_CENTER`. At a radius
         of 1, the point is on the surface of the cube. Everything in
-        between varies linearly. The `theta` and `phi` values are assumed
-        to be as conventionally defined for spherical coordinates, normalized
-        to [0,1].
+        between varies linearly, depending on the other two angles.
+        The `theta` and `phi` values are assumed to be as conventionally
+        defined for spherical coordinates, but linearly normalized to [0,1].
 
     Returns: np.ndarray
         A 2D numpy array containing the points whose pseudo-spherical
