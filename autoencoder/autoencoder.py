@@ -1,7 +1,6 @@
 import torch
 from torch import nn
 from torch.utils.data import DataLoader
-from representation.rep_class import *
 
 
 class MetamaterialAE(nn.Module):
@@ -10,7 +9,7 @@ class MetamaterialAE(nn.Module):
     the metamaterial autoencoder.
     """
 
-    def __init__(self, is_variational=False):
+    def __init__(self, input_size: int, is_variational=False):
         """
         Constructs a metamaterial autoencoder with the given properties.
 
@@ -20,7 +19,7 @@ class MetamaterialAE(nn.Module):
         super().__init__()
 
         # Network sizes
-        self.input_size = REP_SIZE
+        self.input_size = input_size
         self.hidden_size = self.input_size*4
         self.latent_size = self.input_size
 
