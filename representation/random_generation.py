@@ -52,6 +52,10 @@ def random_trusses(num_samples: int, num_nodes: int, num_edges: int):
     """
 
     # Checks for valid parameters
+    assert type(num_samples) == int
+    assert type(num_nodes) == int
+    assert type(num_edges) == int
+    assert num_samples > 0, "Must generate at least one sample."
     assert num_nodes >= 2, f"No edges can be made with {num_nodes} nodes."
     assert num_nodes <= NUM_NODES, f"The representation cannot handle {num_nodes} nodes with its chosen hyperparameters."
     assert num_nodes * (num_nodes - 1) // 2 >= num_edges >= num_nodes-1, f"No truss with {num_nodes} nodes can be made with {num_edges} edges."
