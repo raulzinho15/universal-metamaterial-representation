@@ -187,6 +187,8 @@ def test_epoch(model: MetamaterialAE, dataloader: DataLoader, loss_fn, verbose=F
     node_pos_error = 0
     correct_edges = 0
     edge_params_error = 0
+    correct_faces = 0
+    face_params_error = 0
 
     # Sets up the model's mode
     model.eval()
@@ -216,6 +218,16 @@ def test_epoch(model: MetamaterialAE, dataloader: DataLoader, loss_fn, verbose=F
         decoding_edge_params = decoding[:,NODE_POS_SIZE+EDGE_ADJ_SIZE:][:,:EDGE_PARAMS_SIZE]
         edge_params_error += torch.sum(torch.abs(y_edge_params-decoding_edge_params)).item() / EDGE_PARAMS_SIZE
 
+        # Computes the proportion of faces that were decoded correctly
+        y_faces = y[:,NODE_POS_SIZE+EDGE_ADJ_SIZE+EDGE_PARAMS_SIZE:][:,:FACE_ADJ_SIZE]
+        decoding_faces = decoding[:,NODE_POS_SIZE+EDGE_ADJ_SIZE+EDGE_PARAMS_SIZE:][:,:FACE_ADJ_SIZE]
+        correct_faces += torch.sum(torch.abs(decoding_faces-y_faces) < 0.5).item() / FACE_ADJ_SIZE
+
+        # Computes the average absolute error in face parameters
+        y_face_params = y[:,NODE_POS_SIZE+EDGE_ADJ_SIZE+EDGE_PARAMS_SIZE+FACE_ADJ_SIZE:][:,:FACE_PARAMS_SIZE]
+        decoding_face_params = decoding[:,NODE_POS_SIZE+EDGE_ADJ_SIZE+EDGE_PARAMS_SIZE+FACE_ADJ_SIZE:][:,:FACE_PARAMS_SIZE]
+        face_params_error += torch.sum(torch.abs(y_face_params-decoding_face_params)).item() / FACE_PARAMS_SIZE
+
         # Prints the loss when the report frequency is met
         samples_used += X.shape[0]
         if verbose and (batch+1) % report_frequency == 0:
@@ -226,8 +238,10 @@ def test_epoch(model: MetamaterialAE, dataloader: DataLoader, loss_fn, verbose=F
     node_pos_error /= samples_used
     correct_edges /= samples_used
     edge_params_error /= samples_used
+    correct_faces /= samples_used
+    face_params_error /= samples_used
 
-    return total_loss, node_pos_error, correct_edges, edge_params_error
+    return total_loss, node_pos_error, correct_edges, edge_params_error, correct_faces, face_params_error
 
 
 def load_model(filepath):
