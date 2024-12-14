@@ -148,16 +148,151 @@ def random_edge_adjacencies(num_samples: int, num_nodes: int, num_edges: int) ->
         edge_adj[base_indices, edge_index] = 1
 
     # Computes useful values for adding the remaining edges
-    num_total_edges = num_nodes * (num_nodes-1) // 2
+    edge_indices = torch.tensor([
+        nodes_to_edge[n1, n2]
+            for n1 in range(num_nodes)
+                for n2 in range(n1+1, num_nodes)
+    ])
+    num_total_edges = edge_indices.shape[0]
     edge_perms = torch.stack([torch.randperm(num_total_edges) for _ in range(num_samples)])
-    edge_indices = torch.tensor([nodes_to_edge[n1, n2] for n1 in range(num_nodes) for n2 in range(n1+1, num_nodes)])
 
     # Adds edges while there are not yet `num_edges` edges in each sample
     for i in range(num_total_edges):
-        edge_adj[base_indices,edge_indices[edge_perms[:,i]]] += 1 * ((edge_adj > 0).sum(dim=1) < num_edges)
+        edge_adj[base_indices, edge_indices[edge_perms[:,i]]] += 1 * ((edge_adj > 0).sum(dim=1) < num_edges)
     
     return (edge_adj > 0).to(torch.float32)
 
+
+def random_face_adjacencies(num_samples: int, num_nodes: int, num_faces: int) -> tuple[torch.Tensor]:
+    """
+    Generates random face adjacencies based on the given attributes.
+    The face adjacencies are generated such that:
+        1) There has no disconnected components.
+        2) The material has the number of active nodes specified.
+
+    num_samples: `int`
+        The number of random truss samples to generate.
+
+    num_nodes: `int`
+        The exact number of nodes to use in every sample.
+        Must be at least 3.
+
+    num_faces: `torch.Tensor`
+        The exact number of faces to use in each sample.
+        Must be at least `num_nodes-2`.
+
+    Returns: `torch.Tensor`
+        A tuple of tensors containing the following tensors:
+        
+        A `(N,R)` tensor with the random face adjacencies.
+        `N` is the number of samples.
+        `R` is the size of the face adjacency array in the
+        Metamaterial representation.
+        
+        A `(N,R)` tensor with the corresponding edge adjacencies.
+        `N` is the number of samples.
+        `R` is the size of the edge adjacency array in the
+        Metamaterial representation.
+    """
+
+    # Initializes the random face adjacencies
+    face_adj = torch.zeros((num_samples,FACE_ADJ_SIZE))
+
+    # Stores the face indices for each node
+    nodes_to_face = torch.tensor([[[
+        face_adj_index(n1, n2, n3)
+            for n3 in range(num_nodes)]
+                for n2 in range(num_nodes)]
+                    for n1 in range(num_nodes)])
+
+    # Prepares the values for creating one connected component
+    node_perms = torch.stack([torch.randperm(num_nodes) for _ in range(num_samples)])
+    base_indices = torch.arange(num_samples)
+
+    # Stores the number of nodes that have been used for faces so far
+    nodes_used = (torch.rand((num_samples,)) < 0.5) + 1 # Starts with 1,2
+
+    # Stores the number of nodes to use at the next face addition
+    new_nodes = 3 - nodes_used
+
+    # Ensures each node is included in one connected component
+    for n in range(2, num_nodes):
+        
+        ### FACE ON EXISTING VERTEX
+
+        # Stores which samples will have a face at an existing face's vertex
+        face_at_vertex = torch.nonzero(torch.logical_and((nodes_used + new_nodes) == (n+1), new_nodes == 2))[:,0]
+
+        # Stores which old nodes will be chosen
+        old_node_indices = torch.randint(0, n-1, (face_at_vertex.shape[0],))
+
+        # Creates the face
+        n1_index = node_perms[face_at_vertex, old_node_indices]
+        n2_index = node_perms[face_at_vertex, n-1]
+        n3_index = node_perms[face_at_vertex, n]
+        face_index = nodes_to_face[n1_index, n2_index, n3_index]
+        face_adj[face_at_vertex, face_index] = 1
+
+        # Stores which kind of face will be the next face to be added
+        nodes_used[face_at_vertex] += 2
+        new_nodes[face_at_vertex] = (torch.rand((face_at_vertex.shape[0],)) < 0.5) + 1
+
+        ### FACE ON EXISTING EDGE
+
+        # Handles case when there is one node left but a face-on-vertex was chosen
+        if n == num_nodes-1:
+            new_nodes[:] = 1
+
+        # Stores which samples will have a face at an existing face's edge
+        face_at_edge = torch.nonzero(torch.logical_and((nodes_used + new_nodes) == (n+1), new_nodes == 1))[:,0]
+        
+        # Stores which old nodes will be chosen
+        old_node_indices = torch.stack([torch.randperm(n) for _ in range(face_at_edge.shape[0])])[:,:2]
+
+        # Creates the face
+        n1_index = node_perms[face_at_edge, old_node_indices[:,0]]
+        n2_index = node_perms[face_at_edge, old_node_indices[:,1]]
+        n3_index = node_perms[face_at_edge, n]
+        face_index = nodes_to_face[n1_index, n2_index, n3_index]
+        face_adj[face_at_edge, face_index] = 1
+
+        # Stores which kind of face will be the next face to be added
+        nodes_used[face_at_edge] += 1
+        new_nodes[face_at_edge] = (torch.rand((face_at_edge.shape[0],)) < 0.5) + 1
+
+    # Computes useful values for adding the remaining faces
+    face_indices = torch.tensor([
+        nodes_to_face[n1, n2, n3]
+            for n1 in range(num_nodes)
+                for n2 in range(n1+1, num_nodes)
+                    for n3 in range(n2+1, num_nodes)
+    ])
+    num_total_faces = face_indices.shape[0]
+    face_perms = torch.stack([torch.randperm(num_total_faces) for _ in range(num_samples)])
+
+    # Adds face while there are not yet `num_faces` faces in each sample
+    for i in range(num_total_faces):
+        face_adj[base_indices, face_indices[face_perms[:,i]]] += 1 * ((face_adj > 0).sum(dim=1) < num_faces)
+    face_adj = (face_adj > 0).to(torch.float32)
+
+    # Maps face adjacency indices to the corresponding nodes
+    face_to_nodes = torch.tensor([
+        [n1, n2, n3]
+            for n1 in range(NUM_NODES)
+                for n2 in range(n1+1, NUM_NODES)
+                    for n3 in range(n2+1, NUM_NODES)
+    ])
+
+    # Stores the edge indices for each node
+    nodes_to_edge = torch.tensor([[edge_adj_index(n1, n2) for n2 in range(NUM_NODES)] for n1 in range(NUM_NODES)])
+
+    # Computes the corresponding edge adjacency
+    edge_adj = torch.zeros((num_samples, EDGE_ADJ_SIZE))
+    edge_adj[:, nodes_to_edge[face_to_nodes[:,0], face_to_nodes[:,1]]] = face_adj
+    edge_adj[:, nodes_to_edge[face_to_nodes[:,0], face_to_nodes[:,2]]] = face_adj
+    edge_adj[:, nodes_to_edge[face_to_nodes[:,1], face_to_nodes[:,2]]] = face_adj
+    
+    return face_adj, edge_adj
 
 
 def random_trusses(num_samples: int, num_nodes: int, num_edges: int):
