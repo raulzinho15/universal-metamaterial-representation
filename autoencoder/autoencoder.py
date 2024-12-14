@@ -176,6 +176,8 @@ def test_epoch(model: MetamaterialAE, dataloader: DataLoader, loss_fn, verbose=F
         2) The average absolute node position error.
         3) The fraction of edges correctly decoded.
         4) The average absolute edge parameters error.
+        5) The fraction of faces correctly decoded.
+        6) The average absolute face parameters error.
     """
 
     # Computes the size of the dataset
