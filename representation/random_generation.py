@@ -283,16 +283,62 @@ def random_face_adjacencies(num_samples: int, num_nodes: int, num_faces: int) ->
                     for n3 in range(n2+1, NUM_NODES)
     ])
 
-    # Stores the edge indices for each node
-    nodes_to_edge = torch.tensor([[edge_adj_index(n1, n2) for n2 in range(NUM_NODES)] for n1 in range(NUM_NODES)])
-
     # Computes the corresponding edge adjacency
     edge_adj = torch.zeros((num_samples, EDGE_ADJ_SIZE))
-    edge_adj[:, nodes_to_edge[face_to_nodes[:,0], face_to_nodes[:,1]]] = face_adj
-    edge_adj[:, nodes_to_edge[face_to_nodes[:,0], face_to_nodes[:,2]]] = face_adj
-    edge_adj[:, nodes_to_edge[face_to_nodes[:,1], face_to_nodes[:,2]]] = face_adj
+    for n1 in range(NUM_NODES):
+        for n2 in range(NUM_NODES):
+            if n1 == n2:
+                continue
+            for n3 in range(NUM_NODES):
+                if n1 == n3 or n2 == n3:
+                    continue
+                has_face = face_adj[:, face_adj_index(n1,n2,n3)]
+                edge_adj[:, edge_adj_index(n1,n2)] += has_face
+                edge_adj[:, edge_adj_index(n1,n3)] += has_face
+                edge_adj[:, edge_adj_index(n2,n3)] += has_face
+    edge_adj = (edge_adj > 0).to(torch.float32)
     
     return face_adj, edge_adj
+
+
+def straight_edge_parameters(node_coords: torch.Tensor, edge_adj: torch.Tensor) -> torch.Tensor:
+    """
+    Computes the edge parameters for straight edges for
+    the given samples' node coordinates.
+
+    node_coords: `torch.Tensor`
+        A `(N,R//3,3)` tensor with the samples' node positions
+        transformed into Euclidean coordinates.
+        `N` is the number of samples.
+        `R` is the size of the node position array in the
+        Metamaterial representation.
+
+    edge_adj: `torch.Tensor`
+        A `(N,R)` tensor with the samples' edge adjacencies.
+        `N` is the number of samples.
+        `R` is the size of the edge adjacency array in the
+        Metamaterial representation.
+
+    Returns: `torch.Tensor`
+        A `(N,R)` tensor with the straight edge parameters.
+        Contains only edge parameters for the given active edges.
+        All other edges parameters are 0.
+        `N` is the number of samples.
+        `R` is the size of the edge parameters array in the
+        Metamaterial representation.
+    """
+
+    # Stores the node indices for each edge
+    node_indices = torch.tensor([[n1, n2] for n1 in range(NUM_NODES) for n2 in range(n1+1, NUM_NODES)])
+
+    # Stores the vector describing each edge
+    edge_vectors = node_coords[:,node_indices[:,1]] - node_coords[:,node_indices[:,0]]
+
+    # Stores the edge parameters that make a straight edge
+    edge_params = torch.cat([edge_vectors/3, 2*edge_vectors/3], dim=2) * edge_adj.unsqueeze(-1)
+    edge_params = edge_params.reshape((node_coords.shape[0],-1))
+
+    return edge_params
 
 
 def random_trusses(num_samples: int, num_nodes: int, num_edges: int):
@@ -333,30 +379,87 @@ def random_trusses(num_samples: int, num_nodes: int, num_edges: int):
     assert num_nodes <= NUM_NODES, f"The representation cannot handle {num_nodes} nodes with its chosen hyperparameters."
     assert num_nodes * (num_nodes - 1) // 2 >= num_edges >= num_nodes-1, f"No truss with {num_nodes} nodes can be made with {num_edges} edges."
 
-
     # Stores the node positions
     node_pos, node_coords = random_node_positions(num_samples, num_nodes)
 
     # Stores the edge adjacencies
     edge_adj = random_edge_adjacencies(num_samples, num_nodes, num_edges)
 
-
-    ### EDGE PARAMETERS
-
-    # Stores the node indices for each edge
-    node_indices = torch.tensor([[n1, n2] for n1 in range(NUM_NODES) for n2 in range(n1+1, NUM_NODES)])
-
-    # Stores the vector describing each edge
-    edge_vectors = node_coords[:,node_indices[:,1]] - node_coords[:,node_indices[:,0]]
-
-    # Stores the edge parameters that make a straight edge
-    edge_params = torch.cat([edge_vectors/3, 2*edge_vectors/3], dim=2) * edge_adj.unsqueeze(-1)
-    edge_params = edge_params.reshape((num_samples,-1))
-
+    # Stores the edge parameters
+    edge_params = straight_edge_parameters(node_coords, edge_adj)
 
     # Stores the other parameters
     face_adj = torch.zeros((num_samples,FACE_ADJ_SIZE))
     face_params = torch.zeros((num_samples,FACE_PARAMS_SIZE))
+    global_params = torch.ones((num_samples,1)) * 0.5 # Thickness
+
+    return torch.cat([node_pos, edge_adj, edge_params, face_adj, face_params, global_params], dim=1)
+
+
+def random_shells(num_samples: int, num_nodes: int, num_faces: int):
+    """
+    Generates random shell metamaterials based on the given attributes.
+    The metamaterials are generated such that:
+        1) There has no disconnected components.
+        2) Every face in the unit cube has at least one node.
+        3) The material has the number of active nodes specified.
+        4) The material is a shell (i.e., has only flat faces).
+        5) All nodes are on at least one face of the unit cube.
+        6) All nodes are on at most three faces of the unit cube.
+
+    num_samples: `int`
+        The number of random shell samples to generate.
+
+    num_nodes: `int`
+        The exact number of nodes to use in every sample.
+        Must be at least 3.
+
+    num_faces: `torch.Tensor`
+        The exact number of edges to use in each sample.
+        Must be at least `num_nodes-2`.
+
+    Returns: `torch.Tensor`
+        A `(N,R)` tensor with the random samples of shell
+        metamaterials.
+        `N` is the number of samples.
+        `R` is the representation size.
+    """
+
+    # Checks for valid parameters
+    assert type(num_samples) == int
+    assert type(num_nodes) == int
+    assert type(num_faces) == int
+    assert num_samples > 0, "Must generate at least one sample."
+    assert num_nodes >= 3, f"No faces can be made with {num_nodes} nodes."
+    assert num_nodes <= NUM_NODES, f"The representation cannot handle {num_nodes} nodes with its chosen hyperparameters."
+    assert num_nodes * (num_nodes-1) * (num_nodes-2) // 6 >= num_faces >= num_nodes-2, f"No shell with {num_nodes} nodes can be made with {num_faces} faces."
+
+    # Stores the node positions
+    node_pos, node_coords = random_node_positions(num_samples, num_nodes)
+
+    # Stores the edge/face adjacencies
+    face_adj, edge_adj = random_face_adjacencies(num_samples, num_nodes, num_faces)
+
+    # Stores the edge parameters
+    edge_params = straight_edge_parameters(node_coords, edge_adj)
+
+
+    ### FACE PARAMETERS
+
+    # Stores the node indices for each edge
+    node_indices = torch.tensor([
+        [n1, n2, n3]
+            for n1 in range(NUM_NODES)
+                for n2 in range(n1+1, NUM_NODES)
+                    for n3 in range(n2+1, NUM_NODES)
+    ])
+
+    # Stores the face parameters that make a flat face
+    face_params = node_coords[:, node_indices].sum(dim=2) / 3 - node_coords[:, node_indices[:,0]]
+    face_params = (face_params * face_adj.unsqueeze(-1)).reshape((num_samples,-1))
+
+
+    # Stores the other parameters
     global_params = torch.ones((num_samples,1)) * 0.5 # Thickness
 
     return torch.cat([node_pos, edge_adj, edge_params, face_adj, face_params, global_params], dim=1)
