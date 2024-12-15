@@ -181,7 +181,7 @@ def random_face_adjacencies(num_samples: int, num_nodes: int, num_faces: int) ->
         The exact number of faces to use in each sample.
         Must be at least `num_nodes-2`.
 
-    Returns: `torch.Tensor`
+    Returns: `tuple[torch.Tensor]`
         A tuple of tensors containing the following tensors:
         
         A `(N,R)` tensor with the random face adjacencies.
@@ -322,7 +322,7 @@ def straight_edge_parameters(node_coords: torch.Tensor, edge_adj: torch.Tensor) 
     Returns: `torch.Tensor`
         A `(N,R)` tensor with the straight edge parameters.
         Contains only edge parameters for the given active edges.
-        All other edges parameters are 0.
+        All other edge parameters are 0.
         `N` is the number of samples.
         `R` is the size of the edge parameters array in the
         Metamaterial representation.
@@ -339,6 +339,48 @@ def straight_edge_parameters(node_coords: torch.Tensor, edge_adj: torch.Tensor) 
     edge_params = edge_params.reshape((node_coords.shape[0],-1))
 
     return edge_params
+
+
+def flat_face_parameters(node_coords: torch.Tensor, face_adj: torch.Tensor) -> torch.Tensor:
+    """
+    Computes the face parameters for flat faces for
+    the given samples' node coordinates.
+
+    node_coords: `torch.Tensor`
+        A `(N,R//3,3)` tensor with the samples' node positions
+        transformed into Euclidean coordinates.
+        `N` is the number of samples.
+        `R` is the size of the node position array in the
+        Metamaterial representation.
+
+    face_adj: `torch.Tensor`
+        A `(N,R)` tensor with the samples' face adjacencies.
+        `N` is the number of samples.
+        `R` is the size of the face adjacency array in the
+        Metamaterial representation.
+
+    Returns: `torch.Tensor`
+        A `(N,R)` tensor with the flat face parameters.
+        Contains only face parameters for the given active faces.
+        All other face parameters are 0.
+        `N` is the number of samples.
+        `R` is the size of the face parameters array in the
+        Metamaterial representation.
+    """
+
+    # Stores the node indices for each edge
+    node_indices = torch.tensor([
+        [n1, n2, n3]
+            for n1 in range(NUM_NODES)
+                for n2 in range(n1+1, NUM_NODES)
+                    for n3 in range(n2+1, NUM_NODES)
+    ])
+
+    # Stores the face parameters that make a flat face
+    face_params = node_coords[:, node_indices].sum(dim=2) / 3 - node_coords[:, node_indices[:,0]]
+    face_params = (face_params * face_adj.unsqueeze(-1)).reshape((node_coords.shape[0],-1))
+
+    return face_params
 
 
 def random_trusses(num_samples: int, num_nodes: int, num_edges: int):
@@ -443,24 +485,110 @@ def random_shells(num_samples: int, num_nodes: int, num_faces: int):
     # Stores the edge parameters
     edge_params = straight_edge_parameters(node_coords, edge_adj)
 
-
-    ### FACE PARAMETERS
-
-    # Stores the node indices for each edge
-    node_indices = torch.tensor([
-        [n1, n2, n3]
-            for n1 in range(NUM_NODES)
-                for n2 in range(n1+1, NUM_NODES)
-                    for n3 in range(n2+1, NUM_NODES)
-    ])
-
-    # Stores the face parameters that make a flat face
-    face_params = node_coords[:, node_indices].sum(dim=2) / 3 - node_coords[:, node_indices[:,0]]
-    face_params = (face_params * face_adj.unsqueeze(-1)).reshape((num_samples,-1))
-
+    # Stores the face parameters
+    face_params = flat_face_parameters(node_coords, face_adj)
 
     # Stores the other parameters
     global_params = torch.ones((num_samples,1)) * 0.5 # Thickness
 
     return torch.cat([node_pos, edge_adj, edge_params, face_adj, face_params, global_params], dim=1)
 
+
+def random_curved_trusses(num_samples: int, num_nodes: int, num_edges: int):
+    """
+    Generates random curved truss metamaterials based on the given attributes.
+    The metamaterials are generated such that:
+        1) There has no disconnected components.
+        2) Every face in the unit cube has at least one node.
+        3) The material has the number of active nodes specified.
+        4) The material only has edges.
+        5) All nodes are on at least one face of the unit cube.
+        6) All nodes are on at most three faces of the unit cube.
+
+    num_samples: `int`
+        The number of random curved truss samples to generate.
+
+    num_nodes: `int`
+        The exact number of nodes to use in every sample.
+        Must be at least 2.
+
+    num_edges: `torch.Tensor`
+        The exact number of edges to use in each sample.
+        Must be at least `num_nodes-1`.
+
+    Returns: `torch.Tensor`
+        A `(N,R)` tensor with the random samples of curved
+        truss metamaterials.
+        `N` is the number of samples.
+        `R` is the representation size.
+    """
+
+    # Computes the base trusses
+    trusses = random_trusses(num_samples, num_nodes, num_edges)
+
+    # Stores relevant indices
+    adj_start = NODE_POS_SIZE
+    adj_end = params_start + EDGE_ADJ_SIZE
+    params_start = adj_end
+    params_end = params_start + EDGE_PARAMS_SIZE
+
+    # Computes the randomized edge parameters
+    # [-2,2] was empirically found to be realistic edge parameters
+    edge_params = torch.rand((num_samples, EDGE_ADJ_SIZE, EDGE_BEZIER_COORDS))*4-2
+
+    # Stores only the relevant edge parameters, zeroing others out
+    edge_adj = trusses[:, adj_start:adj_end].unsqueeze(-1)
+    edge_params = (edge_params * edge_adj).reshape((num_samples,-1))
+    trusses[:, params_start:params_end] = edge_params
+
+    return trusses
+
+
+def random_curved_shells(num_samples: int, num_nodes: int, num_faces: int):
+    """
+    Generates random curved shell metamaterials based on the given attributes.
+    The metamaterials are generated such that:
+        1) There has no disconnected components.
+        2) Every face in the unit cube has at least one node.
+        3) The material has the number of active nodes specified.
+        4) The material only has faces.
+        5) All nodes are on at least one face of the unit cube.
+        6) All nodes are on at most three faces of the unit cube.
+
+    num_samples: `int`
+        The number of random curved shell samples to generate.
+
+    num_nodes: `int`
+        The exact number of nodes to use in every sample.
+        Must be at least 3.
+
+    num_faces: `torch.Tensor`
+        The exact number of edges to use in each sample.
+        Must be at least `num_nodes-2`.
+
+    Returns: `torch.Tensor`
+        A `(N,R)` tensor with the random samples of curved
+        shell metamaterials.
+        `N` is the number of samples.
+        `R` is the representation size.
+    """
+
+    # Computes the base shells
+    shells = random_shells(num_samples, num_nodes, num_faces)
+
+    # Stores relevant indices
+    adj_start = NODE_POS_SIZE + EDGE_ADJ_SIZE + EDGE_PARAMS_SIZE
+    adj_end = params_start + FACE_ADJ_SIZE
+    params_start = adj_end
+    params_end = params_start + FACE_PARAMS_SIZE
+
+    # Computes the randomized face parameters
+    # [-2,2] was empirically found to be realistic face parameters
+    face_params = torch.rand((num_samples, FACE_ADJ_SIZE, FACE_BEZIER_COORDS))*4-2
+
+    # Stores only the relevant face parameters, zeroing others out
+    face_adj = shells[:, adj_start:adj_end].unsqueeze(-1)
+    face_params = (face_params * face_adj).reshape((num_samples,-1))
+    shells[:, params_start:params_end] = face_params
+
+    return shells
