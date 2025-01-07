@@ -544,9 +544,13 @@ def flat_face_parameters(node_coords: torch.Tensor, face_adj: torch.Tensor) -> t
     return face_params
 
 
-def base_face_parameters(node_euclidean_coords: torch.Tensor, face_adj: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+def base_face_parameters(num_nodes: int, node_euclidean_coords: torch.Tensor, face_adj: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
     """
     Computes the base face parameters for the given samples.
+
+    num_nodes: `int`
+        The exact number of nodes to use in every sample.
+        Must be at least 2.
 
     node_euclidean_coords: `torch.Tensor`
         A `(N,R//3,3)` tensor with the Euclidean coordinates
@@ -582,7 +586,24 @@ def base_face_parameters(node_euclidean_coords: torch.Tensor, face_adj: torch.Te
 
     # Computes the flat/curved face parameters
     flat_face_params = flat_face_parameters(node_euclidean_coords, face_adj).reshape(face_params_shape)
-    curved_face_params = (torch.rand(face_params_shape)*2-1) * face_adj.unsqueeze(-1)
+    curved_face_params = torch.rand(face_params_shape)
+
+    # Makes each curved face parameter not go beyond the unit cube
+    for n1 in range(num_nodes):
+        for n2 in range(n1+1, num_nodes):
+            for n3 in range(n2+1, num_nodes):
+
+                # Stores the index of the face
+                face_index = face_adj_index(n1,n2,n3)
+
+                # Stores the min possible face parameters
+                min_coords = -node_euclidean_coords[:,n1]
+
+                # Stores the bounded face parameters
+                curved_face_params[:,face_index,:] += min_coords
+
+    # Keeps only active faces' parameters
+    curved_face_params = curved_face_params * face_adj.unsqueeze(-1)
 
     return flat_face_params, curved_face_params
 
@@ -634,9 +655,13 @@ def choose_flat_and_curved_faces(num_curved_faces: int, face_adj: torch.Tensor) 
     return flat_faces, curved_faces
 
 
-def base_edge_parameters(node_euclidean_coords: torch.Tensor, edge_adj: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+def base_edge_parameters(num_nodes: int, node_euclidean_coords: torch.Tensor, edge_adj: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
     """
     Computes the base edge parameters for the given samples.
+
+    num_nodes: `int`
+        The exact number of nodes to use in every sample.
+        Must be at least 2.
 
     node_euclidean_coords: `torch.Tensor`
         A `(N,R//3,3)` tensor with the Euclidean coordinates
@@ -672,7 +697,23 @@ def base_edge_parameters(node_euclidean_coords: torch.Tensor, edge_adj: torch.Te
 
     # Computes the flat/curved edge parameters
     flat_edge_params = flat_edge_parameters(node_euclidean_coords, edge_adj).reshape(edge_params_shape)
-    curved_edge_params = (torch.rand(edge_params_shape)*2-1) * edge_adj.unsqueeze(-1)
+    curved_edge_params = torch.rand(edge_params_shape)
+
+    # Makes each curved edge parameter not go beyond the unit cube
+    for n1 in range(num_nodes):
+        for n2 in range(n1+1, num_nodes):
+
+            # Stores the index of the edge
+            edge_index = edge_adj_index(n1,n2)
+
+            # Stores the min possible edge parameters
+            min_coords = -node_euclidean_coords[:,n1]
+
+            # Stores the bounded edge parameters
+            curved_edge_params[:,edge_index,:] += min_coords
+
+    # Keeps only the active edges' parameters
+    curved_edge_params = curved_edge_params * edge_adj.unsqueeze(-1)
 
     return flat_edge_params, curved_edge_params
 
