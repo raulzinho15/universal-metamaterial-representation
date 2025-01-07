@@ -710,7 +710,8 @@ def base_edge_parameters(num_nodes: int, node_euclidean_coords: torch.Tensor, ed
             min_coords = -node_euclidean_coords[:,n1]
 
             # Stores the bounded edge parameters
-            curved_edge_params[:,edge_index,:] += min_coords
+            curved_edge_params[:,edge_index,:3] += min_coords
+            curved_edge_params[:,edge_index,3:] += min_coords
 
     # Keeps only the active edges' parameters
     curved_edge_params = curved_edge_params * edge_adj.unsqueeze(-1)
@@ -933,7 +934,7 @@ def generate_edge_and_face_parameters(
     """
 
     # Computes the base face parameters
-    flat_face_params, curved_face_params = base_face_parameters(node_euclidean_coords, face_adj)
+    flat_face_params, curved_face_params = base_face_parameters(num_nodes, node_euclidean_coords, face_adj)
 
     # Stores which faces are to be flat/curved
     flat_faces, curved_faces = choose_flat_and_curved_faces(num_curved_faces, face_adj)
@@ -942,7 +943,7 @@ def generate_edge_and_face_parameters(
     face_params = flat_face_params * (flat_faces.unsqueeze(-1)) + curved_face_params * (curved_faces.unsqueeze(-1))
 
     # Computes the base edge parameters
-    flat_edge_params, curved_edge_params = base_edge_parameters(node_euclidean_coords, edge_adj)
+    flat_edge_params, curved_edge_params = base_edge_parameters(num_nodes, node_euclidean_coords, edge_adj)
 
     # Stores which edges are to be flat/curved
     flat_edges, curved_edges = choose_flat_and_curved_edges(num_nodes, num_curved_edges, edge_adj, flat_faces, curved_faces)
