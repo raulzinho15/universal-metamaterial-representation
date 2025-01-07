@@ -381,9 +381,9 @@ def generate_edge_and_face_adjacencies(num_samples: int, num_nodes: int, num_edg
             # - 2: new face at an existing vertex
             action_pdf = torch.tensor([
                 edges_left,
-                faces_left * (nodes_left < faces_left*2 + edges_left),
+                faces_left * (nodes_left < faces_left*2 + edges_left) * (current_node > 1),
                 faces_left * (nodes_left > 1),
-            ])
+            ], dtype=torch.float32)
             assert action_pdf.sum().item() > 0, "The choice of base edge/face adjacencies is invalid"
             action_pdf /= action_pdf.sum().item()
             prob = random.random()
@@ -617,7 +617,7 @@ def choose_flat_and_curved_faces(num_curved_faces: int, face_adj: torch.Tensor) 
 
     # Stores relevant values for the function
     num_samples = face_adj.shape[0]
-    num_faces = face_adj[0].sum().item()
+    num_faces = int(face_adj[0].sum().item())
 
     # Stores the indices of active faces
     active_faces = torch.nonzero(face_adj)[:,1].reshape((num_samples, num_faces))
@@ -627,7 +627,7 @@ def choose_flat_and_curved_faces(num_curved_faces: int, face_adj: torch.Tensor) 
     rows = torch.arange(num_samples).view(-1, 1).expand(num_samples, num_curved_faces)
 
     # Chooses the flat/curved faces
-    curved_faces = torch.zeros(face_adj)
+    curved_faces = torch.zeros(face_adj.shape)
     curved_faces[rows, active_faces[rows, shuffled_indices]] = 1
     flat_faces = face_adj - curved_faces
 
@@ -721,8 +721,8 @@ def find_flat_and_curved_face_edges(num_nodes: int, edge_adj: torch.Tensor, flat
     """
 
     # Stores the template
-    flat_edges: torch.Tensor = torch.zeros(edge_adj)
-    curved_edges: torch.Tensor = torch.zeros(edge_adj)
+    flat_edges: torch.Tensor = torch.zeros(edge_adj.shape)
+    curved_edges: torch.Tensor = torch.zeros(edge_adj.shape)
 
     # Runs through each face
     for n1 in range(num_nodes):
@@ -755,7 +755,7 @@ def find_flat_and_curved_face_edges(num_nodes: int, edge_adj: torch.Tensor, flat
 
     # Randomly deals with intersections
     intersections = torch.logical_and(flat_edges, curved_edges).to(torch.float32)
-    keep_flat_edges = torch.rand(intersections.shape) < 0.5
+    keep_flat_edges = (torch.rand(intersections.shape) < 0.5).to(torch.float32)
 
     # Removes intersections
     flat_edges -= intersections * (1-keep_flat_edges)
@@ -811,11 +811,11 @@ def choose_flat_and_curved_edges(num_nodes: int, num_curved_edges: int, edge_adj
 
     # Stores relevant values for the function
     num_samples = edge_adj.shape[0]
-    num_edges = edge_adj[0].sum().item()
 
     # Stores the indices of active non-face/face edges
     flat_face_edges, curved_face_edges = find_flat_and_curved_face_edges(num_nodes, edge_adj, flat_faces, curved_faces)
-    non_face_edges = edge_adj - (flat_face_edges + curved_face_edges)
+    non_face_edges = (edge_adj - (flat_face_edges + curved_face_edges) > 0).to(torch.float32)
+    num_edges = int(non_face_edges[0].sum().item())
 
     # Stores the indices of active non-face edges
     active_edges = torch.nonzero(non_face_edges)[:,1].reshape((num_samples, num_edges))
@@ -825,19 +825,62 @@ def choose_flat_and_curved_edges(num_nodes: int, num_curved_edges: int, edge_adj
     rows = torch.arange(num_samples).view(-1, 1).expand(num_samples, num_curved_edges)
 
     # Chooses the non-face flat/curved edges
-    curved_edges: torch.Tensor = torch.zeros(edge_adj)
+    curved_edges: torch.Tensor = torch.zeros(edge_adj.shape)
     curved_edges[rows, active_edges[rows, shuffled_indices]] = 1
-    flat_edges: torch.Tensor = edge_adj - curved_edges
+    flat_edges: torch.Tensor = non_face_edges - curved_edges
 
     return flat_edges + flat_face_edges, curved_edges + curved_face_edges
 
 
 def generate_edge_and_face_parameters(
-        num_curved_edges: int, num_curved_faces: int, node_euclidean_coords: torch.Tensor,
+        num_nodes: int, num_curved_edges: int, num_curved_faces: int, node_euclidean_coords: torch.Tensor,
         edge_adj: torch.Tensor, face_adj: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
     """
     Generates random edge and face parameters according
     to the given sample specifications.
+
+    num_nodes: `int`
+        The number of active nodes to use in every sample.
+
+    num_curved_edges: `torch.Tensor`
+        The number of non-face curved edges to use in each sample.
+
+    num_curved_edges: `torch.Tensor`
+        The number of curved faces to use in each sample.
+
+    node_euclidean_coords: `torch.Tensor`
+        A `(N,R//3,3)` tensor with the Euclidean coordinates
+        of each node, ordered in the second dimension by node ID.
+        `N` is the number of samples.
+        `R` is the size of the node position array in the
+        Metamaterial representation.
+
+    edge_adj: `torch.Tensor`
+        A `(N,R)` tensor with the samples' edge adjacencies.
+        `N` is the number of samples.
+        `R` is the size of the edge adjacency array in the
+        Metamaterial representation.
+        
+    face_adj: `torch.Tensor`
+        A `(N,R)` tensor with the samples' face adjacencies.
+        `N` is the number of samples.
+        `R` is the size of the face adjacency array in the
+        Metamaterial representation.
+
+    Returns: `tuple[torch.Tensor, torch.Tensor]`
+        A `(N,R)` tensor with the generated edge parameters.
+        Contains only edge parameters for the given active edges.
+        All other edge parameters are 0.
+        `N` is the number of samples.
+        `R` is the size of the edge parameters array in the
+        Metamaterial representation.
+        
+        A `(N,R)` tensor with the generated face parameters.
+        Contains only face parameters for the given active faces.
+        All other face parameters are 0.
+        `N` is the number of samples.
+        `R` is the size of the face parameters array in the
+        Metamaterial representation.
     """
 
     # Computes the base face parameters
@@ -853,10 +896,15 @@ def generate_edge_and_face_parameters(
     flat_edge_params, curved_edge_params = base_edge_parameters(node_euclidean_coords, edge_adj)
 
     # Stores which edges are to be flat/curved
-    flat_edges, curved_edges = choose_flat_and_curved_edges(num_curved_edges, edge_adj, flat_faces, curved_faces)
+    flat_edges, curved_edges = choose_flat_and_curved_edges(num_nodes, num_curved_edges, edge_adj, flat_faces, curved_faces)
 
     # Computes the edge parameters by combining only the target flat/curved edge parameters
     edge_params = flat_edge_params * (flat_edges.unsqueeze(-1)) + curved_edge_params * (curved_edges.unsqueeze(-1))
+
+    # Resizes the parameters to match the requirement for the metamaterial representation
+    num_samples = edge_params.shape[0]
+    edge_params = edge_params.reshape((num_samples, -1))
+    face_params = face_params.reshape((num_samples, -1))
 
     return edge_params, face_params
 
@@ -1006,6 +1054,8 @@ def random_metamaterials(num_samples: int, num_nodes: int, num_edges: int, num_c
         `R` is the representation size.
     """
 
+    assert num_nodes <= 1 + num_faces*2 + num_edges, "There are not enough edges and faces to make a fully connected metamaterial."
+
     # Stores the node positions
     node_pos, node_euclidean_coords = random_node_positions(num_samples, num_nodes)
 
@@ -1013,7 +1063,7 @@ def random_metamaterials(num_samples: int, num_nodes: int, num_edges: int, num_c
     edge_adj, face_adj = generate_edge_and_face_adjacencies(num_samples, num_nodes, num_edges, num_faces)
 
     # Computes the edge/face parameters
-    edge_params, face_params = generate_edge_and_face_parameters(num_curved_edges, num_curved_faces, node_euclidean_coords, edge_adj, face_adj)
+    edge_params, face_params = generate_edge_and_face_parameters(num_nodes, num_curved_edges, num_curved_faces, node_euclidean_coords, edge_adj, face_adj)
 
     # Stores the other parameters
     global_params = torch.ones((num_samples,1)) * 0.5 # Thickness
