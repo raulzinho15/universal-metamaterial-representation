@@ -582,7 +582,7 @@ def base_face_parameters(node_euclidean_coords: torch.Tensor, face_adj: torch.Te
 
     # Computes the flat/curved face parameters
     flat_face_params = flat_face_parameters(node_euclidean_coords, face_adj).reshape(face_params_shape)
-    curved_face_params = (torch.rand(face_params_shape)*4-2) * face_adj.unsqueeze(-1)
+    curved_face_params = (torch.rand(face_params_shape)*2-1) * face_adj.unsqueeze(-1)
 
     return flat_face_params, curved_face_params
 
@@ -672,7 +672,7 @@ def base_edge_parameters(node_euclidean_coords: torch.Tensor, edge_adj: torch.Te
 
     # Computes the flat/curved edge parameters
     flat_edge_params = flat_edge_parameters(node_euclidean_coords, edge_adj).reshape(edge_params_shape)
-    curved_edge_params = (torch.rand(edge_params_shape)*4-2) * edge_adj.unsqueeze(-1)
+    curved_edge_params = (torch.rand(edge_params_shape)*2-1) * edge_adj.unsqueeze(-1)
 
     return flat_edge_params, curved_edge_params
 
