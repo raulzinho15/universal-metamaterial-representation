@@ -815,18 +815,28 @@ def choose_flat_and_curved_edges(num_nodes: int, num_curved_edges: int, edge_adj
     # Stores the indices of active non-face/face edges
     flat_face_edges, curved_face_edges = find_flat_and_curved_face_edges(num_nodes, edge_adj, flat_faces, curved_faces)
     non_face_edges = (edge_adj - (flat_face_edges + curved_face_edges) > 0).to(torch.float32)
-    num_edges = int(non_face_edges[0].sum().item())
 
-    # Stores the indices of active non-face edges
-    active_edges = torch.nonzero(non_face_edges)[:,1].reshape((num_samples, num_edges))
-
-    # Generates shuffled indices
-    shuffled_indices = torch.stack([torch.randperm(num_edges)[:num_curved_edges] for _ in range(num_samples)])
-    rows = torch.arange(num_samples).view(-1, 1).expand(num_samples, num_curved_edges)
-
-    # Chooses the non-face flat/curved edges
+    # Will store the curved edges
     curved_edges: torch.Tensor = torch.zeros(edge_adj.shape)
-    curved_edges[rows, active_edges[rows, shuffled_indices]] = 1
+
+    # Chooses the edges
+    for sample in range(num_samples):
+
+        # Stores the number
+        num_edges = int(non_face_edges[sample].sum().item())
+        new_num_curved_edges = min(num_edges, num_curved_edges)
+
+        # Stores the indices of active non-face edges
+        active_edges = torch.nonzero(non_face_edges[sample])[:,0]
+
+        # Generates shuffled indices
+        shuffled_indices = torch.randperm(num_edges)[:new_num_curved_edges]
+        rows = torch.arange(new_num_curved_edges)
+
+        # Stores the curved edges
+        curved_edges[sample, active_edges[rows, shuffled_indices]] = 1
+
+    # Stores the flat edges
     flat_edges: torch.Tensor = non_face_edges - curved_edges
 
     return flat_edges + flat_face_edges, curved_edges + curved_face_edges
