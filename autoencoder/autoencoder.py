@@ -19,11 +19,12 @@ class MetamaterialAE(nn.Module):
             Whether the autoencoder is a variational autoencoder or not.
         """
         super().__init__()
+        self.is_variational = is_variational
 
         # Node Position Encoder
         self.node_pos_input_size = NODE_POS_SIZE
         self.node_pos_hidden_size = self.node_pos_input_size*4
-        self.node_pos_latent_size = self.node_pos_input_size//3
+        self.node_pos_latent_size = self.node_pos_input_size//5
         self.node_pos_encoder = nn.Sequential(
             nn.Linear(in_features=self.node_pos_input_size, out_features=self.node_pos_hidden_size),
             nn.ReLU(),
@@ -33,13 +34,13 @@ class MetamaterialAE(nn.Module):
             nn.ReLU(),
             nn.Linear(in_features=self.node_pos_hidden_size, out_features=self.node_pos_hidden_size),
             nn.ReLU(),
-            nn.Linear(in_features=self.node_pos_hidden_size, out_features=self.node_pos_latent_size),
+            nn.Linear(in_features=self.node_pos_hidden_size, out_features=self.node_pos_latent_size * (2 if is_variational else 1)),
         )
 
         # Edge Adjacency Encoder
         self.edge_adj_input_size = EDGE_ADJ_SIZE
         self.edge_adj_hidden_size = self.edge_adj_input_size*4
-        self.edge_adj_latent_size = self.edge_adj_input_size//3
+        self.edge_adj_latent_size = self.edge_adj_input_size//5
         self.edge_adj_encoder = nn.Sequential(
             nn.Linear(in_features=self.edge_adj_input_size, out_features=self.edge_adj_hidden_size),
             nn.ReLU(),
@@ -49,13 +50,13 @@ class MetamaterialAE(nn.Module):
             nn.ReLU(),
             nn.Linear(in_features=self.edge_adj_hidden_size, out_features=self.edge_adj_hidden_size),
             nn.ReLU(),
-            nn.Linear(in_features=self.edge_adj_hidden_size, out_features=self.edge_adj_latent_size),
+            nn.Linear(in_features=self.edge_adj_hidden_size, out_features=self.edge_adj_latent_size * (2 if is_variational else 1)),
         )
 
         # Edge Parameters Encoder
         self.edge_params_input_size = EDGE_PARAMS_SIZE
         self.edge_params_hidden_size = self.edge_params_input_size*4
-        self.edge_params_latent_size = self.edge_params_input_size//3
+        self.edge_params_latent_size = self.edge_params_input_size//5
         self.edge_params_encoder = nn.Sequential(
             nn.Linear(in_features=self.edge_params_input_size, out_features=self.edge_params_hidden_size),
             nn.ReLU(),
@@ -65,13 +66,13 @@ class MetamaterialAE(nn.Module):
             nn.ReLU(),
             nn.Linear(in_features=self.edge_params_hidden_size, out_features=self.edge_params_hidden_size),
             nn.ReLU(),
-            nn.Linear(in_features=self.edge_params_hidden_size, out_features=self.edge_params_latent_size),
+            nn.Linear(in_features=self.edge_params_hidden_size, out_features=self.edge_params_latent_size * (2 if is_variational else 1)),
         )
 
         # Face Adjacency Encoder
         self.face_adj_input_size = FACE_ADJ_SIZE
         self.face_adj_hidden_size = self.face_adj_input_size*4
-        self.face_adj_latent_size = self.face_adj_input_size//3
+        self.face_adj_latent_size = self.face_adj_input_size//5
         self.face_adj_encoder = nn.Sequential(
             nn.Linear(in_features=self.face_adj_input_size, out_features=self.face_adj_hidden_size),
             nn.ReLU(),
@@ -81,13 +82,13 @@ class MetamaterialAE(nn.Module):
             nn.ReLU(),
             nn.Linear(in_features=self.face_adj_hidden_size, out_features=self.face_adj_hidden_size),
             nn.ReLU(),
-            nn.Linear(in_features=self.face_adj_hidden_size, out_features=self.face_adj_latent_size),
+            nn.Linear(in_features=self.face_adj_hidden_size, out_features=self.face_adj_latent_size * (2 if is_variational else 1)),
         )
 
         # Face Parameters Encoder
         self.face_params_input_size = FACE_PARAMS_SIZE
         self.face_params_hidden_size = self.face_params_input_size*4
-        self.face_params_latent_size = self.face_params_input_size//3
+        self.face_params_latent_size = self.face_params_input_size//5
         self.face_params_encoder = nn.Sequential(
             nn.Linear(in_features=self.face_params_input_size, out_features=self.face_params_hidden_size),
             nn.ReLU(),
@@ -97,13 +98,13 @@ class MetamaterialAE(nn.Module):
             nn.ReLU(),
             nn.Linear(in_features=self.face_params_hidden_size, out_features=self.face_params_hidden_size),
             nn.ReLU(),
-            nn.Linear(in_features=self.face_params_hidden_size, out_features=self.face_params_latent_size),
+            nn.Linear(in_features=self.face_params_hidden_size, out_features=self.face_params_latent_size * (2 if is_variational else 1)),
         )
 
         # Global Parameters Encoder
         self.global_params_input_size = GLOBAL_PARAMS_SIZE
         self.global_params_hidden_size = self.global_params_input_size*4
-        self.global_params_latent_size = math.ceil(self.global_params_input_size/3)
+        self.global_params_latent_size = math.ceil(self.global_params_input_size/5)
         self.global_params_encoder = nn.Sequential(
             nn.Linear(in_features=self.global_params_input_size, out_features=self.global_params_hidden_size),
             nn.ReLU(),
@@ -113,13 +114,13 @@ class MetamaterialAE(nn.Module):
             nn.ReLU(),
             nn.Linear(in_features=self.global_params_hidden_size, out_features=self.global_params_hidden_size),
             nn.ReLU(),
-            nn.Linear(in_features=self.global_params_hidden_size, out_features=self.global_params_latent_size),
+            nn.Linear(in_features=self.global_params_hidden_size, out_features=self.global_params_latent_size * (2 if is_variational else 1)),
         )
 
         # Topology Encoder
         self.topology_input_size = EDGE_ADJ_SIZE+FACE_ADJ_SIZE
         self.topology_hidden_size = self.topology_input_size*4
-        self.topology_latent_size = self.topology_input_size//3
+        self.topology_latent_size = self.topology_input_size//5
         self.topology_encoder = nn.Sequential(
             nn.Linear(in_features=self.topology_input_size, out_features=self.topology_hidden_size),
             nn.ReLU(),
@@ -129,13 +130,13 @@ class MetamaterialAE(nn.Module):
             nn.ReLU(),
             nn.Linear(in_features=self.topology_hidden_size, out_features=self.topology_hidden_size),
             nn.ReLU(),
-            nn.Linear(in_features=self.topology_hidden_size, out_features=self.topology_latent_size),
+            nn.Linear(in_features=self.topology_hidden_size, out_features=self.topology_latent_size * (2 if is_variational else 1)),
         )
 
         # Geometry Encoder
         self.geometry_input_size = NODE_POS_SIZE+EDGE_PARAMS_SIZE+FACE_PARAMS_SIZE+GLOBAL_PARAMS_SIZE
         self.geometry_hidden_size = self.geometry_input_size*4
-        self.geometry_latent_size = self.geometry_input_size//3
+        self.geometry_latent_size = self.geometry_input_size//5
         self.geometry_encoder = nn.Sequential(
             nn.Linear(in_features=self.geometry_input_size, out_features=self.geometry_hidden_size),
             nn.ReLU(),
@@ -145,7 +146,7 @@ class MetamaterialAE(nn.Module):
             nn.ReLU(),
             nn.Linear(in_features=self.geometry_hidden_size, out_features=self.geometry_hidden_size),
             nn.ReLU(),
-            nn.Linear(in_features=self.geometry_hidden_size, out_features=self.geometry_latent_size),
+            nn.Linear(in_features=self.geometry_hidden_size, out_features=self.geometry_latent_size * (2 if is_variational else 1)),
         )
 
         # Node Position Decoder
@@ -294,16 +295,13 @@ class MetamaterialAE(nn.Module):
         from the distribution.
         """
 
-        # Finds the halfway mark
-        halfway = latent_vector.shape[-1] // 2
-
-        # Finds the distribution properties
-        mean = latent_vector[..., :halfway]
-        std = latent_vector[..., halfway:]
+        # Stores the mean and log variance
+        mean = latent_vector[..., ::2]
+        logvar = latent_vector[..., 1::2]
 
         # Samples the distribution
         eps = torch.randn(mean.shape)
-        return mean + eps * std
+        return mean + eps * torch.exp(logvar)
     
 
     def decode(self, z: torch.Tensor) -> torch.Tensor:
@@ -320,7 +318,7 @@ class MetamaterialAE(nn.Module):
         topology_index = global_params_index + self.global_params_latent_size
         geometry_index = topology_index + self.topology_latent_size
 
-        # Stores the values from the representation
+        # Stores the latent values
         node_pos_latent =      z[...,                     : edge_adj_index     ]
         edge_adj_latent =      z[..., edge_adj_index      : edge_params_index  ]
         edge_params_latent =   z[..., edge_params_index   : face_adj_index     ]
@@ -352,6 +350,9 @@ class MetamaterialAE(nn.Module):
         """
         Defines a forward pass through the network.
         """
+
+        if self.is_variational:
+            return self.decode(self.sample_latent_space(self.encode(x)))
         return self.decode(self.encode(x))
 
 
