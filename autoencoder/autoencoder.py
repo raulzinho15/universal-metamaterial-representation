@@ -1,4 +1,5 @@
 import torch
+import math
 from torch import nn
 from torch.utils.data import DataLoader
 from representation.rep_utils import *
@@ -19,35 +20,228 @@ class MetamaterialAE(nn.Module):
         """
         super().__init__()
 
-        # Network sizes
-        self.input_size = REP_SIZE
-        self.hidden_size = self.input_size*4
-        self.latent_size = self.input_size
-
-        # Encoder
-        self.encoder_stack = nn.Sequential(
-            nn.Linear(in_features=self.input_size, out_features=self.hidden_size),
+        # Node Position Encoder
+        self.node_pos_input_size = NODE_POS_SIZE
+        self.node_pos_hidden_size = self.node_pos_input_size*4
+        self.node_pos_latent_size = self.node_pos_input_size//3
+        self.node_pos_encoder = nn.Sequential(
+            nn.Linear(in_features=self.node_pos_input_size, out_features=self.node_pos_hidden_size),
             nn.ReLU(),
-            nn.Linear(in_features=self.hidden_size, out_features=self.hidden_size),
+            nn.Linear(in_features=self.node_pos_hidden_size, out_features=self.node_pos_hidden_size),
             nn.ReLU(),
-            nn.Linear(in_features=self.hidden_size, out_features=self.hidden_size),
+            nn.Linear(in_features=self.node_pos_hidden_size, out_features=self.node_pos_hidden_size),
             nn.ReLU(),
-            nn.Linear(in_features=self.hidden_size, out_features=self.hidden_size),
+            nn.Linear(in_features=self.node_pos_hidden_size, out_features=self.node_pos_hidden_size),
             nn.ReLU(),
-            nn.Linear(in_features=self.hidden_size, out_features=self.latent_size),
+            nn.Linear(in_features=self.node_pos_hidden_size, out_features=self.node_pos_latent_size),
         )
 
-        # Decoder
-        self.decoder_stack = nn.Sequential(
-            nn.Linear(in_features=self.latent_size, out_features=self.hidden_size),
+        # Edge Adjacency Encoder
+        self.edge_adj_input_size = EDGE_ADJ_SIZE
+        self.edge_adj_hidden_size = self.edge_adj_input_size*4
+        self.edge_adj_latent_size = self.edge_adj_input_size//3
+        self.edge_adj_encoder = nn.Sequential(
+            nn.Linear(in_features=self.edge_adj_input_size, out_features=self.edge_adj_hidden_size),
             nn.ReLU(),
-            nn.Linear(in_features=self.hidden_size, out_features=self.hidden_size),
+            nn.Linear(in_features=self.edge_adj_hidden_size, out_features=self.edge_adj_hidden_size),
             nn.ReLU(),
-            nn.Linear(in_features=self.hidden_size, out_features=self.hidden_size),
+            nn.Linear(in_features=self.edge_adj_hidden_size, out_features=self.edge_adj_hidden_size),
             nn.ReLU(),
-            nn.Linear(in_features=self.hidden_size, out_features=self.hidden_size),
+            nn.Linear(in_features=self.edge_adj_hidden_size, out_features=self.edge_adj_hidden_size),
             nn.ReLU(),
-            nn.Linear(in_features=self.hidden_size, out_features=self.input_size),
+            nn.Linear(in_features=self.edge_adj_hidden_size, out_features=self.edge_adj_latent_size),
+        )
+
+        # Edge Parameters Encoder
+        self.edge_params_input_size = EDGE_PARAMS_SIZE
+        self.edge_params_hidden_size = self.edge_params_input_size*4
+        self.edge_params_latent_size = self.edge_params_input_size//3
+        self.edge_params_encoder = nn.Sequential(
+            nn.Linear(in_features=self.edge_params_input_size, out_features=self.edge_params_hidden_size),
+            nn.ReLU(),
+            nn.Linear(in_features=self.edge_params_hidden_size, out_features=self.edge_params_hidden_size),
+            nn.ReLU(),
+            nn.Linear(in_features=self.edge_params_hidden_size, out_features=self.edge_params_hidden_size),
+            nn.ReLU(),
+            nn.Linear(in_features=self.edge_params_hidden_size, out_features=self.edge_params_hidden_size),
+            nn.ReLU(),
+            nn.Linear(in_features=self.edge_params_hidden_size, out_features=self.edge_params_latent_size),
+        )
+
+        # Face Adjacency Encoder
+        self.face_adj_input_size = FACE_ADJ_SIZE
+        self.face_adj_hidden_size = self.face_adj_input_size*4
+        self.face_adj_latent_size = self.face_adj_input_size//3
+        self.face_adj_encoder = nn.Sequential(
+            nn.Linear(in_features=self.face_adj_input_size, out_features=self.face_adj_hidden_size),
+            nn.ReLU(),
+            nn.Linear(in_features=self.face_adj_hidden_size, out_features=self.face_adj_hidden_size),
+            nn.ReLU(),
+            nn.Linear(in_features=self.face_adj_hidden_size, out_features=self.face_adj_hidden_size),
+            nn.ReLU(),
+            nn.Linear(in_features=self.face_adj_hidden_size, out_features=self.face_adj_hidden_size),
+            nn.ReLU(),
+            nn.Linear(in_features=self.face_adj_hidden_size, out_features=self.face_adj_latent_size),
+        )
+
+        # Face Parameters Encoder
+        self.face_params_input_size = FACE_PARAMS_SIZE
+        self.face_params_hidden_size = self.face_params_input_size*4
+        self.face_params_latent_size = self.face_params_input_size//3
+        self.face_params_encoder = nn.Sequential(
+            nn.Linear(in_features=self.face_params_input_size, out_features=self.face_params_hidden_size),
+            nn.ReLU(),
+            nn.Linear(in_features=self.face_params_hidden_size, out_features=self.face_params_hidden_size),
+            nn.ReLU(),
+            nn.Linear(in_features=self.face_params_hidden_size, out_features=self.face_params_hidden_size),
+            nn.ReLU(),
+            nn.Linear(in_features=self.face_params_hidden_size, out_features=self.face_params_hidden_size),
+            nn.ReLU(),
+            nn.Linear(in_features=self.face_params_hidden_size, out_features=self.face_params_latent_size),
+        )
+
+        # Global Parameters Encoder
+        self.global_params_input_size = GLOBAL_PARAMS_SIZE
+        self.global_params_hidden_size = self.global_params_input_size*4
+        self.global_params_latent_size = math.ceil(self.global_params_input_size/3)
+        self.global_params_encoder = nn.Sequential(
+            nn.Linear(in_features=self.global_params_input_size, out_features=self.global_params_hidden_size),
+            nn.ReLU(),
+            nn.Linear(in_features=self.global_params_hidden_size, out_features=self.global_params_hidden_size),
+            nn.ReLU(),
+            nn.Linear(in_features=self.global_params_hidden_size, out_features=self.global_params_hidden_size),
+            nn.ReLU(),
+            nn.Linear(in_features=self.global_params_hidden_size, out_features=self.global_params_hidden_size),
+            nn.ReLU(),
+            nn.Linear(in_features=self.global_params_hidden_size, out_features=self.global_params_latent_size),
+        )
+
+        # Topology Encoder
+        self.topology_input_size = EDGE_ADJ_SIZE+FACE_ADJ_SIZE
+        self.topology_hidden_size = self.topology_input_size*4
+        self.topology_latent_size = self.topology_input_size//3
+        self.topology_encoder = nn.Sequential(
+            nn.Linear(in_features=self.topology_input_size, out_features=self.topology_hidden_size),
+            nn.ReLU(),
+            nn.Linear(in_features=self.topology_hidden_size, out_features=self.topology_hidden_size),
+            nn.ReLU(),
+            nn.Linear(in_features=self.topology_hidden_size, out_features=self.topology_hidden_size),
+            nn.ReLU(),
+            nn.Linear(in_features=self.topology_hidden_size, out_features=self.topology_hidden_size),
+            nn.ReLU(),
+            nn.Linear(in_features=self.topology_hidden_size, out_features=self.topology_latent_size),
+        )
+
+        # Geometry Encoder
+        self.geometry_input_size = NODE_POS_SIZE+EDGE_PARAMS_SIZE+FACE_PARAMS_SIZE+GLOBAL_PARAMS_SIZE
+        self.geometry_hidden_size = self.geometry_input_size*4
+        self.geometry_latent_size = self.geometry_input_size//3
+        self.geometry_encoder = nn.Sequential(
+            nn.Linear(in_features=self.geometry_input_size, out_features=self.geometry_hidden_size),
+            nn.ReLU(),
+            nn.Linear(in_features=self.geometry_hidden_size, out_features=self.geometry_hidden_size),
+            nn.ReLU(),
+            nn.Linear(in_features=self.geometry_hidden_size, out_features=self.geometry_hidden_size),
+            nn.ReLU(),
+            nn.Linear(in_features=self.geometry_hidden_size, out_features=self.geometry_hidden_size),
+            nn.ReLU(),
+            nn.Linear(in_features=self.geometry_hidden_size, out_features=self.geometry_latent_size),
+        )
+
+        # Node Position Decoder
+        input_size = self.node_pos_latent_size+self.geometry_latent_size
+        hidden_size = input_size*4
+        output_size = self.node_pos_input_size
+        self.node_pos_decoder = nn.Sequential(
+            nn.Linear(in_features=input_size, out_features=hidden_size),
+            nn.ReLU(),
+            nn.Linear(in_features=hidden_size, out_features=hidden_size),
+            nn.ReLU(),
+            nn.Linear(in_features=hidden_size, out_features=hidden_size),
+            nn.ReLU(),
+            nn.Linear(in_features=hidden_size, out_features=hidden_size),
+            nn.ReLU(),
+            nn.Linear(in_features=hidden_size, out_features=output_size),
+        )
+
+        # Edge Adjacency Decoder
+        input_size = self.edge_adj_latent_size+self.topology_latent_size
+        hidden_size = input_size*4
+        output_size = self.edge_adj_input_size
+        self.edge_adj_decoder = nn.Sequential(
+            nn.Linear(in_features=input_size, out_features=hidden_size),
+            nn.ReLU(),
+            nn.Linear(in_features=hidden_size, out_features=hidden_size),
+            nn.ReLU(),
+            nn.Linear(in_features=hidden_size, out_features=hidden_size),
+            nn.ReLU(),
+            nn.Linear(in_features=hidden_size, out_features=hidden_size),
+            nn.ReLU(),
+            nn.Linear(in_features=hidden_size, out_features=output_size),
+        )
+
+        # Edge Parameters Decoder
+        input_size = self.edge_params_latent_size+self.geometry_latent_size
+        hidden_size = input_size*4
+        output_size = self.edge_params_input_size
+        self.edge_params_decoder = nn.Sequential(
+            nn.Linear(in_features=input_size, out_features=hidden_size),
+            nn.ReLU(),
+            nn.Linear(in_features=hidden_size, out_features=hidden_size),
+            nn.ReLU(),
+            nn.Linear(in_features=hidden_size, out_features=hidden_size),
+            nn.ReLU(),
+            nn.Linear(in_features=hidden_size, out_features=hidden_size),
+            nn.ReLU(),
+            nn.Linear(in_features=hidden_size, out_features=output_size),
+        )
+
+        # Face Adjacency Decoder
+        input_size = self.face_adj_latent_size+self.topology_latent_size
+        hidden_size = input_size*4
+        output_size = self.face_adj_input_size
+        self.face_adj_decoder = nn.Sequential(
+            nn.Linear(in_features=input_size, out_features=hidden_size),
+            nn.ReLU(),
+            nn.Linear(in_features=hidden_size, out_features=hidden_size),
+            nn.ReLU(),
+            nn.Linear(in_features=hidden_size, out_features=hidden_size),
+            nn.ReLU(),
+            nn.Linear(in_features=hidden_size, out_features=hidden_size),
+            nn.ReLU(),
+            nn.Linear(in_features=hidden_size, out_features=output_size),
+        )
+
+        # Face Parameters Decoder
+        input_size = self.face_params_latent_size+self.geometry_latent_size
+        hidden_size = input_size*4
+        output_size = self.face_params_input_size
+        self.face_params_decoder = nn.Sequential(
+            nn.Linear(in_features=input_size, out_features=hidden_size),
+            nn.ReLU(),
+            nn.Linear(in_features=hidden_size, out_features=hidden_size),
+            nn.ReLU(),
+            nn.Linear(in_features=hidden_size, out_features=hidden_size),
+            nn.ReLU(),
+            nn.Linear(in_features=hidden_size, out_features=hidden_size),
+            nn.ReLU(),
+            nn.Linear(in_features=hidden_size, out_features=output_size),
+        )
+
+        # Global Parameters Decoder
+        input_size = self.global_params_latent_size+self.geometry_latent_size
+        hidden_size = input_size*4
+        output_size = self.global_params_input_size
+        self.global_params_decoder = nn.Sequential(
+            nn.Linear(in_features=input_size, out_features=hidden_size),
+            nn.ReLU(),
+            nn.Linear(in_features=hidden_size, out_features=hidden_size),
+            nn.ReLU(),
+            nn.Linear(in_features=hidden_size, out_features=hidden_size),
+            nn.ReLU(),
+            nn.Linear(in_features=hidden_size, out_features=hidden_size),
+            nn.ReLU(),
+            nn.Linear(in_features=hidden_size, out_features=output_size),
         )
 
 
@@ -55,7 +249,42 @@ class MetamaterialAE(nn.Module):
         """
         Runs the network's encoder on the input.
         """
-        return self.encoder_stack(x)
+
+        # Stores the indices
+        edge_adj_index = NODE_POS_SIZE
+        edge_params_index = edge_adj_index+EDGE_ADJ_SIZE
+        face_adj_index = edge_params_index+EDGE_PARAMS_SIZE
+        face_params_index = face_adj_index+FACE_ADJ_SIZE
+        global_params_index = face_params_index+FACE_PARAMS_SIZE
+
+        # Stores the values from the representation
+        node_pos =      x[...,                     : edge_adj_index     ]
+        edge_adj =      x[..., edge_adj_index      : edge_params_index  ]
+        edge_params =   x[..., edge_params_index   : face_adj_index     ]
+        face_adj =      x[..., face_adj_index      : face_params_index  ]
+        face_params =   x[..., face_params_index   : global_params_index]
+        global_params = x[..., global_params_index :                    ]
+
+        # Stores the latent values
+        node_pos_latent = self.node_pos_encoder(node_pos)
+        edge_adj_latent = self.edge_adj_encoder(edge_adj)
+        edge_params_latent = self.edge_params_encoder(edge_params)
+        face_adj_latent = self.face_adj_encoder(face_adj)
+        face_params_latent = self.face_params_encoder(face_params)
+        global_params_latent = self.global_params_encoder(global_params)
+        topology_latent = self.topology_encoder(torch.cat([edge_adj, face_adj], dim=-1))
+        geometry_latent = self.geometry_encoder(torch.cat([node_pos, edge_params, face_params, global_params], dim=-1))
+
+        return torch.cat([
+            node_pos_latent,
+            edge_adj_latent,
+            edge_params_latent,
+            face_adj_latent,
+            face_params_latent,
+            global_params_latent,
+            topology_latent,
+            geometry_latent,
+        ], dim=-1)
     
 
     def sample_latent_space(self, latent_vector: torch.Tensor):
@@ -81,7 +310,42 @@ class MetamaterialAE(nn.Module):
         """
         Runs the network's decoder on the input.
         """
-        return self.decoder_stack(z)
+
+        # Stores the indices
+        edge_adj_index = self.node_pos_latent_size
+        edge_params_index = edge_adj_index + self.edge_adj_latent_size
+        face_adj_index = edge_params_index + self.edge_params_latent_size
+        face_params_index = face_adj_index + self.face_adj_latent_size
+        global_params_index = face_params_index + self.face_params_latent_size
+        topology_index = global_params_index + self.global_params_latent_size
+        geometry_index = topology_index + self.topology_latent_size
+
+        # Stores the values from the representation
+        node_pos_latent =      z[...,                     : edge_adj_index     ]
+        edge_adj_latent =      z[..., edge_adj_index      : edge_params_index  ]
+        edge_params_latent =   z[..., edge_params_index   : face_adj_index     ]
+        face_adj_latent =      z[..., face_adj_index      : face_params_index  ]
+        face_params_latent =   z[..., face_params_index   : global_params_index]
+        global_params_latent = z[..., global_params_index : topology_index     ]
+        topology_latent =      z[..., topology_index      : geometry_index     ]
+        geometry_latent =      z[..., geometry_index      :                    ]
+
+        # Stores the decoded values
+        node_pos = self.node_pos_decoder(torch.cat([node_pos_latent, geometry_latent], dim=-1))
+        edge_adj = self.edge_adj_decoder(torch.cat([edge_adj_latent, topology_latent], dim=-1))
+        edge_params = self.edge_params_decoder(torch.cat([edge_params_latent, geometry_latent], dim=-1))
+        face_adj = self.face_adj_decoder(torch.cat([face_adj_latent, topology_latent], dim=-1))
+        face_params = self.face_params_decoder(torch.cat([face_params_latent, geometry_latent], dim=-1))
+        global_params = self.global_params_decoder(torch.cat([global_params_latent, geometry_latent], dim=-1))
+
+        return torch.cat([
+            node_pos,
+            edge_adj,
+            edge_params,
+            face_adj,
+            face_params,
+            global_params,
+        ], dim=-1)
 
 
     def forward(self, x: torch.Tensor):

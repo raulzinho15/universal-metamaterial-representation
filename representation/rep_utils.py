@@ -3,7 +3,7 @@ import torch
 from math import factorial
 
 # User-controlled properties
-NUM_NODES = 13 # Non-center nodes plus the single center node
+NUM_NODES = 10 # Non-center nodes plus the single center node
 EDGE_BEZIER_POINTS = 2 # The number of points to describe curved edges
 EDGE_SEGMENTS = 8 # The number of segments to use to mesh edges/faces
 CUBE_CENTER = np.ones(3)/2 # The center of the metamaterial cube
@@ -19,7 +19,8 @@ FACE_ADJ_SIZE = NUM_NODES * (NUM_NODES-1) * (NUM_NODES-2) // 6 # The number of p
 FACE_BEZIER_POINTS = EDGE_BEZIER_POINTS * (EDGE_BEZIER_POINTS-1) // 2 # The number of points to described curved faces
 FACE_BEZIER_COORDS = FACE_BEZIER_POINTS * 3 # The number of face curvature parameters per face
 FACE_PARAMS_SIZE = FACE_ADJ_SIZE * FACE_BEZIER_COORDS # The total number of face curvature parameters
-REP_SIZE = NODE_POS_SIZE + EDGE_ADJ_SIZE + EDGE_PARAMS_SIZE + FACE_ADJ_SIZE + FACE_PARAMS_SIZE + 1 # The total number of parameters in the representation
+GLOBAL_PARAMS_SIZE = 1
+REP_SIZE = NODE_POS_SIZE + EDGE_ADJ_SIZE + EDGE_PARAMS_SIZE + FACE_ADJ_SIZE + FACE_PARAMS_SIZE + GLOBAL_PARAMS_SIZE # The total number of parameters in the representation
 
 
 def euclidean_to_pseudo_spherical(points: np.ndarray) -> np.ndarray:
