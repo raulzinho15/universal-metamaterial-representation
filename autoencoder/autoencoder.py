@@ -288,16 +288,20 @@ class MetamaterialAE(nn.Module):
         ], dim=-1)
     
 
-    def sample_latent_space(self, latent_vector: torch.Tensor):
+    def get_latent_distribution(self, latent_vector: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        """
+        Gets the mean and variance of the latent distribution.
+        """
+
+        return latent_vector[..., ::2], latent_vector[..., 1::2]
+    
+
+    def sample_latent_space(self, mean: torch.Tensor, logvar: torch.Tensor):
         """
         Assuming the autoencoder is a VAE, splits the latent
         vector into a normal distribution's mean/std and samples
         from the distribution.
         """
-
-        # Stores the mean and log variance
-        mean = latent_vector[..., ::2]
-        logvar = latent_vector[..., 1::2]
 
         # Samples the distribution
         eps = torch.randn(mean.shape)
@@ -356,9 +360,12 @@ class MetamaterialAE(nn.Module):
         return self.decode(self.encode(x))
 
 
-def train_epoch(model: MetamaterialAE, dataloader: DataLoader, loss_fn, optim, verbose=True, report_frequency=200) -> float:
+def train_epoch(epoch: int, model: MetamaterialAE, dataloader: DataLoader, loss_fn, optim, verbose=True, report_frequency=200) -> float:
     """
     Runs a training epoch on the model with the given data.
+    
+    epoch: `int`
+        The current epoch.
 
     model: `MetamaterialAE`
         The model to be used.
@@ -397,10 +404,21 @@ def train_epoch(model: MetamaterialAE, dataloader: DataLoader, loss_fn, optim, v
     for batch, (X,y), in enumerate(dataloader):
 
         # Computes the forward pass
-        decoding = model(X)
+        encoding = model.encode(X)
+
+        # Computes the VAE loss
+        if model.is_variational:
+            mean, logvar = model.get_latent_distribution(encoding)
+            decoding = model.decode(model.sample_latent_space(mean, logvar))
+            kld_loss: torch.Tensor = min(1, epoch/10) * (-0.5 * torch.sum(1 + logvar - mean.pow(2) - logvar.exp()))
+            loss: torch.Tensor = loss_fn(decoding, y) + kld_loss
+
+        # Computes the AE loss
+        else:
+            decoding = model.decode(encoding)
+            loss: torch.Tensor = loss_fn(decoding, y)
 
         # Computes the loss
-        loss: torch.Tensor = loss_fn(decoding, y)
         total_loss += loss.item() * X.shape[0]
 
         # Runs backpropagation and gradient descent
