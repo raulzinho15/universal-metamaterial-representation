@@ -11,9 +11,12 @@ class MetamaterialAE(nn.Module):
     the metamaterial autoencoder.
     """
 
-    def __init__(self, is_variational=False):
+    def __init__(self, device, is_variational=False):
         """
         Constructs a metamaterial autoencoder with the given properties.
+
+        device: `str`
+            The device on which the model will be placed.
 
         is_variational: bool
             Whether the autoencoder is a variational autoencoder or not.
@@ -245,6 +248,10 @@ class MetamaterialAE(nn.Module):
             nn.Linear(in_features=hidden_size, out_features=output_size),
         )
 
+        # Stores the device
+        self.device = device
+        self.to(device)
+
 
     def encode(self, x: torch.Tensor) -> torch.Tensor:
         """
@@ -304,7 +311,7 @@ class MetamaterialAE(nn.Module):
         """
 
         # Samples the distribution
-        eps = torch.randn(mean.shape)
+        eps = torch.randn(mean.shape).to(self.device)
         return mean + eps * torch.exp(logvar)
     
 
