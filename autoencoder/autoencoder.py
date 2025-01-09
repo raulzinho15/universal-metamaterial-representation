@@ -418,7 +418,7 @@ def train_epoch(epoch: int, model: MetamaterialAE, dataloader: DataLoader, loss_
         if model.is_variational:
             mean, logvar = model.get_latent_distribution(encoding)
             decoding = model.decode(model.sample_latent_space(mean, logvar))
-            kld_loss: torch.Tensor = min(1, epoch/10) * (-0.5 * torch.sum(1 + logvar - mean.pow(2) - logvar.exp()))
+            kld_loss: torch.Tensor = min(1, epoch/10) * (-0.5 * torch.sum(1 + logvar - mean.pow(2) - logvar.exp())) / mean.numel()
             loss: torch.Tensor = loss_fn(decoding, y) + kld_loss
 
         # Computes the AE loss
