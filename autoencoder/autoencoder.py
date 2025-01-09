@@ -418,7 +418,7 @@ def train_epoch(epoch: int, model: MetamaterialAE, dataloader: DataLoader, loss_
         if model.is_variational:
             mean, logvar = model.get_latent_distribution(encoding)
             decoding = model.decode(model.sample_latent_space(mean, logvar))
-            kld_loss: torch.Tensor = min(1, epoch/10) * (-0.5 * torch.sum(1 + logvar - mean.pow(2) - logvar.exp())) / mean.numel()
+            kld_loss: torch.Tensor = max(0, min(1e-1, (epoch-2)*1e-3)) * (-0.5 * torch.sum(1 + logvar - mean.pow(2) - logvar.exp())) / mean.numel()
             loss: torch.Tensor = loss_fn(decoding, y) + kld_loss
 
         # Computes the AE loss
@@ -463,12 +463,14 @@ def test_epoch(model: MetamaterialAE, dataloader: DataLoader, loss_fn, verbose=F
         the verbose option is chosen.
 
     Returns: `tuple[float]`
-        1) The loss from the epoch.
-        2) The average absolute node position error.
-        3) The fraction of edges correctly decoded.
-        4) The average absolute edge parameters error.
-        5) The fraction of faces correctly decoded.
-        6) The average absolute face parameters error.
+        1) The reconstruction loss from the epoch.
+        2) The KL Divergence loss from the epoch.
+        3) The average absolute node position error.
+        4) The fraction of edges correctly decoded.
+        5) The average absolute edge parameters error.
+        6) The fraction of faces correctly decoded.
+        7) The average absolute face parameters error.
+        8) The average absolute global parameters error.
     """
 
     # Computes the size of the dataset
@@ -476,12 +478,14 @@ def test_epoch(model: MetamaterialAE, dataloader: DataLoader, loss_fn, verbose=F
 
     # Prepares values for the epoch
     samples_used = 0
-    total_loss = 0
+    total_reconstruction_loss = 0
+    total_kld_loss = 0
     node_pos_error = 0
     correct_edges = 0
     edge_params_error = 0
     correct_faces = 0
     face_params_error = 0
+    global_params_error = 0
 
     # Sets up the model's mode
     model.eval()
@@ -490,11 +494,24 @@ def test_epoch(model: MetamaterialAE, dataloader: DataLoader, loss_fn, verbose=F
     for batch, (X,y), in enumerate(dataloader):
 
         # Computes the forward pass
-        decoding = model(X)
+        encoding = model.encode(X)
+
+        # Computes the VAE loss
+        if model.is_variational:
+            mean, logvar = model.get_latent_distribution(encoding)
+            decoding = model.decode(model.sample_latent_space(mean, logvar))
+            kld_loss: torch.Tensor = (-0.5 * torch.sum(1 + logvar - mean.pow(2) - logvar.exp())) / mean.numel()
+            reconstruction_loss: torch.Tensor = loss_fn(decoding, y)
+
+        # Computes the AE loss
+        else:
+            decoding = model.decode(encoding)
+            kld_loss = torch.tensor(0)
+            reconstruction_loss: torch.Tensor = loss_fn(decoding, y)
 
         # Computes the loss
-        loss: torch.Tensor = loss_fn(decoding, y)
-        total_loss += loss.item() * X.shape[0]
+        total_reconstruction_loss += reconstruction_loss.item() * X.shape[0]
+        total_kld_loss += kld_loss.item() * X.shape[0]
 
         # Computes the average absolute error in node positions
         y_nodes = y[:,:NODE_POS_SIZE]
@@ -521,20 +538,27 @@ def test_epoch(model: MetamaterialAE, dataloader: DataLoader, loss_fn, verbose=F
         decoding_face_params = decoding[:,NODE_POS_SIZE+EDGE_ADJ_SIZE+EDGE_PARAMS_SIZE+FACE_ADJ_SIZE:][:,:FACE_PARAMS_SIZE]
         face_params_error += torch.sum(torch.abs(y_face_params-decoding_face_params)).item() / FACE_PARAMS_SIZE
 
+        # Computes the average absolute error in global parameters
+        y_global_params = y[:,NODE_POS_SIZE+EDGE_ADJ_SIZE+EDGE_PARAMS_SIZE+FACE_ADJ_SIZE+FACE_PARAMS_SIZE:][:,:GLOBAL_PARAMS_SIZE]
+        decoding_global_params = decoding[:,NODE_POS_SIZE+EDGE_ADJ_SIZE+EDGE_PARAMS_SIZE+FACE_ADJ_SIZE+FACE_PARAMS_SIZE:][:,:GLOBAL_PARAMS_SIZE]
+        global_params_error += torch.sum(torch.abs(y_global_params-decoding_global_params)).item() / GLOBAL_PARAMS_SIZE
+
         # Prints the loss when the report frequency is met
         samples_used += X.shape[0]
         if verbose and (batch+1) % report_frequency == 0:
-            print(f"Loss: {(total_loss / samples_used):>7f} [{samples_used}/{dataset_size}]")
+            print(f"Loss: {(total_reconstruction_loss / samples_used):>7f} [{samples_used}/{dataset_size}]")
     
     # Averages the output values
-    total_loss /= samples_used
+    total_reconstruction_loss /= samples_used
+    total_kld_loss /= samples_used
     node_pos_error /= samples_used
     correct_edges /= samples_used
     edge_params_error /= samples_used
     correct_faces /= samples_used
     face_params_error /= samples_used
+    global_params_error /= samples_used
 
-    return total_loss, node_pos_error, correct_edges, edge_params_error, correct_faces, face_params_error
+    return total_reconstruction_loss, total_kld_loss, node_pos_error, correct_edges, edge_params_error, correct_faces, face_params_error, global_params_error
 
 
 def load_model(filepath):
