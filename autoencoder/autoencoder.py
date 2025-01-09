@@ -418,16 +418,18 @@ def train_epoch(epoch: int, model: MetamaterialAE, dataloader: DataLoader, loss_
         if model.is_variational:
             mean, logvar = model.get_latent_distribution(encoding)
             decoding = model.decode(model.sample_latent_space(mean, logvar))
-            reconstruction_loss = loss_fn(decoding, y)
-            reconstruction_loss[..., NODE_POS_SIZE+EDGE_ADJ_SIZE : NODE_POS_SIZE+EDGE_ADJ_SIZE+EDGE_PARAMS_SIZE] *= 2 # Scales up the edge parameters loss for better reconstruction
+            decoding[..., NODE_POS_SIZE+EDGE_ADJ_SIZE : NODE_POS_SIZE+EDGE_ADJ_SIZE+EDGE_PARAMS_SIZE] *= 2 # Scales up the edge parameters loss for better reconstruction
+            y[..., NODE_POS_SIZE+EDGE_ADJ_SIZE : NODE_POS_SIZE+EDGE_ADJ_SIZE+EDGE_PARAMS_SIZE] *= 2 # Scales up the edge parameters loss for better reconstruction
+            reconstruction_loss: torch.Tensor = loss_fn(decoding, y)
             kld_loss: torch.Tensor = max(0, min(1e-2, (epoch-2)*1e-3)) * (-0.5 * torch.sum(1 + logvar - mean.pow(2) - logvar.exp())) / mean.numel()
             loss: torch.Tensor = reconstruction_loss + kld_loss
 
         # Computes the AE loss
         else:
             decoding = model.decode(encoding)
-            reconstruction_loss = loss_fn(decoding, y)
-            reconstruction_loss[..., NODE_POS_SIZE+EDGE_ADJ_SIZE : NODE_POS_SIZE+EDGE_ADJ_SIZE+EDGE_PARAMS_SIZE] *= 2 # Scales up the edge parameters loss for better reconstruction
+            decoding[..., NODE_POS_SIZE+EDGE_ADJ_SIZE : NODE_POS_SIZE+EDGE_ADJ_SIZE+EDGE_PARAMS_SIZE] *= 2 # Scales up the edge parameters loss for better reconstruction
+            y[..., NODE_POS_SIZE+EDGE_ADJ_SIZE : NODE_POS_SIZE+EDGE_ADJ_SIZE+EDGE_PARAMS_SIZE] *= 2 # Scales up the edge parameters loss for better reconstruction
+            reconstruction_loss: torch.Tensor = loss_fn(decoding, y)
             loss: torch.Tensor = reconstruction_loss
 
         # Computes the loss
@@ -504,14 +506,18 @@ def test_epoch(model: MetamaterialAE, dataloader: DataLoader, loss_fn, verbose=F
         if model.is_variational:
             mean, logvar = model.get_latent_distribution(encoding)
             decoding = model.decode(model.sample_latent_space(mean, logvar))
-            kld_loss: torch.Tensor = (-0.5 * torch.sum(1 + logvar - mean.pow(2) - logvar.exp())) / mean.numel()
+            decoding[..., NODE_POS_SIZE+EDGE_ADJ_SIZE : NODE_POS_SIZE+EDGE_ADJ_SIZE+EDGE_PARAMS_SIZE] *= 2 # Scales up the edge parameters loss for better reconstruction
+            y[..., NODE_POS_SIZE+EDGE_ADJ_SIZE : NODE_POS_SIZE+EDGE_ADJ_SIZE+EDGE_PARAMS_SIZE] *= 2 # Scales up the edge parameters loss for better reconstruction
             reconstruction_loss: torch.Tensor = loss_fn(decoding, y)
+            kld_loss: torch.Tensor = (-0.5 * torch.sum(1 + logvar - mean.pow(2) - logvar.exp())) / mean.numel()
 
         # Computes the AE loss
         else:
             decoding = model.decode(encoding)
-            kld_loss = torch.tensor(0)
+            decoding[..., NODE_POS_SIZE+EDGE_ADJ_SIZE : NODE_POS_SIZE+EDGE_ADJ_SIZE+EDGE_PARAMS_SIZE] *= 2 # Scales up the edge parameters loss for better reconstruction
+            y[..., NODE_POS_SIZE+EDGE_ADJ_SIZE : NODE_POS_SIZE+EDGE_ADJ_SIZE+EDGE_PARAMS_SIZE] *= 2 # Scales up the edge parameters loss for better reconstruction
             reconstruction_loss: torch.Tensor = loss_fn(decoding, y)
+            kld_loss = torch.tensor(0)
 
         # Computes the loss
         total_reconstruction_loss += reconstruction_loss.item() * X.shape[0]
@@ -530,7 +536,7 @@ def test_epoch(model: MetamaterialAE, dataloader: DataLoader, loss_fn, verbose=F
         # Computes the average absolute error in edge parameters
         y_edge_params = y[:,NODE_POS_SIZE+EDGE_ADJ_SIZE:][:,:EDGE_PARAMS_SIZE]
         decoding_edge_params = decoding[:,NODE_POS_SIZE+EDGE_ADJ_SIZE:][:,:EDGE_PARAMS_SIZE]
-        edge_params_error += torch.sum(torch.abs(y_edge_params-decoding_edge_params)).item() / EDGE_PARAMS_SIZE
+        edge_params_error += torch.sum(torch.abs(y_edge_params-decoding_edge_params)).item() / EDGE_PARAMS_SIZE / 2
 
         # Computes the proportion of faces that were decoded correctly
         y_faces = y[:,NODE_POS_SIZE+EDGE_ADJ_SIZE+EDGE_PARAMS_SIZE:][:,:FACE_ADJ_SIZE]
