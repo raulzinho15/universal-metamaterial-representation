@@ -363,7 +363,8 @@ class MetamaterialAE(nn.Module):
         """
 
         if self.is_variational:
-            return self.decode(self.sample_latent_space(self.encode(x)))
+            mean, logvar = self.get_latent_distribution(self.encode(x))
+            return self.decode(self.sample_latent_space(mean, logvar))
         return self.decode(self.encode(x))
 
 
