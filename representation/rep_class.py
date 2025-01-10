@@ -3,7 +3,6 @@ import torch
 from random import randrange
 from representation.rep_utils import *
 from representation.utils import *
-from typing import Self
 
 class Metamaterial:
 
@@ -186,8 +185,9 @@ class Metamaterial:
             The angle score.
         """
 
-        return self.node_pos[3*node] * self.node_pos[3*node+1]
-    
+        node_coords = self.get_node_position(node)
+        return node_coords[0] + node_coords[1]*2 + node_coords[2]*4
+
 
     def get_thickness(self) -> float:
         """
@@ -200,7 +200,7 @@ class Metamaterial:
         return self.thickness * THICKNESS
     
 
-    def set_thickness(self, thickness: float) -> Self:
+    def set_thickness(self, thickness: float):
         """
         Makes a copy of this metamaterial with the given thickness.
 
@@ -976,7 +976,7 @@ class Metamaterial:
         return new_material
 
 
-    def sort_rep(self) -> Self:
+    def sort_rep(self):
         """
         Sorts the nodes in increasing order by the product of the two rep angles.
 
@@ -994,7 +994,7 @@ class Metamaterial:
         return self.reorder_nodes(sorted_node_indices)
 
 
-    def best_node_match(self, mat2: Self, nodes1: int, nodes2: int) -> list[int]:
+    def best_node_match(self, mat2, nodes1: int, nodes2: int) -> list[int]:
         """
         Computes the best matching between the first nodes of the given materials.
 
@@ -1134,7 +1134,7 @@ class Metamaterial:
         return torch.from_numpy(concatenation).type(torch.float32)
 
 
-    def copy(self) -> Self:
+    def copy(self):
         """
         Creates a copy of the Metamaterial.
 
@@ -1160,7 +1160,7 @@ class Metamaterial:
         return material
     
     
-    def from_tensor(rep_tensor: torch.Tensor) -> Self:
+    def from_tensor(rep_tensor: torch.Tensor):
         """
         Creates a Metamaterial from the given PyTorch tensor.
 
