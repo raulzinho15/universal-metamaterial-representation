@@ -499,32 +499,32 @@ def run_epoch(epoch: int, model: MetamaterialAE, dataloader: DataLoader, optim=N
             total_volume_loss += volume_loss.item() * X.shape[0]
 
             # Accumulates the average absolute error in node positions
-            y_nodes = y[:,:NODE_POS_SIZE]
+            y_nodes = X[:,:NODE_POS_SIZE]
             decoding_nodes = decoding[:,:NODE_POS_SIZE]
             node_pos_error += torch.sum(torch.abs(y_nodes-decoding_nodes)).item() / NODE_POS_SIZE
 
             # Accumulates the proportion of edges that were decoded correctly
-            y_edges = y[:,NODE_POS_SIZE:][:,:EDGE_ADJ_SIZE]
+            y_edges = X[:,NODE_POS_SIZE:][:,:EDGE_ADJ_SIZE]
             decoding_edges = decoding[:,NODE_POS_SIZE:][:,:EDGE_ADJ_SIZE]
             correct_edges += torch.sum(torch.abs(decoding_edges-y_edges) < 0.5).item() / EDGE_ADJ_SIZE
 
             # Accumulates the average absolute error in edge parameters
-            y_edge_params = y[:,NODE_POS_SIZE+EDGE_ADJ_SIZE:][:,:EDGE_PARAMS_SIZE]
+            y_edge_params = X[:,NODE_POS_SIZE+EDGE_ADJ_SIZE:][:,:EDGE_PARAMS_SIZE]
             decoding_edge_params = decoding[:,NODE_POS_SIZE+EDGE_ADJ_SIZE:][:,:EDGE_PARAMS_SIZE]
             edge_params_error += torch.sum(torch.abs(y_edge_params-decoding_edge_params)).item() / EDGE_PARAMS_SIZE / 2
 
             # Accumulates the proportion of faces that were decoded correctly
-            y_faces = y[:,NODE_POS_SIZE+EDGE_ADJ_SIZE+EDGE_PARAMS_SIZE:][:,:FACE_ADJ_SIZE]
+            y_faces = X[:,NODE_POS_SIZE+EDGE_ADJ_SIZE+EDGE_PARAMS_SIZE:][:,:FACE_ADJ_SIZE]
             decoding_faces = decoding[:,NODE_POS_SIZE+EDGE_ADJ_SIZE+EDGE_PARAMS_SIZE:][:,:FACE_ADJ_SIZE]
             correct_faces += torch.sum(torch.abs(decoding_faces-y_faces) < 0.5).item() / FACE_ADJ_SIZE
 
             # Accumulates the average absolute error in face parameters
-            y_face_params = y[:,NODE_POS_SIZE+EDGE_ADJ_SIZE+EDGE_PARAMS_SIZE+FACE_ADJ_SIZE:][:,:FACE_PARAMS_SIZE]
+            y_face_params = X[:,NODE_POS_SIZE+EDGE_ADJ_SIZE+EDGE_PARAMS_SIZE+FACE_ADJ_SIZE:][:,:FACE_PARAMS_SIZE]
             decoding_face_params = decoding[:,NODE_POS_SIZE+EDGE_ADJ_SIZE+EDGE_PARAMS_SIZE+FACE_ADJ_SIZE:][:,:FACE_PARAMS_SIZE]
             face_params_error += torch.sum(torch.abs(y_face_params-decoding_face_params)).item() / FACE_PARAMS_SIZE
 
             # Accumulates the average absolute error in global parameters
-            y_global_params = y[:,NODE_POS_SIZE+EDGE_ADJ_SIZE+EDGE_PARAMS_SIZE+FACE_ADJ_SIZE+FACE_PARAMS_SIZE:][:,:GLOBAL_PARAMS_SIZE]
+            y_global_params = X[:,NODE_POS_SIZE+EDGE_ADJ_SIZE+EDGE_PARAMS_SIZE+FACE_ADJ_SIZE+FACE_PARAMS_SIZE:][:,:GLOBAL_PARAMS_SIZE]
             decoding_global_params = decoding[:,NODE_POS_SIZE+EDGE_ADJ_SIZE+EDGE_PARAMS_SIZE+FACE_ADJ_SIZE+FACE_PARAMS_SIZE:][:,:GLOBAL_PARAMS_SIZE]
             global_params_error += torch.sum(torch.abs(y_global_params-decoding_global_params)).item() / GLOBAL_PARAMS_SIZE
 
