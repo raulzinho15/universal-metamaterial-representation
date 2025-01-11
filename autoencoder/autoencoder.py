@@ -11,18 +11,14 @@ class MetamaterialAE(nn.Module):
     the metamaterial autoencoder.
     """
 
-    def __init__(self, device, is_variational=False):
+    def __init__(self, device):
         """
         Constructs a metamaterial autoencoder with the given properties.
 
         device: `str`
             The device on which the model will be placed.
-
-        is_variational: bool
-            Whether the autoencoder is a variational autoencoder or not.
         """
         super().__init__()
-        self.is_variational = is_variational
 
         # Node Position Encoder
         self.node_pos_input_size = NODE_POS_SIZE
@@ -37,7 +33,7 @@ class MetamaterialAE(nn.Module):
             nn.ReLU(),
             nn.Linear(in_features=self.node_pos_hidden_size, out_features=self.node_pos_hidden_size),
             nn.ReLU(),
-            nn.Linear(in_features=self.node_pos_hidden_size, out_features=self.node_pos_latent_size * (2 if is_variational else 1)),
+            nn.Linear(in_features=self.node_pos_hidden_size, out_features=self.node_pos_latent_size*2),
         )
 
         # Edge Adjacency Encoder
@@ -53,7 +49,7 @@ class MetamaterialAE(nn.Module):
             nn.ReLU(),
             nn.Linear(in_features=self.edge_adj_hidden_size, out_features=self.edge_adj_hidden_size),
             nn.ReLU(),
-            nn.Linear(in_features=self.edge_adj_hidden_size, out_features=self.edge_adj_latent_size * (2 if is_variational else 1)),
+            nn.Linear(in_features=self.edge_adj_hidden_size, out_features=self.edge_adj_latent_size*2),
         )
 
         # Edge Parameters Encoder
@@ -69,7 +65,7 @@ class MetamaterialAE(nn.Module):
             nn.ReLU(),
             nn.Linear(in_features=self.edge_params_hidden_size, out_features=self.edge_params_hidden_size),
             nn.ReLU(),
-            nn.Linear(in_features=self.edge_params_hidden_size, out_features=self.edge_params_latent_size * (2 if is_variational else 1)),
+            nn.Linear(in_features=self.edge_params_hidden_size, out_features=self.edge_params_latent_size*2),
         )
 
         # Face Adjacency Encoder
@@ -85,7 +81,7 @@ class MetamaterialAE(nn.Module):
             nn.ReLU(),
             nn.Linear(in_features=self.face_adj_hidden_size, out_features=self.face_adj_hidden_size),
             nn.ReLU(),
-            nn.Linear(in_features=self.face_adj_hidden_size, out_features=self.face_adj_latent_size * (2 if is_variational else 1)),
+            nn.Linear(in_features=self.face_adj_hidden_size, out_features=self.face_adj_latent_size*2),
         )
 
         # Face Parameters Encoder
@@ -101,7 +97,7 @@ class MetamaterialAE(nn.Module):
             nn.ReLU(),
             nn.Linear(in_features=self.face_params_hidden_size, out_features=self.face_params_hidden_size),
             nn.ReLU(),
-            nn.Linear(in_features=self.face_params_hidden_size, out_features=self.face_params_latent_size * (2 if is_variational else 1)),
+            nn.Linear(in_features=self.face_params_hidden_size, out_features=self.face_params_latent_size*2),
         )
 
         # Global Parameters Encoder
@@ -117,7 +113,7 @@ class MetamaterialAE(nn.Module):
             nn.ReLU(),
             nn.Linear(in_features=self.global_params_hidden_size, out_features=self.global_params_hidden_size),
             nn.ReLU(),
-            nn.Linear(in_features=self.global_params_hidden_size, out_features=self.global_params_latent_size * (2 if is_variational else 1)),
+            nn.Linear(in_features=self.global_params_hidden_size, out_features=self.global_params_latent_size*2),
         )
 
         # Topology Encoder
@@ -133,7 +129,7 @@ class MetamaterialAE(nn.Module):
             nn.ReLU(),
             nn.Linear(in_features=self.topology_hidden_size, out_features=self.topology_hidden_size),
             nn.ReLU(),
-            nn.Linear(in_features=self.topology_hidden_size, out_features=self.topology_latent_size * (2 if is_variational else 1)),
+            nn.Linear(in_features=self.topology_hidden_size, out_features=self.topology_latent_size*2),
         )
 
         # Geometry Encoder
@@ -149,7 +145,19 @@ class MetamaterialAE(nn.Module):
             nn.ReLU(),
             nn.Linear(in_features=self.geometry_hidden_size, out_features=self.geometry_hidden_size),
             nn.ReLU(),
-            nn.Linear(in_features=self.geometry_hidden_size, out_features=self.geometry_latent_size * (2 if is_variational else 1)),
+            nn.Linear(in_features=self.geometry_hidden_size, out_features=self.geometry_latent_size*2),
+        )
+
+        # Stores latent space properties
+        self.latent_size = (
+            self.node_pos_latent_size +
+            self.edge_adj_latent_size +
+            self.edge_params_latent_size + 
+            self.face_adj_latent_size + 
+            self.face_params_latent_size +
+            self.global_params_latent_size +
+            self.topology_latent_size +
+            self.geometry_latent_size
         )
 
         # Node Position Decoder
@@ -247,6 +255,25 @@ class MetamaterialAE(nn.Module):
             nn.ReLU(),
             nn.Linear(in_features=hidden_size, out_features=output_size),
         )
+
+        # Volume Predictor
+        input_size = self.latent_size
+        hidden_size = input_size*6
+        self.volume_predictor = nn.Sequential(
+            nn.Linear(in_features=input_size, out_features=hidden_size),
+            nn.ReLU(),
+            nn.Linear(in_features=hidden_size, out_features=hidden_size),
+            nn.ReLU(),
+            nn.Linear(in_features=hidden_size, out_features=hidden_size),
+            nn.ReLU(),
+            nn.Linear(in_features=hidden_size, out_features=hidden_size),
+            nn.ReLU(),
+            nn.Linear(in_features=hidden_size, out_features=hidden_size),
+            nn.ReLU(),
+            nn.Linear(in_features=hidden_size, out_features=output_size),
+        )
+
+        self.softmax = nn.Softmax()
 
         # Stores the device
         self.device = device
@@ -347,6 +374,10 @@ class MetamaterialAE(nn.Module):
         face_params = self.face_params_decoder(torch.cat([face_params_latent, geometry_latent], dim=-1))
         global_params = self.global_params_decoder(torch.cat([global_params_latent, geometry_latent], dim=-1))
 
+        # Sets the adjacencies to be in [0,1]
+        edge_adj = self.softmax(edge_adj)
+        face_adj = self.softmax(face_adj)
+
         return torch.cat([
             node_pos,
             edge_adj,
@@ -355,6 +386,14 @@ class MetamaterialAE(nn.Module):
             face_params,
             global_params,
         ], dim=-1)
+    
+
+    def predict_volume(self, z: torch.Tensor) -> torch.Tensor:
+        """
+        Predicts the volume of the latent sample.
+        """
+
+        return self.volume_predictor(z)
 
 
     def forward(self, x: torch.Tensor):
@@ -362,15 +401,19 @@ class MetamaterialAE(nn.Module):
         Defines a forward pass through the network.
         """
 
-        if self.is_variational:
-            mean, logvar = self.get_latent_distribution(self.encode(x))
-            return self.decode(self.sample_latent_space(mean, logvar))
-        return self.decode(self.encode(x))
+        encoding = self.encode(x)
+        mean, logvar = self.get_latent_distribution(encoding)
+        z = self.sample_latent_space(mean, logvar)
+        decoding = self.decode(z)
+        volumes = self.predict_volume(z)
+
+        return mean, logvar, decoding, volumes
 
 
-def train_epoch(epoch: int, model: MetamaterialAE, dataloader: DataLoader, loss_fn, optim, verbose=True, report_frequency=200) -> float:
+def run_epoch(epoch: int, model: MetamaterialAE, dataloader: DataLoader, optim=None, verbose=True, report_frequency=200) -> float:
+
     """
-    Runs a training epoch on the model with the given data.
+    Runs a epoch on the model with the given data.
     
     epoch: `int`
         The current epoch.
@@ -379,13 +422,11 @@ def train_epoch(epoch: int, model: MetamaterialAE, dataloader: DataLoader, loss_
         The model to be used.
 
     dataloader: `DataLoader`
-        The training data to use.
+        The data to use.
 
-    loss_fn:
-        The loss function to use.
-
-    optim:
+    optim: optional
         The optimizer to use in training.
+        If not `None`, then model will be optimized.
 
     verbose: `bool`, optional
         Whether batch progress will output to the terminal.
@@ -395,7 +436,16 @@ def train_epoch(epoch: int, model: MetamaterialAE, dataloader: DataLoader, loss_
         the verbose option is chosen.
 
     Returns: `float`
-        The loss from the epoch.
+        If `train=False`, returns:
+        1) The reconstruction loss.
+        2) The KL Divergence loss.
+        3) The volume prediction loss.
+        4) The average absolute node position error.
+        5) The fraction of edges correctly decoded.
+        6) The average absolute edge parameters error.
+        7) The fraction of faces correctly decoded.
+        8) The average absolute face parameters error.
+        9) The average absolute global parameters error.
     """
 
     # Computes the size of the dataset
@@ -404,88 +454,9 @@ def train_epoch(epoch: int, model: MetamaterialAE, dataloader: DataLoader, loss_
     # Prepares values for the epoch
     samples_used = 0
     total_loss = 0
-
-    # Sets up the model's mode
-    model.train()
-
-    # Runs through each batch
-    for batch, (X,y), in enumerate(dataloader):
-
-        # Computes the forward pass
-        encoding = model.encode(X)
-
-        # Computes the VAE loss
-        if model.is_variational:
-            mean, logvar = model.get_latent_distribution(encoding)
-            decoding = model.decode(model.sample_latent_space(mean, logvar))
-            decoding[..., NODE_POS_SIZE+EDGE_ADJ_SIZE : NODE_POS_SIZE+EDGE_ADJ_SIZE+EDGE_PARAMS_SIZE] *= 2 # Scales up the edge parameters loss for better reconstruction
-            y[..., NODE_POS_SIZE+EDGE_ADJ_SIZE : NODE_POS_SIZE+EDGE_ADJ_SIZE+EDGE_PARAMS_SIZE] *= 2 # Scales up the edge parameters loss for better reconstruction
-            reconstruction_loss: torch.Tensor = loss_fn(decoding, y)
-            kld_loss: torch.Tensor = max(0, min(1e-2, (epoch-2)*1e-3)) * (-0.5 * torch.sum(1 + logvar - mean.pow(2) - logvar.exp())) / mean.numel()
-            loss: torch.Tensor = reconstruction_loss + kld_loss
-
-        # Computes the AE loss
-        else:
-            decoding = model.decode(encoding)
-            decoding[..., NODE_POS_SIZE+EDGE_ADJ_SIZE : NODE_POS_SIZE+EDGE_ADJ_SIZE+EDGE_PARAMS_SIZE] *= 2 # Scales up the edge parameters loss for better reconstruction
-            y[..., NODE_POS_SIZE+EDGE_ADJ_SIZE : NODE_POS_SIZE+EDGE_ADJ_SIZE+EDGE_PARAMS_SIZE] *= 2 # Scales up the edge parameters loss for better reconstruction
-            reconstruction_loss: torch.Tensor = loss_fn(decoding, y)
-            loss: torch.Tensor = reconstruction_loss
-
-        # Computes the loss
-        total_loss += loss.item() * X.shape[0]
-
-        # Runs backpropagation and gradient descent
-        loss.backward()
-        optim.step()
-        optim.zero_grad()
-
-        # Prints the loss when the report frequency is met
-        samples_used += X.shape[0]
-        if verbose and (batch+1) % report_frequency == 0:
-            print(f"Loss: {(total_loss / samples_used):>7f} [{samples_used}/{dataset_size}]")
-    
-    return total_loss
-
-
-def test_epoch(model: MetamaterialAE, dataloader: DataLoader, loss_fn, verbose=False, report_frequency=200) -> tuple[float]:
-    """
-    Runs a testing epoch on the model with the given data.
-
-    model: `MetamaterialAE`
-        The model to be used.
-
-    dataloader: `DataLoader`
-        The testing data to use.
-
-    loss_fn:
-        The loss function to use.
-
-    verbose: `bool`, optional
-        Whether batch progress will output to the terminal.
-
-    report_frequency: `int`, optional
-        The number of batches between which reports will be printed if
-        the verbose option is chosen.
-
-    Returns: `tuple[float]`
-        1) The reconstruction loss from the epoch.
-        2) The KL Divergence loss from the epoch.
-        3) The average absolute node position error.
-        4) The fraction of edges correctly decoded.
-        5) The average absolute edge parameters error.
-        6) The fraction of faces correctly decoded.
-        7) The average absolute face parameters error.
-        8) The average absolute global parameters error.
-    """
-
-    # Computes the size of the dataset
-    dataset_size = len(dataloader.dataset)
-
-    # Prepares values for the epoch
-    samples_used = 0
     total_reconstruction_loss = 0
     total_kld_loss = 0
+    total_volume_loss = 0
     node_pos_error = 0
     correct_edges = 0
     edge_params_error = 0
@@ -494,100 +465,101 @@ def test_epoch(model: MetamaterialAE, dataloader: DataLoader, loss_fn, verbose=F
     global_params_error = 0
 
     # Sets up the model's mode
-    model.eval()
+    train = optim is not None
+    if train:
+        model.train()
+    else:
+        model.eval()
+
+    # Prepares the loss function
+    loss_fn = nn.MSELoss()
 
     # Runs through each batch
-    for batch, (X,y), in enumerate(dataloader):
+    for batch, (X,v), in enumerate(dataloader):
 
         # Computes the forward pass
-        encoding = model.encode(X)
+        mean, logvar, decoding, volume = model(X)
 
-        # Computes the VAE loss
-        if model.is_variational:
-            mean, logvar = model.get_latent_distribution(encoding)
-            decoding = model.decode(model.sample_latent_space(mean, logvar))
-            decoding[..., NODE_POS_SIZE+EDGE_ADJ_SIZE : NODE_POS_SIZE+EDGE_ADJ_SIZE+EDGE_PARAMS_SIZE] *= 2 # Scales up the edge parameters loss for better reconstruction
-            y[..., NODE_POS_SIZE+EDGE_ADJ_SIZE : NODE_POS_SIZE+EDGE_ADJ_SIZE+EDGE_PARAMS_SIZE] *= 2 # Scales up the edge parameters loss for better reconstruction
-            reconstruction_loss: torch.Tensor = loss_fn(decoding, y)
-            kld_loss: torch.Tensor = (-0.5 * torch.sum(1 + logvar - mean.pow(2) - logvar.exp())) / mean.numel()
+        # Computes the losses
+        reconstruction_loss: torch.Tensor = loss_fn(decoding, X)
+        kld_scale = min(1.0, (epoch%100) * 2e-2)
+        kld_loss: torch.Tensor = kld_scale * -0.5 * torch.sum(1 + logvar - mean.pow(2) - logvar.exp()) / mean.numel()
+        volume_loss: torch.Tensor = loss_fn(volume, v)
+        loss: torch.Tensor = reconstruction_loss + kld_loss + volume_loss
 
-        # Computes the AE loss
-        else:
-            decoding = model.decode(encoding)
-            decoding[..., NODE_POS_SIZE+EDGE_ADJ_SIZE : NODE_POS_SIZE+EDGE_ADJ_SIZE+EDGE_PARAMS_SIZE] *= 2 # Scales up the edge parameters loss for better reconstruction
-            y[..., NODE_POS_SIZE+EDGE_ADJ_SIZE : NODE_POS_SIZE+EDGE_ADJ_SIZE+EDGE_PARAMS_SIZE] *= 2 # Scales up the edge parameters loss for better reconstruction
-            reconstruction_loss: torch.Tensor = loss_fn(decoding, y)
-            kld_loss = torch.tensor(0)
+        # Accumulates the total loss
+        total_loss += loss.item() * X.shape[0]
 
-        # Computes the loss
-        total_reconstruction_loss += reconstruction_loss.item() * X.shape[0]
-        total_kld_loss += kld_loss.item() * X.shape[0]
+        # Accumulates the different individual errors
+        if not train:
 
-        # Computes the average absolute error in node positions
-        y_nodes = y[:,:NODE_POS_SIZE]
-        decoding_nodes = decoding[:,:NODE_POS_SIZE]
-        node_pos_error += torch.sum(torch.abs(y_nodes-decoding_nodes)).item() / NODE_POS_SIZE
+            # Accumulates the different losses
+            total_reconstruction_loss += reconstruction_loss.item() * X.shape[0]
+            total_kld_loss += kld_loss.item() * X.shape[0]
+            total_volume_loss += volume_loss.item() * X.shape[0]
 
-        # Computes the proportion of edges that were decoded correctly
-        y_edges = y[:,NODE_POS_SIZE:][:,:EDGE_ADJ_SIZE]
-        decoding_edges = decoding[:,NODE_POS_SIZE:][:,:EDGE_ADJ_SIZE]
-        correct_edges += torch.sum(torch.abs(decoding_edges-y_edges) < 0.5).item() / EDGE_ADJ_SIZE
+            # Accumulates the average absolute error in node positions
+            y_nodes = y[:,:NODE_POS_SIZE]
+            decoding_nodes = decoding[:,:NODE_POS_SIZE]
+            node_pos_error += torch.sum(torch.abs(y_nodes-decoding_nodes)).item() / NODE_POS_SIZE
 
-        # Computes the average absolute error in edge parameters
-        y_edge_params = y[:,NODE_POS_SIZE+EDGE_ADJ_SIZE:][:,:EDGE_PARAMS_SIZE]
-        decoding_edge_params = decoding[:,NODE_POS_SIZE+EDGE_ADJ_SIZE:][:,:EDGE_PARAMS_SIZE]
-        edge_params_error += torch.sum(torch.abs(y_edge_params-decoding_edge_params)).item() / EDGE_PARAMS_SIZE / 2
+            # Accumulates the proportion of edges that were decoded correctly
+            y_edges = y[:,NODE_POS_SIZE:][:,:EDGE_ADJ_SIZE]
+            decoding_edges = decoding[:,NODE_POS_SIZE:][:,:EDGE_ADJ_SIZE]
+            correct_edges += torch.sum(torch.abs(decoding_edges-y_edges) < 0.5).item() / EDGE_ADJ_SIZE
 
-        # Computes the proportion of faces that were decoded correctly
-        y_faces = y[:,NODE_POS_SIZE+EDGE_ADJ_SIZE+EDGE_PARAMS_SIZE:][:,:FACE_ADJ_SIZE]
-        decoding_faces = decoding[:,NODE_POS_SIZE+EDGE_ADJ_SIZE+EDGE_PARAMS_SIZE:][:,:FACE_ADJ_SIZE]
-        correct_faces += torch.sum(torch.abs(decoding_faces-y_faces) < 0.5).item() / FACE_ADJ_SIZE
+            # Accumulates the average absolute error in edge parameters
+            y_edge_params = y[:,NODE_POS_SIZE+EDGE_ADJ_SIZE:][:,:EDGE_PARAMS_SIZE]
+            decoding_edge_params = decoding[:,NODE_POS_SIZE+EDGE_ADJ_SIZE:][:,:EDGE_PARAMS_SIZE]
+            edge_params_error += torch.sum(torch.abs(y_edge_params-decoding_edge_params)).item() / EDGE_PARAMS_SIZE / 2
 
-        # Computes the average absolute error in face parameters
-        y_face_params = y[:,NODE_POS_SIZE+EDGE_ADJ_SIZE+EDGE_PARAMS_SIZE+FACE_ADJ_SIZE:][:,:FACE_PARAMS_SIZE]
-        decoding_face_params = decoding[:,NODE_POS_SIZE+EDGE_ADJ_SIZE+EDGE_PARAMS_SIZE+FACE_ADJ_SIZE:][:,:FACE_PARAMS_SIZE]
-        face_params_error += torch.sum(torch.abs(y_face_params-decoding_face_params)).item() / FACE_PARAMS_SIZE
+            # Accumulates the proportion of faces that were decoded correctly
+            y_faces = y[:,NODE_POS_SIZE+EDGE_ADJ_SIZE+EDGE_PARAMS_SIZE:][:,:FACE_ADJ_SIZE]
+            decoding_faces = decoding[:,NODE_POS_SIZE+EDGE_ADJ_SIZE+EDGE_PARAMS_SIZE:][:,:FACE_ADJ_SIZE]
+            correct_faces += torch.sum(torch.abs(decoding_faces-y_faces) < 0.5).item() / FACE_ADJ_SIZE
 
-        # Computes the average absolute error in global parameters
-        y_global_params = y[:,NODE_POS_SIZE+EDGE_ADJ_SIZE+EDGE_PARAMS_SIZE+FACE_ADJ_SIZE+FACE_PARAMS_SIZE:][:,:GLOBAL_PARAMS_SIZE]
-        decoding_global_params = decoding[:,NODE_POS_SIZE+EDGE_ADJ_SIZE+EDGE_PARAMS_SIZE+FACE_ADJ_SIZE+FACE_PARAMS_SIZE:][:,:GLOBAL_PARAMS_SIZE]
-        global_params_error += torch.sum(torch.abs(y_global_params-decoding_global_params)).item() / GLOBAL_PARAMS_SIZE
+            # Accumulates the average absolute error in face parameters
+            y_face_params = y[:,NODE_POS_SIZE+EDGE_ADJ_SIZE+EDGE_PARAMS_SIZE+FACE_ADJ_SIZE:][:,:FACE_PARAMS_SIZE]
+            decoding_face_params = decoding[:,NODE_POS_SIZE+EDGE_ADJ_SIZE+EDGE_PARAMS_SIZE+FACE_ADJ_SIZE:][:,:FACE_PARAMS_SIZE]
+            face_params_error += torch.sum(torch.abs(y_face_params-decoding_face_params)).item() / FACE_PARAMS_SIZE
+
+            # Accumulates the average absolute error in global parameters
+            y_global_params = y[:,NODE_POS_SIZE+EDGE_ADJ_SIZE+EDGE_PARAMS_SIZE+FACE_ADJ_SIZE+FACE_PARAMS_SIZE:][:,:GLOBAL_PARAMS_SIZE]
+            decoding_global_params = decoding[:,NODE_POS_SIZE+EDGE_ADJ_SIZE+EDGE_PARAMS_SIZE+FACE_ADJ_SIZE+FACE_PARAMS_SIZE:][:,:GLOBAL_PARAMS_SIZE]
+            global_params_error += torch.sum(torch.abs(y_global_params-decoding_global_params)).item() / GLOBAL_PARAMS_SIZE
+
+        # Runs backpropagation and gradient descent
+        if train:
+            loss.backward()
+            optim.step()
+            optim.zero_grad()
 
         # Prints the loss when the report frequency is met
         samples_used += X.shape[0]
         if verbose and (batch+1) % report_frequency == 0:
-            print(f"Loss: {(total_reconstruction_loss / samples_used):>7f} [{samples_used}/{dataset_size}]")
-    
-    # Averages the output values
+            print(f"Loss: {(total_loss / samples_used):>7f} [{samples_used}/{dataset_size}]")
+
+    # Averages the errors
     total_reconstruction_loss /= samples_used
     total_kld_loss /= samples_used
+    total_volume_loss /= samples_used
     node_pos_error /= samples_used
     correct_edges /= samples_used
     edge_params_error /= samples_used
     correct_faces /= samples_used
     face_params_error /= samples_used
     global_params_error /= samples_used
-
-    return total_reconstruction_loss, total_kld_loss, node_pos_error, correct_edges, edge_params_error, correct_faces, face_params_error, global_params_error
-
-
-def load_model(filepath):
-    """
-    Loads the model at the given file, setting it to evaluation mode.
-
-    filepath: str
-        The path to the file containing the model state dictionary.
-
-    Returns: MetamaterialAutoencoder
-        The autoencoder network stored at the given file.
-    """
-
-    # Loads the model
-    model = MetamaterialAE()
-    model.load_state_dict(torch.load(filepath))
-
-    # Sets to evaluation mode
-    model.eval()
-
-    return model
+    
+    if not train:
+        return (
+            total_reconstruction_loss,
+            total_kld_loss,
+            total_volume_loss,
+            node_pos_error,
+            correct_edges,
+            edge_params_error,
+            correct_faces,
+            face_params_error,
+            global_params_error,
+        )
 
