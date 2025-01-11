@@ -273,7 +273,7 @@ class MetamaterialAE(nn.Module):
             nn.Linear(in_features=hidden_size, out_features=output_size),
         )
 
-        self.softmax = nn.Softmax()
+        self.softmax = nn.Softmax(dim=-1)
 
         # Stores the device
         self.device = device
