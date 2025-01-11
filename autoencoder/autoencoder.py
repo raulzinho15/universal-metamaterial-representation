@@ -482,7 +482,7 @@ def run_epoch(epoch: int, model: MetamaterialAE, dataloader: DataLoader, optim=N
 
         # Computes the losses
         reconstruction_loss: torch.Tensor = loss_fn(decoding, X)
-        kld_scale = min(1.0, (epoch%100) * 2e-2)
+        kld_scale = min(1.0, (epoch%100) * 2e-2) if train else 1.0
         kld_loss: torch.Tensor = kld_scale * -0.5 * torch.sum(1 + logvar - mean.pow(2) - logvar.exp()) / mean.numel()
         volume_loss: torch.Tensor = loss_fn(volume, v)
         loss: torch.Tensor = reconstruction_loss + kld_loss + volume_loss
