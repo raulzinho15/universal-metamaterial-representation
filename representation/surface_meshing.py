@@ -1003,7 +1003,7 @@ def estimate_volumes(materials: torch.Tensor, device='cuda') -> float:
     segment_lengths: torch.Tensor = edge_segments.norm(p=2, dim=-1)
 
     # Computes the edge volumes
-    edge_volumes = segment_lengths.sum(dim=-1) * np.pi * (thickness*101/100)**2
+    edge_volumes = segment_lengths.sum(dim=-1) * np.pi * (thickness.unsqueeze(-1)*101/100)**2
 
     # Adjusts the volume for the edges
     # 1. Edge additional volume
@@ -1043,7 +1043,7 @@ def estimate_volumes(materials: torch.Tensor, device='cuda') -> float:
     triangle_areas: torch.Tensor = torch.cross(triangle_leg1, triangle_leg2, dim=-1).norm(p=2, dim=-1) / 2
 
     # Computes the face volumes
-    face_volumes = triangle_areas.sum(dim=-1) * 2 * thickness
+    face_volumes = triangle_areas.sum(dim=-1) * 2 * thickness.unsqueeze(-1)
 
     # Adjusts the volume for the faces
     # 1. Face additional volume
