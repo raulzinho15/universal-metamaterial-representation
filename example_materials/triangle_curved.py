@@ -12,13 +12,16 @@ node_positions = np.array([
 ])
 node_pos[:9] = euclidean_to_pseudo_spherical(node_positions)
 
-# Prepares the edge adjacencies of the metamaterial
-edge_adj = np.zeros(EDGE_ADJ_SIZE)
-
 # Computes the edge indices
 edge1_index = edge_adj_index(0,1) * EDGE_BEZIER_COORDS
 edge2_index = edge_adj_index(0,2) * EDGE_BEZIER_COORDS
 edge3_index = edge_adj_index(1,2) * EDGE_BEZIER_COORDS
+
+# Prepares the edge adjacencies of the metamaterial
+edge_adj = np.zeros(EDGE_ADJ_SIZE)
+edge_adj[edge1_index // EDGE_BEZIER_COORDS] = 1
+edge_adj[edge2_index // EDGE_BEZIER_COORDS] = 1
+edge_adj[edge3_index // EDGE_BEZIER_COORDS] = 1
 
 # Prepares the face adjacencies of the metamaterial
 face_adj = np.zeros(FACE_ADJ_SIZE)
