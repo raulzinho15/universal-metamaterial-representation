@@ -273,8 +273,6 @@ class MetamaterialAE(nn.Module):
             nn.Linear(in_features=hidden_size, out_features=output_size),
         )
 
-        self.softmax = nn.Softmax(dim=-1)
-
         # Stores the device
         self.device = device
         self.to(device)
@@ -373,10 +371,6 @@ class MetamaterialAE(nn.Module):
         face_adj = self.face_adj_decoder(torch.cat([face_adj_latent, topology_latent], dim=-1))
         face_params = self.face_params_decoder(torch.cat([face_params_latent, geometry_latent], dim=-1))
         global_params = self.global_params_decoder(torch.cat([global_params_latent, geometry_latent], dim=-1))
-
-        # Sets the adjacencies to be in [0,1]
-        edge_adj = self.softmax(edge_adj)
-        face_adj = self.softmax(face_adj)
 
         return torch.cat([
             node_pos,
