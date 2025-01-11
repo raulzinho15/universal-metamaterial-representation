@@ -927,6 +927,139 @@ def union_obj_components(vertices: list[list[tuple]], faces: list[list[tuple]], 
     return union_mesh
 
 
+def estimate_volumes(materials: torch.Tensor, device='cuda') -> float:
+
+    # Will store the material volumes
+    num_materials = materials.shape[0]
+    materials = materials.to(device)
+    volumes = torch.zeros(num_materials, dtype=torch.float64).to(device)
+
+    # Stores indices for edges/faces
+    edge_node_indices = torch.tensor([[n1,n2] for n1 in range(NUM_NODES) for n2 in range(n1+1, NUM_NODES)])
+    face_node_indices = torch.tensor([[n1,n2,n3] for n1 in range(NUM_NODES) for n2 in range(n1+1, NUM_NODES) for n3 in range(n2+1, NUM_NODES)])
+    face_edge_indices = torch.tensor([
+        [edge_adj_index(n1,n2), edge_adj_index(n1,n3), edge_adj_index(n2,n3)]
+            for n1 in range(NUM_NODES)
+                for n2 in range(n1+1, NUM_NODES)
+                    for n3 in range(n2+1, NUM_NODES)
+    ])
+
+    # Stores the node properties
+    node_coords_shape = (num_materials,NUM_NODES,1,3)
+    node_coords = pseudo_spherical_to_euclidean_torch(materials[:,:NODE_POS_SIZE].reshape(node_coords_shape)[:,:,0])
+    node_coords = node_coords.reshape(node_coords_shape)
+
+    # Stores the edge properties
+    edge_adj = materials[:,NODE_POS_SIZE:][:,:EDGE_ADJ_SIZE]
+    edge_params_shape = (num_materials,EDGE_ADJ_SIZE,EDGE_BEZIER_POINTS,3)
+    edge_params = materials[:,NODE_POS_SIZE+EDGE_ADJ_SIZE:][:,:EDGE_PARAMS_SIZE].reshape(edge_params_shape)
+
+    # Stores the face properties
+    face_adj = materials[:,NODE_POS_SIZE+EDGE_ADJ_SIZE+EDGE_PARAMS_SIZE:][:,:FACE_ADJ_SIZE]
+    face_params_shape = (num_materials,FACE_ADJ_SIZE,FACE_BEZIER_POINTS,3)
+    face_params = materials[:,NODE_POS_SIZE+EDGE_ADJ_SIZE+EDGE_PARAMS_SIZE+FACE_ADJ_SIZE:][:,:FACE_PARAMS_SIZE].reshape(face_params_shape)
+
+    # Stores the global parameter properties
+    thickness = materials[:,-1] * THICKNESS
+
+    # Runs through each edge for active node counting
+    active_nodes = torch.zeros((num_materials, NUM_NODES)).to(device)
+    for n1 in range(NUM_NODES):
+        for n2 in range(n1+1, NUM_NODES):
+
+            # Computes the edge index
+            edge_index = edge_adj_index(n1,n2)
+
+            # Accounts for each node in the edge
+            active_nodes[:,n1] += edge_adj[:,edge_index]
+            active_nodes[:,n2] += edge_adj[:,edge_index]
+
+    # Stores whether nodes are active with bools
+    active_nodes = active_nodes.to(torch.bool)
+
+    # Computes the nodes' volumes
+    one_node_volume = 4/3 * np.pi * (thickness*51/50)**3
+    volumes += one_node_volume * active_nodes.sum(dim=-1)
+
+    # Transforms the edge parameters into the world coordinate system
+    edge_params += node_coords[:,edge_node_indices[:,0]]
+
+    # Stores values for the Bezier parameters for edges
+    node1_coords = node_coords[:,edge_node_indices[:,0]]
+    node2_coords = node_coords[:,edge_node_indices[:,1]]
+    
+    # Stores the Bezier parameters for edges
+    edge_bezier_params = torch.cat([node1_coords, edge_params, node2_coords], dim=2)
+
+    # Computes the edges' points
+    # Shape: (num_materials, num_edges, edge_segments_vertices, 3)
+    edge_points = BEZIER_CURVE_COEFFICIENTS_TENSOR.to(device) @ edge_bezier_params
+
+    # Masks the edge points to only include active edges' points
+    edge_points *= edge_adj.unsqueeze(-1).unsqueeze(-1)
+
+    # Computes the edge segment lengths
+    edge_segments = edge_points[:,:,1:] - edge_points[:,:,:-1]
+    segment_lengths: torch.Tensor = edge_segments.norm(p=2, dim=-1)
+
+    # Computes the edge volumes
+    edge_volumes = segment_lengths.sum(dim=-1) * np.pi * (thickness*101/100)**2
+
+    # Adjusts the volume for the edges
+    # 1. Edge additional volume
+    # 2. Node-edge intersection excess volume 
+    #  - Each edge intersects with half of two nodes
+    volumes += edge_volumes.sum(dim=-1)
+    volumes -= one_node_volume * edge_adj.sum(dim=-1)
+
+    # Transforms the face parameters into the world coordinate system
+    face_params += node_coords[:,face_node_indices[:,0]]
+
+    # Stores values for the Bezier parameters for faces
+    node1_coords = node_coords[:,face_node_indices[:,0]]
+    node2_coords = node_coords[:,face_node_indices[:,1]]
+    node3_coords = node_coords[:,face_node_indices[:,2]]
+    edge1_params = edge_params[:,face_edge_indices[:,0]]
+    edge2_params = edge_params[:,face_edge_indices[:,1]]
+    edge3_params = edge_params[:,face_edge_indices[:,2]]
+
+    # Stores the Bezier parameters for faces
+    face_bezier_params = torch.cat([
+        node1_coords, node2_coords, node3_coords,
+        edge1_params, edge2_params, edge3_params,
+        face_params
+    ], dim=2)
+
+    # Computes the faces' points
+    # Shape: (num_materials, num_face, face_segments_vertices, 3)
+    face_points = BEZIER_TRIANGLE_COEFFICIENTS_TENSOR.to(device) @ face_bezier_params
+
+    # Masks the face points to only include active faces' points
+    face_points *= face_adj.unsqueeze(-1).unsqueeze(-1)
+
+    # Computes the face segment areas
+    triangle_leg1 = face_points[:,:,FACE_VERTEX_INDICES[:,1]]-face_points[:,:,FACE_VERTEX_INDICES[:,0]]
+    triangle_leg2 = face_points[:,:,FACE_VERTEX_INDICES[:,2]]-face_points[:,:,FACE_VERTEX_INDICES[:,0]]
+    triangle_areas: torch.Tensor = torch.cross(triangle_leg1, triangle_leg2, dim=-1).norm(p=2, dim=-1) / 2
+
+    # Computes the face volumes
+    face_volumes = triangle_areas.sum(dim=-1) * 2 * thickness
+
+    # Adjusts the volume for the faces
+    # 1. Face additional volume
+    # 2. Edge-face intersection excess volume
+    #  - Each face intersects with half of its three edges
+    volumes += face_volumes.sum(dim=-1)
+    excess_edge_volume = (
+        edge_volumes[:,face_edge_indices[:,0]] +
+        edge_volumes[:,face_edge_indices[:,1]] +
+        edge_volumes[:,face_edge_indices[:,2]]
+    )
+    volumes -= (excess_edge_volume * face_adj).sum(dim=-1) / 2
+
+    return volumes
+
+
 def estimate_volume(material: Metamaterial) -> float:
     """
     Estimates the volume of the given metamaterial with the process

@@ -5,7 +5,7 @@ from math import factorial
 # User-controlled properties
 NUM_NODES = 10 # Non-center nodes plus the single center node
 EDGE_BEZIER_POINTS = 2 # The number of points to describe curved edges
-EDGE_SEGMENTS = 8 # The number of segments to use to mesh edges/faces
+EDGE_SEGMENTS = 32 # The number of segments to use to mesh edges/faces
 CUBE_CENTER = np.ones(3)/2 # The center of the metamaterial cube
 # SCALE = 1
 THICKNESS = 0.1 # The thickness of the metamaterial
@@ -175,6 +175,54 @@ def pseudo_spherical_to_euclidean(points: np.ndarray) -> np.ndarray:
 
     # Projects the unit sphere onto the unit cube
     euclidean_points /= np.abs(euclidean_points).max(axis=1, keepdims=True)
+
+    # Normalizes the points within the cube based on the pseudo-radius
+    euclidean_points *= radius
+
+    # Transforms the points to be within the unit cube
+    euclidean_points = (euclidean_points+1)/2
+
+    return euclidean_points
+
+
+def pseudo_spherical_to_euclidean_torch(points: torch.Tensor) -> torch.Tensor:
+    """
+    Computes the Euclidean coordinates, of the given pseudo-spherical
+    points centered at `CUBE_CENTER`.
+
+    points: np.ndarray
+        A 2D numpy array containing the pseudo-spherical coordinates.
+        The first axis separates different pseudo-spherical points.
+        The second axis separates the `(radius, theta, phi)` coordinates
+        of a particular point. Assumes the `radius` value is a value in
+        [0,1]. At a radius of 0, the point is at `CUBE_CENTER`. At a radius
+        of 1, the point is on the surface of the cube. Everything in
+        between varies linearly, depending on the other two angles.
+        The `theta` and `phi` values are assumed to be as conventionally
+        defined for spherical coordinates, but linearly normalized to [0,1].
+
+    Returns: np.ndarray
+        A 2D numpy array containing the points whose pseudo-spherical
+        coordinates will be computed. The first axis separates
+        different points. The second axis separates the `(x,y,z)`
+        coordinates of a particular point. Points are centered
+        at `CUBE_CENTER`. Points are in [0,1].
+    """
+
+    # Stores the pseudo-spherical coordinate values
+    radius = points[:,:,0:1]
+    theta = points[:,:,1] * np.pi
+    phi = points[:,:,2] * 2*np.pi
+
+    # Computes the Euclidian coordinates on the unit sphere
+    euclidean_points: torch.Tensor = torch.stack([
+        torch.sin(theta) * torch.cos(phi),
+        torch.sin(theta) * torch.sin(phi),
+        torch.cos(theta),
+    ], dim=2)
+
+    # Projects the unit sphere onto the unit cube
+    euclidean_points /= torch.abs(euclidean_points).max(dim=2, keepdim=True)[0]
 
     # Normalizes the points within the cube based on the pseudo-radius
     euclidean_points *= radius
@@ -540,17 +588,6 @@ def bezier_triangle_coefficients(s: int, t: int) -> np.ndarray:
     ])
 
 
-# Computes the parameters of a Bezier triangle in the order they are used in BEZIER_TRIANGLE_COEFFICIENTS
-BEZIER_TRIANGLE_PARAMETERS = np.array([
-    [s, t, EDGE_SEGMENTS-s-t] for s in range(EDGE_SEGMENTS+1) for t in range(EDGE_SEGMENTS+1-s)
-])
-
-# Computes the general coefficients for a Bezier triangle
-BEZIER_TRIANGLE_COEFFICIENTS = np.concatenate([
-    bezier_triangle_coefficients(s, t) for s,t,u in BEZIER_TRIANGLE_PARAMETERS
-], axis=0)
-
-
 def bezier_triangle_index(s: int, t: int) -> int:
     """
     Gets the index of the entry in `BEZIER_TRIANGLE_COEFFICIENTS`
@@ -569,6 +606,43 @@ def bezier_triangle_index(s: int, t: int) -> int:
         Must be in `[0,EDGE_SEGMENTS]`.
     """
     return t + s*(3-s)//2 + s*EDGE_SEGMENTS
+
+
+# Computes the parameters of a Bezier triangle in the order they are used in BEZIER_TRIANGLE_COEFFICIENTS
+BEZIER_TRIANGLE_PARAMETERS = np.array([
+    [s, t, EDGE_SEGMENTS-s-t] for s in range(EDGE_SEGMENTS+1) for t in range(EDGE_SEGMENTS+1-s)
+])
+BEZIER_CURVE_COEFFICIENTS_TENSOR = torch.from_numpy(BEZIER_CURVE_COEFFICIENTS).unsqueeze(0).unsqueeze(0)
+
+# Computes the general coefficients for a Bezier triangle
+BEZIER_TRIANGLE_COEFFICIENTS = np.concatenate([
+    bezier_triangle_coefficients(s, t) for s,t,u in BEZIER_TRIANGLE_PARAMETERS
+], axis=0)
+BEZIER_TRIANGLE_COEFFICIENTS_TENSOR = torch.from_numpy(BEZIER_TRIANGLE_COEFFICIENTS).unsqueeze(0).unsqueeze(0)
+
+FACE_VERTEX_INDICES_LIST = []
+# Runs through each bottom face
+for s in range(EDGE_SEGMENTS):
+    for t in range(EDGE_SEGMENTS-s):
+
+        # Stores the point indices
+        point1_index = bezier_triangle_index(s,t)
+        point2_index = bezier_triangle_index(s+1,t)
+        point3_index = bezier_triangle_index(s,t+1)
+
+        # Adds the faces
+        FACE_VERTEX_INDICES_LIST.append((point3_index, point2_index, point1_index)) # Bottom face
+
+        # Checks for a second face
+        if s+t+2 <= EDGE_SEGMENTS:
+
+            # Stores the new point index
+            point4_index = bezier_triangle_index(s+1,t+1)
+
+            # Adds the faces
+            FACE_VERTEX_INDICES_LIST.append((point2_index, point3_index, point4_index)) # Bottom face
+
+FACE_VERTEX_INDICES = torch.tensor(FACE_VERTEX_INDICES_LIST)
 
 
 def find_face_params(edge_params: np.ndarray | None, face_function):
