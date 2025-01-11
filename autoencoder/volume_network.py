@@ -4,7 +4,7 @@ import torch
 
 class VolumeNetwork(nn.Module):
 
-    def __init__(self, input_size: int):
+    def __init__(self, input_size: int, device: str):
 
         # Stores the network sizes
         self.input_size = input_size
@@ -22,6 +22,8 @@ class VolumeNetwork(nn.Module):
             nn.ReLU(),
             nn.Linear(in_features=self.hidden_size, out_features=self.output_size),
         )
+
+        self.to(device)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.stack(x)
