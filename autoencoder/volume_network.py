@@ -94,4 +94,4 @@ def test_epoch(model: VolumeNetwork, dataloader: DataLoader, loss_fn, verbose=Fa
         if verbose and (batch+1) % report_frequency == 0:
             print(f"Test Loss: {(total_loss / samples_used):>7f} [{samples_used}/{dataset_size}]")
 
-    return total_loss
+    return total_loss / samples_used
