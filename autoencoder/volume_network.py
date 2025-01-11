@@ -5,6 +5,7 @@ import torch
 class VolumeNetwork(nn.Module):
 
     def __init__(self, input_size: int, device: str):
+        super().__init__()
 
         # Stores the network sizes
         self.input_size = input_size
