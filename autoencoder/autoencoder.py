@@ -453,16 +453,17 @@ def run_epoch(epoch: int, model: MetamaterialAE, dataloader: DataLoader, optim=N
 
     Returns: `float`
         If `train=False`, returns:
-        1) The reconstruction loss.
-        2) The KL Divergence loss.
-        3) The volume prediction loss.
-        4) The node position R^2 coefficient.
-        5) The fraction of edges correctly decoded.
-        6) The edge parameters R^2 coefficient.
-        7) The fraction of faces correctly decoded.
-        8) The face parameters R^2 coefficient.
-        9) The global parameters R^2 coefficient.
-        10) The volume prediction R^2 coefficient.
+        1) The total loss.
+        2) The reconstruction loss.
+        3) The KL Divergence loss.
+        4) The volume prediction loss.
+        5) The node position R^2 coefficient.
+        6) The fraction of edges correctly decoded.
+        7) The edge parameters R^2 coefficient.
+        8) The fraction of faces correctly decoded.
+        9) The face parameters R^2 coefficient.
+        10) The global parameters R^2 coefficient.
+        11) The volume prediction R^2 coefficient.
     """
 
     # Computes the size of the dataset
@@ -562,6 +563,7 @@ def run_epoch(epoch: int, model: MetamaterialAE, dataloader: DataLoader, optim=N
             print(f"Loss: {(total_loss / samples_used):>7f} [{samples_used}/{dataset_size}]")
 
     # Averages the errors
+    total_loss /= samples_used
     total_reconstruction_loss /= samples_used
     total_kld_loss /= samples_used
     total_volume_loss /= samples_used
@@ -589,6 +591,7 @@ def run_epoch(epoch: int, model: MetamaterialAE, dataloader: DataLoader, optim=N
     
     if not train:
         return (
+            total_loss,
             total_reconstruction_loss,
             total_kld_loss,
             total_volume_loss,
