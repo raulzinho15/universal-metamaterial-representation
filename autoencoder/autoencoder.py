@@ -148,6 +148,18 @@ class MetamaterialAE(nn.Module):
             nn.Linear(in_features=self.geometry_hidden_size, out_features=self.geometry_latent_size*2),
         )
 
+        # Stores all the encoders compactly
+        self.encoders = [
+            self.node_pos_encoder,
+            self.edge_adj_encoder,
+            self.edge_params_encoder,
+            self.face_adj_encoder,
+            self.face_params_encoder,
+            self.global_params_encoder,
+            self.topology_encoder,
+            self.geometry_encoder,
+        ]
+
         # Stores latent space properties
         self.latent_size = (
             self.node_pos_latent_size +
@@ -255,6 +267,16 @@ class MetamaterialAE(nn.Module):
             nn.ReLU(),
             nn.Linear(in_features=hidden_size, out_features=output_size),
         )
+        
+        # Stores all the decoders compactly
+        self.decoders = [
+            self.node_pos_decoder,
+            self.edge_adj_decoder,
+            self.edge_params_decoder,
+            self.face_adj_decoder,
+            self.face_params_decoder,
+            self.global_params_decoder,
+        ]
 
         # Volume Predictor
         input_size = self.latent_size
