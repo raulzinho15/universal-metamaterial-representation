@@ -456,12 +456,13 @@ def run_epoch(epoch: int, model: MetamaterialAE, dataloader: DataLoader, optim=N
         1) The reconstruction loss.
         2) The KL Divergence loss.
         3) The volume prediction loss.
-        4) The average absolute node position error.
+        4) The node position R^2 coefficient.
         5) The fraction of edges correctly decoded.
-        6) The average absolute edge parameters error.
+        6) The edge parameters R^2 coefficient.
         7) The fraction of faces correctly decoded.
-        8) The average absolute face parameters error.
-        9) The average absolute global parameters error.
+        8) The face parameters R^2 coefficient.
+        9) The global parameters R^2 coefficient.
+        10) The volume prediction R^2 coefficient.
     """
 
     # Computes the size of the dataset
@@ -473,12 +474,13 @@ def run_epoch(epoch: int, model: MetamaterialAE, dataloader: DataLoader, optim=N
     total_reconstruction_loss = 0
     total_kld_loss = 0
     total_volume_loss = 0
-    node_pos_error = 0
+    node_pos_residual_sum = 0
     correct_edges = 0
-    edge_params_error = 0
+    edge_params_residual_sum = 0
     correct_faces = 0
-    face_params_error = 0
-    global_params_error = 0
+    face_params_residual_sum = 0
+    global_params_residual_sum = 0
+    volume_residual_sum = 0
 
     # Sets up the model's mode
     train = optim is not None
@@ -498,9 +500,10 @@ def run_epoch(epoch: int, model: MetamaterialAE, dataloader: DataLoader, optim=N
 
         # Computes the losses
         reconstruction_loss: torch.Tensor = loss_fn(decoding, X)
-        kld_scale = max(0.0, min(0.1, (epoch-5) * 1e-3)) if train else 1.0
+        kld_scale = max(0.0, min(0.0025, (epoch-5) * 5e-4)) if train else 1.0
         kld_loss: torch.Tensor = kld_scale * -0.5 * torch.sum(1 + logvar - mean.pow(2) - logvar.exp()) / mean.numel()
-        volume_loss: torch.Tensor = loss_fn(volume, v)
+        volume_scale = 0.1 + (epoch+1)/10 if train else 1.0
+        volume_loss: torch.Tensor = volume_scale * loss_fn(volume, v)
         loss: torch.Tensor = reconstruction_loss + kld_loss + volume_loss
 
         # Accumulates the total loss
@@ -514,35 +517,38 @@ def run_epoch(epoch: int, model: MetamaterialAE, dataloader: DataLoader, optim=N
             total_kld_loss += kld_loss.item() * X.shape[0]
             total_volume_loss += volume_loss.item() * X.shape[0]
 
-            # Accumulates the average absolute error in node positions
+            # Accumulates the error in node positions
             y_nodes = X[:,:NODE_POS_SIZE]
             decoding_nodes = decoding[:,:NODE_POS_SIZE]
-            node_pos_error += torch.sum(torch.abs(y_nodes-decoding_nodes)).item() / NODE_POS_SIZE
+            node_pos_residual_sum += torch.sum((y_nodes-decoding_nodes)**2).item()
 
             # Accumulates the proportion of edges that were decoded correctly
             y_edges = X[:,NODE_POS_SIZE:][:,:EDGE_ADJ_SIZE]
             decoding_edges = decoding[:,NODE_POS_SIZE:][:,:EDGE_ADJ_SIZE]
             correct_edges += torch.sum(torch.abs(decoding_edges-y_edges) < 0.5).item() / EDGE_ADJ_SIZE
 
-            # Accumulates the average absolute error in edge parameters
+            # Accumulates the error in edge parameters
             y_edge_params = X[:,NODE_POS_SIZE+EDGE_ADJ_SIZE:][:,:EDGE_PARAMS_SIZE]
             decoding_edge_params = decoding[:,NODE_POS_SIZE+EDGE_ADJ_SIZE:][:,:EDGE_PARAMS_SIZE]
-            edge_params_error += torch.sum(torch.abs(y_edge_params-decoding_edge_params)).item() / EDGE_PARAMS_SIZE / 2
+            edge_params_residual_sum += torch.sum((y_edge_params-decoding_edge_params)**2).item()
 
             # Accumulates the proportion of faces that were decoded correctly
             y_faces = X[:,NODE_POS_SIZE+EDGE_ADJ_SIZE+EDGE_PARAMS_SIZE:][:,:FACE_ADJ_SIZE]
             decoding_faces = decoding[:,NODE_POS_SIZE+EDGE_ADJ_SIZE+EDGE_PARAMS_SIZE:][:,:FACE_ADJ_SIZE]
             correct_faces += torch.sum(torch.abs(decoding_faces-y_faces) < 0.5).item() / FACE_ADJ_SIZE
 
-            # Accumulates the average absolute error in face parameters
+            # Accumulates the error in face parameters
             y_face_params = X[:,NODE_POS_SIZE+EDGE_ADJ_SIZE+EDGE_PARAMS_SIZE+FACE_ADJ_SIZE:][:,:FACE_PARAMS_SIZE]
             decoding_face_params = decoding[:,NODE_POS_SIZE+EDGE_ADJ_SIZE+EDGE_PARAMS_SIZE+FACE_ADJ_SIZE:][:,:FACE_PARAMS_SIZE]
-            face_params_error += torch.sum(torch.abs(y_face_params-decoding_face_params)).item() / FACE_PARAMS_SIZE
+            face_params_residual_sum += torch.sum((y_face_params-decoding_face_params)**2).item()
 
-            # Accumulates the average absolute error in global parameters
+            # Accumulates the error in global parameters
             y_global_params = X[:,NODE_POS_SIZE+EDGE_ADJ_SIZE+EDGE_PARAMS_SIZE+FACE_ADJ_SIZE+FACE_PARAMS_SIZE:][:,:GLOBAL_PARAMS_SIZE]
             decoding_global_params = decoding[:,NODE_POS_SIZE+EDGE_ADJ_SIZE+EDGE_PARAMS_SIZE+FACE_ADJ_SIZE+FACE_PARAMS_SIZE:][:,:GLOBAL_PARAMS_SIZE]
-            global_params_error += torch.sum(torch.abs(y_global_params-decoding_global_params)).item() / GLOBAL_PARAMS_SIZE
+            global_params_residual_sum += torch.sum((y_global_params-decoding_global_params)**2).item()
+
+            # Accumulates the error in volumes
+            volume_residual_sum += torch.sum((v-volume)**2).item()
 
         # Runs backpropagation and gradient descent
         if train:
@@ -559,23 +565,39 @@ def run_epoch(epoch: int, model: MetamaterialAE, dataloader: DataLoader, optim=N
     total_reconstruction_loss /= samples_used
     total_kld_loss /= samples_used
     total_volume_loss /= samples_used
-    node_pos_error /= samples_used
     correct_edges /= samples_used
-    edge_params_error /= samples_used
     correct_faces /= samples_used
-    face_params_error /= samples_used
-    global_params_error /= samples_used
+
+    # Computes the actual data means
+    material_means = dataloader.dataset.metamaterials.sum(dim=0) / dataset_size
+    node_pos_mean = material_means[:NODE_POS_SIZE].sum().item() / NODE_POS_SIZE
+    edge_params_mean = material_means[NODE_POS_SIZE+EDGE_ADJ_SIZE:][:EDGE_PARAMS_SIZE].sum().item() / EDGE_PARAMS_SIZE
+    face_params_mean = material_means[NODE_POS_SIZE+EDGE_ADJ_SIZE+EDGE_PARAMS_SIZE+FACE_ADJ_SIZE:][:FACE_PARAMS_SIZE].sum().item() / FACE_PARAMS_SIZE
+    global_params_mean = material_means[-GLOBAL_PARAMS_SIZE:].sum().item() / GLOBAL_PARAMS_SIZE 
+    volume_mean = dataloader.dataset.volumes.sum().item() / dataset_size
+
+    # Computes the R^2 coefficient
+    node_pos_vals = dataloader.dataset.metamaterials[:,:NODE_POS_SIZE]
+    node_pos_r2 = 1 - node_pos_residual_sum / ((node_pos_vals-node_pos_mean)**2).sum().item()
+    edge_params_vals = dataloader.dataset.metamaterials[:,NODE_POS_SIZE+EDGE_ADJ_SIZE:][:,:EDGE_PARAMS_SIZE]
+    edge_params_r2 = 1 - edge_params_residual_sum / ((edge_params_vals-edge_params_mean)**2).sum().item()
+    face_params_vals = dataloader.dataset.metamaterials[:,NODE_POS_SIZE+EDGE_ADJ_SIZE+EDGE_PARAMS_SIZE+FACE_ADJ_SIZE:][:,:FACE_PARAMS_SIZE]
+    face_params_r2 = 1 - face_params_residual_sum / ((face_params_vals-face_params_mean)**2).sum().item()
+    global_params_vals = dataloader.dataset.metamaterials[:,-GLOBAL_PARAMS_SIZE:]
+    global_params_r2 = 1 - global_params_residual_sum / ((global_params_vals-global_params_mean)**2).sum().item()
+    volume_r2 = 1 - volume_residual_sum / ((dataloader.dataset.volumes-volume_mean)**2).sum().item()
     
     if not train:
         return (
             total_reconstruction_loss,
             total_kld_loss,
             total_volume_loss,
-            node_pos_error,
+            node_pos_r2,
             correct_edges,
-            edge_params_error,
+            edge_params_r2,
             correct_faces,
-            face_params_error,
-            global_params_error,
+            face_params_r2,
+            global_params_r2,
+            volume_r2
         )
 
