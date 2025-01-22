@@ -1,6 +1,7 @@
 import torch
 import random
 from representation.rep_utils import *
+from line_profiler import profile
 
 # Stores the device on which operations will be done
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
@@ -56,15 +57,15 @@ def random_node_positions(num_samples: int, num_nodes: int) -> tuple[torch.Tenso
     """
 
     # Will store the random node positions
-    node_pos = torch.zeros((0,NODE_POS_SIZE//3,3))
-    node_coords = torch.zeros((0,NODE_POS_SIZE//3,3))
+    node_pos = torch.zeros((0,NODE_POS_SIZE//3,3), device=DEVICE)
+    node_coords = torch.zeros((0,NODE_POS_SIZE//3,3), device=DEVICE)
 
     # Stores the edge node indices
-    node_edge_indices = torch.tensor([[n1, n2] for n1 in range(num_nodes) for n2 in range(n1+1, num_nodes)])
+    node_edge_indices = torch.tensor([[n1, n2] for n1 in range(num_nodes) for n2 in range(n1+1, num_nodes)], device=DEVICE)
 
     # Stores values for indexing
-    rows = torch.arange(num_samples).view(-1, 1).expand(num_samples, num_nodes)
-    cols = torch.arange(num_nodes).view(1, -1).expand(num_samples, num_nodes)
+    rows = torch.arange(num_samples, device=DEVICE).view(-1, 1).expand(num_samples, num_nodes)
+    cols = torch.arange(num_nodes, device=DEVICE).view(1, -1).expand(num_samples, num_nodes)
 
     # Generates new node positions until enough are valid
     while node_pos.shape[0] != num_samples:
@@ -94,7 +95,7 @@ def random_node_positions(num_samples: int, num_nodes: int) -> tuple[torch.Tenso
         node_distances = ((new_node_coords[:,node_edge_indices[:,1]] - new_node_coords[:,node_edge_indices[:,0]])**2).sum(dim=-1).sqrt()
 
         # Ensures that each face has at least one node
-        valid_nodes = new_node_coords[:,:,[0,1,2,0,1,2]] == torch.tensor([[[0,0,0,1,1,1]]])
+        valid_nodes = new_node_coords[:,:,[0,1,2,0,1,2]] == torch.tensor([[[0,0,0,1,1,1]]], device=DEVICE)
         valid_nodes = valid_nodes.any(dim=1).all(dim=1)
         valid_nodes = torch.logical_and(valid_nodes, (node_distances > 0.25).all(dim=-1))
         valid_nodes = torch.nonzero(valid_nodes)[:,0]
@@ -368,20 +369,20 @@ def generate_edge_and_face_adjacencies(num_samples: int, num_nodes: int, num_edg
     """
 
     # Will store the edge and face adjancencies
-    edge_adj = torch.zeros((num_samples, EDGE_ADJ_SIZE))
-    face_adj = torch.zeros((num_samples, FACE_ADJ_SIZE))
+    edge_adj = torch.zeros((num_samples, EDGE_ADJ_SIZE), device=DEVICE)
+    face_adj = torch.zeros((num_samples, FACE_ADJ_SIZE), device=DEVICE)
 
     # Stores the node index chain for the base edges
-    node_orderings = torch.rand((num_samples, num_nodes)).argsort(dim=-1)
+    node_orderings = torch.rand((num_samples, num_nodes), device=DEVICE).argsort(dim=-1)
 
     # Maps node IDs to edge/face indices
-    nodes_to_edge = torch.tensor([[edge_adj_index(n1,n2) for n1 in range(num_nodes)] for n2 in range(num_nodes)])
-    nodes_to_face = torch.tensor([[[face_adj_index(n1,n2,n3) for n1 in range(num_nodes)] for n2 in range(num_nodes)] for n3 in range(num_nodes)])
+    nodes_to_edge = torch.tensor([[edge_adj_index(n1,n2) for n1 in range(num_nodes)] for n2 in range(num_nodes)], device=DEVICE)
+    nodes_to_face = torch.tensor([[[face_adj_index(n1,n2,n3) for n1 in range(num_nodes)] for n2 in range(num_nodes)] for n3 in range(num_nodes)], device=DEVICE)
 
     # Stores values for making connections
-    nodes_left: torch.Tensor = torch.full((num_samples,), num_nodes-1, dtype=torch.int32)
-    edges_left = torch.full((num_samples,), num_edges, dtype=torch.int32)
-    faces_left = torch.full((num_samples,), num_faces, dtype=torch.int32)
+    nodes_left: torch.Tensor = torch.full((num_samples,), num_nodes-1, dtype=torch.int32, device=DEVICE)
+    edges_left = torch.full((num_samples,), num_edges, dtype=torch.int32, device=DEVICE)
+    faces_left = torch.full((num_samples,), num_faces, dtype=torch.int32, device=DEVICE)
 
     # Runs through each node to make the base topology connection
     while True:
@@ -433,7 +434,6 @@ def generate_edge_and_face_adjacencies(num_samples: int, num_nodes: int, num_edg
         if material_indices.numel() > 0:
             nodes_left[material_indices] -= 1
             faces_left[material_indices] -= 1
-            # node_choices = torch.stack([torch.randperm(current_node[i])[:2] for i in range(num_samples)])
             node_choices = torch.rand((num_samples, num_nodes)).argsort(dim=-1)+1
             mask = node_choices < current_node.unsqueeze(-1)
             node_choices = torch.topk(node_choices * mask, 2, dim=-1)[0]-1
@@ -443,15 +443,15 @@ def generate_edge_and_face_adjacencies(num_samples: int, num_nodes: int, num_edg
             face_adj[material_indices, nodes_to_face[node1, node2, node3]] = 1
 
     # Fills in the rest of the faces
-    base_indices = torch.arange(num_samples)
-    face_adj_indices = torch.tensor([face_adj_index(n1,n2,n3) for n1 in range(num_nodes) for n2 in range(n1+1, num_nodes) for n3 in range(n2+1, num_nodes)])
-    face_orderings = torch.rand((num_samples, face_adj_indices.shape[0])).argsort(dim=-1)
+    base_indices = torch.arange(num_samples, device=DEVICE)
+    face_adj_indices = torch.tensor([face_adj_index(n1,n2,n3) for n1 in range(num_nodes) for n2 in range(n1+1, num_nodes) for n3 in range(n2+1, num_nodes)], device=DEVICE)
+    face_orderings = torch.rand((num_samples, face_adj_indices.shape[0]), device=DEVICE).argsort(dim=-1)
     for face in range(num_faces):
         face_adj[base_indices, face_adj_indices[face_orderings[:,face]]] += ((face_adj > 0).sum(dim=1) < num_faces)
     face_adj = (face_adj > 0).to(torch.float32)
 
     # Computes all the edges tied to an existing face
-    face_edges = torch.zeros(edge_adj.shape)
+    face_edges = torch.zeros(edge_adj.shape, device=DEVICE)
     for n1 in range(num_nodes):
         for n2 in range(n1+1, num_nodes):
             for n3 in range(n2+1, num_nodes):
@@ -476,8 +476,8 @@ def generate_edge_and_face_adjacencies(num_samples: int, num_nodes: int, num_edg
 
     # Fills in the rest of the edges
     edge_offset = face_edges.sum(dim=1).to(torch.int32)
-    edge_adj_indices = torch.tensor([edge_adj_index(n1,n2) for n1 in range(num_nodes) for n2 in range(n1+1, num_nodes)])
-    edge_orderings = torch.rand((num_samples, edge_adj_indices.shape[0])).argsort(dim=-1)
+    edge_adj_indices = torch.tensor([edge_adj_index(n1,n2) for n1 in range(num_nodes) for n2 in range(n1+1, num_nodes)], device=DEVICE)
+    edge_orderings = torch.rand((num_samples, edge_adj_indices.shape[0]), device=DEVICE).argsort(dim=-1)
     for edge in range(min(EDGE_ADJ_SIZE, num_edges+edge_offset.max().item())):
         edge_adj[base_indices, edge_adj_indices[edge_orderings[:,edge]]] += (edge_adj > 0).sum(dim=1) < (num_edges + edge_offset)
     edge_adj = (edge_adj > 0).to(torch.float32)
@@ -609,7 +609,7 @@ def base_face_parameters(num_nodes: int, node_euclidean_coords: torch.Tensor, fa
 
     # Computes the flat/curved face parameters
     flat_face_params = flat_face_parameters(node_euclidean_coords, face_adj).reshape(face_params_shape)
-    curved_face_params = torch.rand(face_params_shape)
+    curved_face_params = torch.rand(face_params_shape, device=DEVICE)
 
     # Makes each curved face parameter not go beyond the unit cube
     for n1 in range(num_nodes):
@@ -630,7 +630,7 @@ def base_face_parameters(num_nodes: int, node_euclidean_coords: torch.Tensor, fa
 
     return flat_face_params, curved_face_params
 
-
+@profile
 def choose_flat_and_curved_faces(num_curved_faces: int, face_adj: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
     """
     Chooses which face will correspond to flat/curved faces
@@ -667,11 +667,14 @@ def choose_flat_and_curved_faces(num_curved_faces: int, face_adj: torch.Tensor) 
     active_faces = torch.nonzero(face_adj)[:,1].reshape((num_samples, num_faces))
 
     # Generates shuffled indices
-    shuffled_indices = torch.stack([torch.randperm(num_faces)[:num_curved_faces] for _ in range(num_samples)])
-    rows = torch.arange(num_samples).view(-1, 1).expand(num_samples, num_curved_faces)
+    # shuffled_indices = torch.stack([torch.randperm(num_faces)[:num_curved_faces] for _ in range(num_samples)])
+    shuffled_indices = torch.rand((num_samples, num_faces)).argsort(dim=-1)+1
+    mask = shuffled_indices < num_curved_faces
+    shuffled_indices = torch.topk(shuffled_indices * mask, num_curved_faces, dim=-1)[0]-1
+    rows = torch.arange(num_samples, device=DEVICE).view(-1, 1).expand(num_samples, num_curved_faces)
 
     # Chooses the flat/curved faces
-    curved_faces = torch.zeros(face_adj.shape)
+    curved_faces = torch.zeros(face_adj.shape, device=DEVICE)
     curved_faces[rows, active_faces[rows, shuffled_indices]] = 1
     flat_faces = face_adj - curved_faces
 
@@ -720,7 +723,7 @@ def base_edge_parameters(num_nodes: int, node_euclidean_coords: torch.Tensor, ed
 
     # Computes the flat/curved edge parameters
     flat_edge_params = flat_edge_parameters(node_euclidean_coords, edge_adj).reshape(edge_params_shape)
-    curved_edge_params = torch.rand(edge_params_shape)
+    curved_edge_params = torch.rand(edge_params_shape, device=DEVICE)
 
     # Makes each curved edge parameter not go beyond the unit cube
     for n1 in range(num_nodes):
@@ -786,8 +789,8 @@ def find_flat_and_curved_face_edges(num_nodes: int, edge_adj: torch.Tensor, flat
     """
 
     # Stores the template
-    flat_edges: torch.Tensor = torch.zeros(edge_adj.shape)
-    curved_edges: torch.Tensor = torch.zeros(edge_adj.shape)
+    flat_edges: torch.Tensor = torch.zeros(edge_adj.shape, device=DEVICE)
+    curved_edges: torch.Tensor = torch.zeros(edge_adj.shape, device=DEVICE)
 
     # Runs through each face
     for n1 in range(num_nodes):
@@ -820,7 +823,7 @@ def find_flat_and_curved_face_edges(num_nodes: int, edge_adj: torch.Tensor, flat
 
     # Randomly deals with intersections
     intersections = torch.logical_and(flat_edges, curved_edges).to(torch.float32)
-    keep_flat_edges = (torch.rand(intersections.shape) < 0.5).to(torch.float32)
+    keep_flat_edges = (torch.rand(intersections.shape, device=DEVICE) < 0.5).to(torch.float32)
 
     # Removes intersections
     flat_edges -= intersections * (1-keep_flat_edges)
@@ -882,7 +885,7 @@ def choose_flat_and_curved_edges(num_nodes: int, num_curved_edges: int, edge_adj
     non_face_edges = (edge_adj - (flat_face_edges + curved_face_edges) > 0).to(torch.float32)
 
     # Will store the curved edges
-    curved_edges: torch.Tensor = torch.zeros(edge_adj.shape)
+    curved_edges: torch.Tensor = torch.zeros(edge_adj.shape, device=DEVICE)
 
     # Chooses the edges
     for sample in range(num_samples):
@@ -894,7 +897,7 @@ def choose_flat_and_curved_edges(num_nodes: int, num_curved_edges: int, edge_adj
         active_edges = torch.nonzero(non_face_edges[sample])[:,0]
 
         # Generates shuffled indices
-        shuffled_indices = torch.randperm(num_edges)[:min(num_edges, num_curved_edges)]
+        shuffled_indices = torch.randperm(num_edges, device=DEVICE)[:min(num_edges, num_curved_edges)]
 
         # Stores the curved edges
         curved_edges[sample, active_edges[shuffled_indices]] = 1
@@ -1092,7 +1095,7 @@ def random_shells(num_samples: int, num_nodes: int, num_faces: int):
 
     return torch.cat([node_pos, edge_adj, edge_params, face_adj, face_params, global_params], dim=1)
 
-
+@profile
 def random_metamaterials(num_samples: int, num_nodes: int, num_edges: int, num_curved_edges: int, num_faces: int, num_curved_faces: int) -> torch.Tensor:
     """
     Generates random metamaterials based on the given attributes.
