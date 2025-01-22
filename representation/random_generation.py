@@ -1,7 +1,6 @@
 import torch
 import random
 from representation.rep_utils import *
-from line_profiler import profile
 
 # Stores the device on which operations will be done
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
@@ -1093,7 +1092,7 @@ def random_shells(num_samples: int, num_nodes: int, num_faces: int):
 
     return torch.cat([node_pos, edge_adj, edge_params, face_adj, face_params, global_params], dim=1)
 
-@profile
+
 def random_metamaterials(num_samples: int, num_nodes: int, num_edges: int, num_curved_edges: int, num_faces: int, num_curved_faces: int) -> torch.Tensor:
     """
     Generates random metamaterials based on the given attributes.
