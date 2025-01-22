@@ -1,6 +1,10 @@
 import torch
 import random
 from representation.rep_utils import *
+from line_profiler import profile
+
+# Stores the device on which operations will be done
+DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 # Stores the face combinations that are compatible
 COMPATIBLE_FACES = torch.tensor([
@@ -56,6 +60,9 @@ def random_node_positions(num_samples: int, num_nodes: int) -> tuple[torch.Tenso
     node_pos = torch.zeros((0,NODE_POS_SIZE//3,3))
     node_coords = torch.zeros((0,NODE_POS_SIZE//3,3))
 
+    # Stores the edge node indices
+    node_edge_indices = torch.tensor([[n1, n2] for n1 in range(num_nodes) for n2 in range(n1+1, num_nodes)])
+
     # Stores values for indexing
     rows = torch.arange(num_samples).view(-1, 1).expand(num_samples, num_nodes)
     cols = torch.arange(num_nodes).view(1, -1).expand(num_samples, num_nodes)
@@ -84,9 +91,14 @@ def random_node_positions(num_samples: int, num_nodes: int) -> tuple[torch.Tenso
                 old_val * torch.logical_not(probs) + (face_combinations[:,:,face] // 3) * probs
             )
 
+        # Ensures nodes are far enough apart
+        node_distances = ((new_node_coords[:,node_edge_indices[:,1]] - new_node_coords[:,node_edge_indices[:,0]])**2).sum(dim=-1).sqrt()
+
         # Ensures that each face has at least one node
         valid_nodes = new_node_coords[:,:,[0,1,2,0,1,2]] == torch.tensor([[[0,0,0,1,1,1]]])
-        valid_nodes = torch.nonzero(valid_nodes.any(dim=1).all(dim=1))[:,0]
+        valid_nodes = valid_nodes.any(dim=1).all(dim=1)
+        valid_nodes = torch.logical_and(valid_nodes, (node_distances > 0.25).all(dim=-1))
+        valid_nodes = torch.nonzero(valid_nodes)[:,0]
 
         # Stores only the valid samples
         cutoff = num_samples-node_pos.shape[0]
@@ -361,72 +373,82 @@ def generate_edge_and_face_adjacencies(num_samples: int, num_nodes: int, num_edg
     face_adj = torch.zeros((num_samples, FACE_ADJ_SIZE))
 
     # Stores the node index chain for the base edges
-    node_orderings = torch.stack([torch.randperm(num_nodes) for _ in range(num_samples)])
+    node_orderings = torch.rand((num_samples, num_nodes)).argsort(dim=-1)
 
-    # Runs through each sample, creating the base connection between all the active nodes
-    for sample in range(num_samples):
+    # Maps node IDs to edge/face indices
+    nodes_to_edge = torch.tensor([[edge_adj_index(n1,n2) for n1 in range(num_nodes)] for n2 in range(num_nodes)])
+    nodes_to_face = torch.tensor([[[face_adj_index(n1,n2,n3) for n1 in range(num_nodes)] for n2 in range(num_nodes)] for n3 in range(num_nodes)])
 
-        # Stores values for making node connections
-        current_node = 1
-        nodes_left = num_nodes-1
-        edges_left = num_edges
-        faces_left = num_faces
+    # Stores values for making connections
+    nodes_left: torch.Tensor = torch.full((num_samples,), num_nodes-1, dtype=torch.int32)
+    edges_left = torch.full((num_samples,), num_edges, dtype=torch.int32)
+    faces_left = torch.full((num_samples,), num_faces, dtype=torch.int32)
 
-        # Determines the sequence of connections to make
-        while True:
+    # Runs through each node to make the base topology connection
+    while True:
 
-            # Stores the next action to take
-            # - 0: new edge at an existing vertex
-            # - 1: new face at two existing vertices
-            # - 2: new face at an existing vertex
-            action_pdf = torch.tensor([
-                edges_left,
-                faces_left * (nodes_left < faces_left*2 + edges_left) * (current_node > 1),
-                faces_left * (nodes_left > 1),
-            ], dtype=torch.float32)
-            assert action_pdf.sum().item() > 0, "The choice of base edge/face adjacencies is invalid"
-            action_pdf /= action_pdf.sum().item()
-            prob = random.random()
+        # Breaks out if no materials left
+        if nodes_left.sum().item() == 0:
+            break
 
-            # Adds a new edge at an existing vertex
-            if prob < action_pdf[0]:
-                edges_left -= 1
-                nodes_left -= 1
-                node1 = node_orderings[sample, random.randint(0,current_node-1)]
-                node2 = node_orderings[sample, current_node]
-                edge_adj[sample, edge_adj_index(node1, node2)] = 1
-                current_node += 1
+        # Stores which topology adding actions will be taken
+        # - 0: new edge at an existing vertex
+        # - 1: new face with one new vertex
+        # - 2: new face with two new vertices
+        current_node = num_nodes-nodes_left
+        actions_pdf = torch.stack([
+            edges_left * (nodes_left > 0),
+            faces_left * (nodes_left < faces_left*2 + edges_left) * (current_node > 1) * (nodes_left > 0),
+            faces_left * (nodes_left > 1),
+        ], dim=-1).to(torch.float32)
+        actions_pdf = torch.nan_to_num(actions_pdf / actions_pdf.sum(dim=-1, keepdim=True))
 
-            # Adds a new face at an existing vertex
-            elif 1-prob < action_pdf[2]:
-                faces_left -= 1
-                nodes_left -= 2
-                node1 = node_orderings[sample, random.randint(0,current_node-1)]
-                node2 = node_orderings[sample, current_node]
-                node3 = node_orderings[sample, current_node+1]
-                face_adj[sample, face_adj_index(node1, node2, node3)] = 1
-                current_node += 2
+        # Chooses the actions
+        action_indices = torch.nonzero(actions_pdf.sum(dim=-1) != 0).squeeze(1)
+        actions = torch.full((num_samples,), actions_pdf.shape[-1])
+        actions[action_indices] = torch.multinomial(actions_pdf[action_indices], 1).squeeze(1)
 
-            # Adds a new face at two existing vertices
-            else:
-                faces_left -= 1
-                nodes_left -= 1
-                node_choices = torch.randperm(current_node)[:2]
-                node1 = node_orderings[sample, node_choices[0]]
-                node2 = node_orderings[sample, node_choices[1]]
-                node3 = node_orderings[sample, current_node]
-                face_adj[sample, face_adj_index(node1, node2, node3)] = 1
-                current_node += 1
-            
-            # Exits when no nodes are left
-            if nodes_left == 0:
-                break
+        # Handles adding a new edge at an existing vertex
+        material_indices = torch.nonzero(actions == 0).squeeze(1)
+        if material_indices.numel() > 0:
+            nodes_left[material_indices] -= 1
+            edges_left[material_indices] -= 1
+            node1_index = torch.floor(torch.rand(material_indices.shape[0]) * current_node[material_indices]).to(torch.int32)
+            node1 = node_orderings[material_indices, node1_index]
+            node2 = node_orderings[material_indices, current_node[material_indices]]
+            edge_adj[material_indices, nodes_to_edge[node1, node2]] = 1
+
+        # Handles adding a new face with two new vertices
+        material_indices = torch.nonzero(actions == 2).squeeze(1)
+        if material_indices.numel() > 0:
+            nodes_left[material_indices] -= 2
+            faces_left[material_indices] -= 1
+            node1_index = torch.floor(torch.rand(material_indices.shape[0]) * current_node[material_indices]).to(torch.int32)
+            node1 = node_orderings[material_indices, node1_index]
+            node2 = node_orderings[material_indices, current_node[material_indices]]
+            node3 = node_orderings[material_indices, current_node[material_indices]+1]
+            face_adj[material_indices, nodes_to_face[node1, node2, node3]] = 1
+
+        # Handles adding a new face with one new vertex
+        material_indices = torch.nonzero(actions == 1).squeeze(1)
+        if material_indices.numel() > 0:
+            nodes_left[material_indices] -= 1
+            faces_left[material_indices] -= 1
+            # node_choices = torch.stack([torch.randperm(current_node[i])[:2] for i in range(num_samples)])
+            node_choices = torch.rand((num_samples, num_nodes)).argsort(dim=-1)+1
+            mask = node_choices < current_node.unsqueeze(-1)
+            node_choices = torch.topk(node_choices * mask, 2, dim=-1)[0]-1
+            node1 = node_orderings[material_indices, node_choices[material_indices,0]]
+            node2 = node_orderings[material_indices, node_choices[material_indices,1]]
+            node3 = node_orderings[material_indices, current_node[material_indices]]
+            face_adj[material_indices, nodes_to_face[node1, node2, node3]] = 1
 
     # Fills in the rest of the faces
     base_indices = torch.arange(num_samples)
-    face_orderings = torch.stack([torch.randperm(FACE_ADJ_SIZE)[:num_faces] for _ in range(num_samples)])
+    face_adj_indices = torch.tensor([face_adj_index(n1,n2,n3) for n1 in range(num_nodes) for n2 in range(n1+1, num_nodes) for n3 in range(n2+1, num_nodes)])
+    face_orderings = torch.rand((num_samples, face_adj_indices.shape[0])).argsort(dim=-1)
     for face in range(num_faces):
-        face_adj[base_indices, face_orderings[:,face]] += 1 * ((face_adj > 0).sum(dim=1) < num_faces)
+        face_adj[base_indices, face_adj_indices[face_orderings[:,face]]] += ((face_adj > 0).sum(dim=1) < num_faces)
     face_adj = (face_adj > 0).to(torch.float32)
 
     # Computes all the edges tied to an existing face
@@ -451,12 +473,14 @@ def generate_edge_and_face_adjacencies(num_samples: int, num_nodes: int, num_edg
     
     # Normalizes the face-edge adjacency
     face_edges = (face_edges > 0).to(torch.float32)
+    edge_adj += face_edges
 
     # Fills in the rest of the edges
-    edge_offset = face_edges.sum(dim=1)
-    edge_orderings = torch.stack([torch.randperm(EDGE_ADJ_SIZE) for _ in range(num_samples)])
-    for edge in range(EDGE_ADJ_SIZE):
-        edge_adj[base_indices, edge_orderings[:,edge]] += 1 * ((edge_adj > 0).sum(dim=1) < num_edges + edge_offset)
+    edge_offset = face_edges.sum(dim=1).to(torch.int32)
+    edge_adj_indices = torch.tensor([edge_adj_index(n1,n2) for n1 in range(num_nodes) for n2 in range(n1+1, num_nodes)])
+    edge_orderings = torch.rand((num_samples, edge_adj_indices.shape[0])).argsort(dim=-1)
+    for edge in range(min(EDGE_ADJ_SIZE, num_edges+edge_offset.max().item())):
+        edge_adj[base_indices, edge_adj_indices[edge_orderings[:,edge]]] += (edge_adj > 0).sum(dim=1) < (num_edges + edge_offset)
     edge_adj = (edge_adj > 0).to(torch.float32)
 
     return edge_adj, face_adj
@@ -1069,7 +1093,7 @@ def random_shells(num_samples: int, num_nodes: int, num_faces: int):
 
     return torch.cat([node_pos, edge_adj, edge_params, face_adj, face_params, global_params], dim=1)
 
-
+@profile
 def random_metamaterials(num_samples: int, num_nodes: int, num_edges: int, num_curved_edges: int, num_faces: int, num_curved_faces: int) -> torch.Tensor:
     """
     Generates random metamaterials based on the given attributes.
