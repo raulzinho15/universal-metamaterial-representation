@@ -38,13 +38,13 @@ def generate_random_permutations(draws: int, max_values: torch.Tensor) -> torch.
     # Computes all the permutations
     flat_max_values = max_values.flatten()
     num_samples = flat_max_values.shape[0]
-    all_perms = torch.rand((num_samples, max_values.max().item())).argsort(dim=-1)+1
+    all_perms = torch.rand((num_samples, max_values.max().item()), device=DEVICE).argsort(dim=-1)+1
 
     # Masks the values above the threshold
     mask = all_perms <= flat_max_values.unsqueeze(-1)
 
     # Computes the permutations
-    rows = torch.arange(num_samples).reshape(-1,1).expand((num_samples, draws))
+    rows = torch.arange(num_samples, device=DEVICE).reshape(-1,1).expand((num_samples, draws))
     flat_permutations: torch.Tensor = all_perms[rows, mask.argsort(dim=-1, descending=True)[:, :draws]]-1
 
     return flat_permutations.reshape((*max_values.shape, draws))
@@ -152,7 +152,7 @@ def generate_node_positions(num_nodes: torch.Tensor) -> torch.Tensor:
                 x1_placement * (grid_size-1)
             )
             x_coords = (
-                x_free_placement * ((x_placements-1 + torch.rand((samples_left,))) / grid_size) +
+                x_free_placement * ((x_placements-1 + torch.rand((samples_left,), device=DEVICE)) / grid_size) +
                 x1_placement.to(torch.float32)
             )
 
@@ -182,7 +182,7 @@ def generate_node_positions(num_nodes: torch.Tensor) -> torch.Tensor:
                 y1_placement * (grid_size-1)
             )
             y_coords = (
-                y_free_placement * ((y_placements-1 + torch.rand((samples_left,))) / grid_size) +
+                y_free_placement * ((y_placements-1 + torch.rand((samples_left,), device=DEVICE)) / grid_size) +
                 y1_placement.to(torch.float32)
             )
 
@@ -212,7 +212,7 @@ def generate_node_positions(num_nodes: torch.Tensor) -> torch.Tensor:
                 z1_placement * (grid_size-1)
             )
             z_coords = (
-                z_free_placement * ((z_placements-1 + torch.rand((samples_left,))) / grid_size) +
+                z_free_placement * ((z_placements-1 + torch.rand((samples_left,), device=DEVICE)) / grid_size) +
                 z1_placement.to(torch.float32)
             )
 
@@ -235,7 +235,7 @@ def generate_node_positions(num_nodes: torch.Tensor) -> torch.Tensor:
         
     # Permutes the node coordinate dimensions to ensure uniformity in the random choices
     dim_permutation = torch.rand((num_samples,3), device=DEVICE).argsort(dim=-1)
-    rows = torch.arange(num_samples).unsqueeze(-1).expand((num_samples, 3))
+    rows = torch.arange(num_samples, device=DEVICE).unsqueeze(-1).expand((num_samples, 3))
     node_coords[rows, :, dim_permutation] = node_coords.transpose(1,2).clone()
 
     # Computes the pseudo-spherical positions
