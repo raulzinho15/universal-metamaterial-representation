@@ -228,7 +228,7 @@ def generate_node_positions(num_nodes: torch.Tensor) -> torch.Tensor:
             grid[sample_indices.unsqueeze(-1), grid_indices[:,0], grid_indices[:,1], grid_indices[:,2]] = False
 
             # Updates the node coordinates
-            node_coords[sample_indices,node] = torch.stack([x_coords, y_coords, z_coords], dim=-1)
+            node_coords[sample_indices+sample,node] = torch.stack([x_coords, y_coords, z_coords], dim=-1)
 
             # Updates the number of nodes left
             nodes_left -= 1
