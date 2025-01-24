@@ -1,5 +1,4 @@
 import torch
-import random
 from representation.rep_utils import *
 
 # Stores the device on which operations will be done
@@ -98,6 +97,10 @@ def generate_node_positions(num_nodes: torch.Tensor) -> torch.Tensor:
     grid_size = 7
     assert NUM_NODES <= 10, "Current value of grid_size may not work"
 
+    # Stores the grid offset indices
+    grid_offsets = torch.stack(torch.meshgrid([torch.tensor([-1, 0, 1], device=DEVICE)]*3, indexing="ij")).reshape((3,-1)).unsqueeze(0)
+    prob_indices = torch.tensor([[0] + [i for i in range(grid_size)] + [grid_size-1]], dtype=torch.int32, device=DEVICE)
+
     # Will store the random node Euclidean coordinates
     node_coords = torch.full((num_samples,NUM_NODES,3), 0.5, dtype=torch.float32, device=DEVICE)
 
@@ -130,7 +133,7 @@ def generate_node_positions(num_nodes: torch.Tensor) -> torch.Tensor:
             x0_empty, x1_empty = empty_faces[sample_indices,0], empty_faces[sample_indices,-3]
 
             # Computes the x face probabilities
-            x_probs = torch.cat([grid[sample_indices,:1], grid[sample_indices], grid[sample_indices,-1:]], dim=1).any(dim=-1).any(dim=-1).to(torch.float32) # Checks which faces are still open
+            x_probs = grid[sample_indices.unsqueeze(-1),prob_indices].any(dim=(-2,-1)).to(torch.float32) # Checks which faces are still open
             x_probs[:, 0] *= grid_size*torch.logical_not(torch.logical_and(x1_empty, nodes_left[sample_indices] == 1)) # Disables x=0 when x=1 must happen, and scales the prob
             x_probs[:,-1] *= grid_size*torch.logical_not(torch.logical_and(x0_empty, nodes_left[sample_indices] == 1)) # Disables x=1 when x=0 must happen, and scales the prob
             x_probs[:,[ 1, 2]] *= 1-x0_empty.unsqueeze(-1) # Disables the free choices affecting x=0 when x=0 is still empty
@@ -220,19 +223,15 @@ def generate_node_positions(num_nodes: torch.Tensor) -> torch.Tensor:
             empty_faces[sample_indices, 2+z_placements*3] = torch.clamp(empty_faces[sample_indices, 2+z_placements*3]-1, min=0)
 
             # Updates the grid
-            for dx in [-1,0,1]:
-                for dy in [-1,0,1]:
-                    for dz in [-1,0,1]:
-                        x = torch.clamp(x_indices+dx, min=0, max=grid_size-1)
-                        y = torch.clamp(y_indices+dy, min=0, max=grid_size-1)
-                        z = torch.clamp(z_indices+dz, min=0, max=grid_size-1)
-                        grid[sample_indices,x,y,z] = False
+            base_indices = torch.stack([x_indices, y_indices, z_indices], dim=-1).unsqueeze(-1)
+            grid_indices = torch.clamp(grid_offsets + base_indices, min=0, max=grid_size-1)
+            grid[sample_indices.unsqueeze(-1), grid_indices[:,0], grid_indices[:,1], grid_indices[:,2]] = False
 
             # Updates the node coordinates
             node_coords[sample_indices,node] = torch.stack([x_coords, y_coords, z_coords], dim=-1)
 
             # Updates the number of nodes left
-            nodes_left -= 1 # CHECK IF NEGATIVE VALUES CAUSE PROBLEMS
+            nodes_left -= 1
         
     # Permutes the node coordinate dimensions to ensure uniformity in the random choices
     dim_permutation = torch.rand((num_samples,3), device=DEVICE).argsort(dim=-1)
