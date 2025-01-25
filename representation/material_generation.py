@@ -5,34 +5,41 @@ from representation.rep_utils import *
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 # Computes the node IDs corresponding to each edge, in order of edge IDs
-NODE_EDGE_INDICES = torch.tensor([
+EDGE_TO_NODES = torch.tensor([
     [n1, n2]
         for n1 in range(NUM_NODES)
             for n2 in range(n1+1, NUM_NODES)
 ], device=DEVICE)
 
-# Stores the face combinations that are compatible for a node to simultaneously be on
-COMPATIBLE_FACES = torch.tensor([
-    [0, 1, 2], [0, 1, 5], [0, 4, 2], [0, 4, 5], 
-    [3, 1, 2], [3, 1, 5], [3, 4, 2], [3, 4, 5],
-    [0, 2, 1], [0, 2, 4], [0, 5, 1], [0, 5, 4],
-    [3, 2, 1], [3, 2, 4], [3, 5, 1], [3, 5, 4],
-    [1, 0, 2], [1, 0, 5], [1, 3, 2], [1, 3, 5],
-    [4, 0, 2], [4, 0, 5], [4, 3, 2], [4, 3, 5],
-    [1, 2, 0], [1, 2, 3], [1, 5, 0], [1, 5, 3],
-    [4, 2, 0], [4, 2, 3], [4, 5, 0], [4, 5, 3],
-    [2, 0, 1], [2, 0, 4], [2, 3, 1], [2, 3, 4],
-    [5, 0, 1], [5, 0, 4], [5, 3, 1], [5, 3, 4],
-    [2, 1, 0], [2, 1, 3], [2, 4, 0], [2, 4, 3],
-    [5, 1, 0], [5, 1, 3], [5, 4, 0], [5, 4, 3],
+# Computes the node IDs corresponding to each face, in order of face IDs
+FACE_TO_NODES = torch.tensor([
+    [n1, n2, n3]
+        for n1 in range(NUM_NODES)
+            for n2 in range(n1+1, NUM_NODES)
+                for n3 in range(n2+1, NUM_NODES)
 ], device=DEVICE)
-NUM_FACE_COMBINATIONS = COMPATIBLE_FACES.shape[0]
+
+# Computes the edge IDs corresponding to each node pair
+NODES_TO_EDGE = torch.tensor([[
+    edge_adj_index(n1,n2)
+        for n1 in range(NUM_NODES)]
+            for n2 in range(NUM_NODES)
+], device=DEVICE)
+
+# Computes the face IDs corresponding to each node triplet
+NODES_TO_FACE = torch.tensor([[[
+    face_adj_index(n1,n2,n3)
+        for n1 in range(NUM_NODES)]
+            for n2 in range(NUM_NODES)]
+                for n3 in range(NUM_NODES)
+], device=DEVICE)
 
 
-def generate_random_permutations(draws: int, max_values: torch.Tensor) -> torch.Tensor:
+def generate_random_permutations(max_values: torch.Tensor) -> torch.Tensor:
     """
-    Generates `draws`-long random permutations of the numbers between 0 (inclusive)
-    and `max_values` (exclusive). It must be that `draws <= max_values.max()`.
+    Generates random permutations of the numbers between 0 (inclusive)
+    and `max_values` (exclusive). Any remaining numbers are a permutation
+    of the remaining numbers.
     """
 
     # Computes all the permutations
@@ -44,10 +51,18 @@ def generate_random_permutations(draws: int, max_values: torch.Tensor) -> torch.
     mask = all_perms <= flat_max_values.unsqueeze(-1)
 
     # Computes the permutations
+    draws = flat_max_values.max().item()
     rows = torch.arange(num_samples, device=DEVICE).reshape(-1,1).expand((num_samples, draws))
-    flat_permutations: torch.Tensor = all_perms[rows, mask.argsort(dim=-1, descending=True)[:, :draws]]-1
+    flat_permutations: torch.Tensor = all_perms[rows, mask.argsort(dim=-1, descending=True)]-1
 
     return flat_permutations.reshape((*max_values.shape, draws))
+
+
+def generate_random_ints(max_values: torch.Tensor, min_values: torch.Tensor=0) -> torch.Tensor:
+    """
+    Generates random integers between `min_values` (inclusive) and `max_values` (exclusive).
+    """
+    return torch.floor(torch.rand(max_values.shape[0], device=DEVICE) * (max_values - min_values) + min_values).to(torch.int32)
 
 
 def generate_node_positions(num_nodes: torch.Tensor) -> torch.Tensor:
@@ -71,13 +86,13 @@ def generate_node_positions(num_nodes: torch.Tensor) -> torch.Tensor:
     Returns: `tuple[torch.Tensor, torch.Tensor]`
         A tuple of tensors containing the following tensors:
         
-        A `(N,R)` tensor with the random pseudo-spherical
+        A `(N,R)` float tensor with the random pseudo-spherical
         node positions.
         `N` is the number of samples.
         `R` is the size of the node position array in the
         Metamaterial representation.
         
-        A `(N,R//3,3)` tensor with the random node positions
+        A `(N,R//3,3)` float tensor with the random node positions
         transformed into Euclidean coordinates.
         `N` is the number of samples.
         `R` is the size of the node position array in the
@@ -102,7 +117,7 @@ def generate_node_positions(num_nodes: torch.Tensor) -> torch.Tensor:
     prob_indices = torch.tensor([[0] + [i for i in range(grid_size)] + [grid_size-1]], dtype=torch.int32, device=DEVICE)
 
     # Will store the random node Euclidean coordinates
-    node_coords = torch.full((num_samples,NUM_NODES,3), 0.5, dtype=torch.float32, device=DEVICE)
+    node_coords = torch.full((num_samples,NUM_NODES,3), 0.5, device=DEVICE)
 
     # Runs through each sample group
     for sample in range(0, num_samples, samples_per_group):
@@ -122,7 +137,7 @@ def generate_node_positions(num_nodes: torch.Tensor) -> torch.Tensor:
         # Runs through each node
         for node in range(max_node_count):
 
-            # Updates the data structures according to which samples are still being generated
+            # Stores the samples still being generated
             sample_indices = torch.nonzero(nodes_left > 0).squeeze(1)
             samples_left = sample_indices.shape[0]
 
@@ -243,3 +258,224 @@ def generate_node_positions(num_nodes: torch.Tensor) -> torch.Tensor:
 
     # Returns the computed values
     return node_pos, node_coords
+
+
+def generate_adjacencies(num_nodes: torch.Tensor, num_edges: torch.Tensor, num_faces: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+    """
+    Generates random edge and face adjacencies such that the resulting topology
+    of the metamaterial is connected.
+
+    num_nodes: `torch.Tensor`
+        A `(N,)` int tensor with the number of active nodes to use in each sample.
+        `N` is the number of samples.
+
+    num_edges: `torch.Tensor`
+        A `(N,)` int tensor with the maximum number of non-face edges to use in
+        each sample. The number is the maximum as the choice of faces is prioritized.
+        If the choice of faces allows for this many non-face edges, then there will
+        be this many edges. Otherwise, the maximum number of edges with the generated
+        face arrangement will be chosen. There will always be at least this many edges.
+        `N` is the number of samples.
+
+    num_faces: `torch.Tensor`
+        A `(N,)` int tensor with the total number of faces to use in each sample.
+        `N` is the number of samples.
+
+    Returns: `tuple[torch.Tensor, torch.Tensor]`
+        A `(N,R)` tensor with the samples' edge adjacencies.
+        `N` is the number of samples.
+        `R` is the size of the edge adjacency array in the
+        Metamaterial representation.
+        
+        A `(N,R)` tensor with the samples' face adjacencies.
+        `N` is the number of samples.
+        `R` is the size of the face adjacency array in the
+        Metamaterial representation.
+    """
+
+    # Performs safety checks
+    assert num_nodes.numel() > 0, "Must have at least one node count."
+    assert num_nodes.numel() == num_edges.numel(), "Must have the same number of node counts as edge counts."
+    assert num_nodes.numel() == num_faces.numel(), "Must have the same number of node counts as face counts."
+    assert len(num_nodes.shape) == 1, "num_nodes must be a 1D tensor."
+    assert len(num_edges.shape) == 1, "num_edges must be a 1D tensor."
+    assert len(num_faces.shape) == 1, "num_faces must be a 1D tensor."
+    assert num_nodes.dtype == torch.int32 or num_nodes.dtype == torch.int64, "num_nodes must be an int tensor."
+    assert num_edges.dtype == torch.int32 or num_edges.dtype == torch.int64, "num_edges must be an int tensor."
+    assert num_faces.dtype == torch.int32 or num_faces.dtype == torch.int64, "num_faces must be an int tensor."
+    assert num_nodes.max().item() <= NUM_NODES, "num_nodes cannot contain values above NUM_NODES."
+    assert num_nodes.min().item() >= 2, "num_nodes cannot contain values below 2."
+    assert torch.all(num_nodes <= 1 + num_edges + 2*num_faces).item(), "There are not enough edges and faces to make all nodes connected."
+    max_edges = num_nodes * (num_nodes-1) // 2
+    assert torch.all(num_edges <= max_edges).item(), "There are not enough nodes to make all the edges."
+    max_faces = num_nodes * (num_nodes-1) * (num_nodes-2) // 6
+    assert torch.all(num_faces <= max_faces).item(), "There are not enough nodes to make all the faces."
+
+    # Stores relevant & convenient values for the function
+    num_samples = num_nodes.shape[0]
+    base_indices = torch.arange(num_samples, dtype=torch.int32, device=DEVICE)
+    max_nodes = num_nodes.max().item()
+
+    # Will store the edge and face adjancencies
+    edge_adj = torch.zeros((num_samples, EDGE_ADJ_SIZE), device=DEVICE)
+    face_adj = torch.zeros((num_samples, FACE_ADJ_SIZE), device=DEVICE)
+
+    # Stores the random node permutation for edge/face connection
+    node_orderings = generate_random_permutations(num_nodes)
+
+    # Stores values for making connections
+    old_indices = base_indices.clone()
+    nodes_left = num_nodes.clone()-1
+    edges_left = num_edges.clone()
+    faces_left = num_faces.clone()
+
+    # Runs through each node to make the base topology connection
+    while True:
+
+        # Stores the samples still being generated
+        sample_indices = torch.nonzero(nodes_left > 0).squeeze(1)
+        samples_left = sample_indices.shape[0]
+
+        # Breaks out if no samples left
+        if samples_left == 0:
+            break
+
+        # Updates the data structures storing info about the samples
+        old_indices = old_indices[sample_indices]
+        node_orderings = node_orderings[sample_indices]
+        nodes_left = nodes_left[sample_indices]
+        edges_left = edges_left[sample_indices]
+        faces_left = faces_left[sample_indices]
+
+        # Stores the current node to which a topology connection is being added
+        current_node = num_nodes[old_indices]-nodes_left
+
+        # Stores the probability of each action
+        # - 0: new edge at an existing node
+        # - 1: new face with one new node
+        # - 2: new face with two new node
+        actions_pdf = torch.stack([
+            edges_left,
+            faces_left * (nodes_left < faces_left*2 + edges_left) * (current_node > 1),
+            faces_left * (nodes_left > 1),
+        ], dim=-1).to(torch.float32)
+
+        # Chooses the actions
+        actions = torch.multinomial(actions_pdf, 1).squeeze(1)
+
+        # Handles adding a new edge at an existing node
+        material_indices = torch.nonzero(actions == 0).squeeze(1)
+        if material_indices.numel() > 0:
+
+            # Adjusts the number of nodes/edges left
+            nodes_left[material_indices] -= 1
+            edges_left[material_indices] -= 1
+
+            # Chooses the nodes on which the edge addition will take place
+            node1_index = generate_random_ints(current_node[material_indices])
+            node1 = node_orderings[material_indices, node1_index]
+            node2 = node_orderings[material_indices, current_node[material_indices]]
+
+            # Adds the edge
+            edge_adj[old_indices[material_indices], NODES_TO_EDGE[node1, node2]] = 1
+
+        # Handles adding a new face with two new nodes
+        material_indices = torch.nonzero(actions == 2).squeeze(1)
+        if material_indices.numel() > 0:
+
+            # Adjusts the number of nodes/faces left
+            nodes_left[material_indices] -= 2
+            faces_left[material_indices] -= 1
+
+            # Chooses the nodes on which the face addition will take place
+            node1_index = generate_random_ints(current_node[material_indices])
+            node1 = node_orderings[material_indices, node1_index]
+            node2 = node_orderings[material_indices, current_node[material_indices]]
+            node3 = node_orderings[material_indices, current_node[material_indices]+1]
+
+            # Adds the face
+            face_adj[old_indices[material_indices], NODES_TO_FACE[node1, node2, node3]] = 1
+
+        # Handles adding a new face with one new node
+        material_indices = torch.nonzero(actions == 1).squeeze(1)
+        if material_indices.numel() > 0:
+
+            # Adjusts the number of nodes/faces left
+            nodes_left[material_indices] -= 1
+            faces_left[material_indices] -= 1
+
+            # Chooses the nodes on which the face addition will take place
+            node_choices = generate_random_permutations(current_node[material_indices])[:,:2]
+            node1 = node_orderings[material_indices, node_choices[:,0]]
+            node2 = node_orderings[material_indices, node_choices[:,1]]
+            node3 = node_orderings[material_indices, current_node[material_indices]]
+
+            # Adds the face
+            face_adj[old_indices[material_indices], NODES_TO_FACE[node1, node2, node3]] = 1
+
+    # Stores the face adjacency indices in order increasing largest node
+    face_adj_indices = torch.tensor([
+        face_adj_index(n1,n2,n3)
+            for n3 in range(max_nodes)
+                for n2 in range(n3-1, -1, -1)
+                    for n1 in range(n2-1, -1, -1)
+    ], device=DEVICE)
+
+    # Stores a shuffling of the faces
+    face_shuffle = generate_random_permutations(max_faces)
+
+    # Fills in the rest of the faces
+    for face in range(num_faces.max().item()):
+        face_adj[base_indices, face_adj_indices[face_shuffle[:,face]]] += (
+            (face_adj > 0).sum(dim=1) < num_faces
+        )
+    face_adj = (face_adj > 0).to(torch.float32)
+
+    # Computes all the edges tied to an existing face
+    face_edges = torch.zeros(edge_adj.shape, device=DEVICE)
+    for n1 in range(max_nodes):
+        for n2 in range(n1+1, max_nodes):
+            for n3 in range(n2+1, max_nodes):
+
+                # Stores the face index
+                face_index = face_adj_index(n1,n2,n3)
+
+                # Stores the edge_indices
+                edge1_index = edge_adj_index(n1,n2)
+                edge2_index = edge_adj_index(n1,n3)
+                edge3_index = edge_adj_index(n2,n3)
+                
+                # Labels the edge as a face-edge
+                face_val = face_adj[:,face_index]
+                face_edges[:,edge1_index] += face_val
+                face_edges[:,edge2_index] += face_val
+                face_edges[:,edge3_index] += face_val
+    
+    # Normalizes the face-edge adjacency
+    face_edges = (face_edges > 0).to(torch.float32)
+    edge_offset = face_edges.sum(dim=1).to(torch.int32)
+    edge_adj = ((edge_adj + face_edges) > 0).to(torch.int32)
+
+    # Stores the edge adjacency indices in order increasing largest node
+    edge_adj_indices = torch.tensor([
+        edge_adj_index(n1,n2)
+            for n2 in range(max_nodes)
+                for n1 in range(n2-1, -1, -1)
+    ], device=DEVICE)
+
+    # Stores a shuffling of the edge
+    edge_shuffle = generate_random_permutations(max_edges)
+
+    # Fills in the rest of the edges
+    edge_cutoff = min(max_edges.max().item(), (num_edges+edge_offset).max().item())
+    for edge in range(edge_cutoff):
+        edge_adj[base_indices, edge_adj_indices[edge_shuffle[:,edge]]] += (
+            (edge_adj > 0).sum(dim=1) < (num_edges + edge_offset)
+        )
+    edge_adj = (edge_adj > 0).to(torch.float32)
+
+    return edge_adj, face_adj
+
+
+
+
