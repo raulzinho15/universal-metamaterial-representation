@@ -65,9 +65,232 @@ def generate_random_ints(max_values: torch.Tensor, min_values: torch.Tensor=0) -
     return torch.floor(torch.rand(max_values.shape[0], device=DEVICE) * (max_values - min_values) + min_values).to(torch.int32)
 
 
-def compute_node_x_probabilities() -> torch.Tensor:
+def choose_node_x_placements(nodes_left: torch.Tensor, empty_slots: torch.Tensor, grid: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     """
+    Chooses the placement of the next node for each sample along the x dimension.
+
+    nodes_left: `torch.Tensor`
+        A `(N,)` tensor with the number of nodes left for each sample.
+        `N` is the number of samples.
+
+    empty_slots: `torch.Tensor`
+        A `(N,3G+6)` tensor with a 1 when a particular node placement has not
+        been made before, and 0 otherwise.
+        `N` is the number of samples.
+        `G` is the grid size.
+
+    grid: `torch.Tensor`
+        A `(N,G,G,G)` tensor with which grid spaces are not taken by a
+        node or are too close to a node.
+        `N` is the number of samples.
+        `G` is the grid size.
+
+    Returns: `tuple[torch.Tensor, torch.Tensor, torch.Tensor]`
+        A `(N,)` tensor with the x slot placements for each node.
+        `N` is the number of samples.
+        
+        A `(N,)` tensor with the x index placements for each node.
+        `N` is the number of samples.
+        
+        A `(N,)` tensor with the x coordinate placements for each node.
+        `N` is the number of samples.
     """
+
+    # Stores convenient values for the function
+    samples_left = grid.shape[0]
+    grid_size = grid.shape[1]
+    prob_indices = torch.tensor([0] + [i for i in range(grid_size)] + [grid_size-1], dtype=torch.int32, device=DEVICE)
+
+    # Stores which faces are empty
+    x0_empty, x1_empty = empty_slots[:,0], empty_slots[:,-3]
+
+    # Checks which faces are still open
+    x_probs = grid[:,prob_indices].any(dim=(-2,-1)).to(torch.float32)
+
+    # Disables x=(0,1) when x=(1,0) must happen, and scales the probability
+    x_probs[:, 0] *= grid_size*torch.logical_not(torch.logical_and(x1_empty, nodes_left == 1))
+    x_probs[:,-1] *= grid_size*torch.logical_not(torch.logical_and(x0_empty, nodes_left == 1))
+
+    # Disables the free choices affecting x=(0,1) when x=(0,1) is still empty
+    x_probs[:,[ 1, 2]] *= torch.logical_not(x0_empty).unsqueeze(-1)
+    x_probs[:,[-3,-2]] *= torch.logical_not(x1_empty).unsqueeze(-1)
+
+    # Disables free choices when a face must be chosen
+    x_probs[:,1:-1] *= (nodes_left > (x0_empty+x1_empty)).unsqueeze(-1)
+
+    # Chooses the placements
+    x_placements = torch.multinomial(x_probs, 1).squeeze(1)
+    x0_placement = x_placements == 0
+    x1_placement = x_placements == grid_size+1
+    x_free_placement = torch.logical_not(torch.logical_or(x0_placement, x1_placement))
+
+    # Computes the indices/coordinates due to the placements (x=0 is automatically 0)
+    x_indices = (
+        x_free_placement * (x_placements-1) +
+        x1_placement * (grid_size-1)
+    )
+    x_coords = (
+        x_free_placement * ((x_placements-1 + torch.rand((samples_left,), device=DEVICE)) / grid_size) +
+        x1_placement.to(torch.float32)
+    )
+
+    return x_placements, x_indices, x_coords
+
+
+def choose_node_y_placements(nodes_left: torch.Tensor, empty_slots: torch.Tensor, grid: torch.Tensor, x_indices: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    """
+    Chooses the placement of the next node for each sample along the y dimension.
+
+    nodes_left: `torch.Tensor`
+        A `(N,)` tensor with the number of nodes left for each sample.
+        `N` is the number of samples.
+
+    empty_slots: `torch.Tensor`
+        A `(N,3G+6)` tensor with a 1 when a particular node placement has not
+        been made before, and 0 otherwise.
+        `N` is the number of samples.
+        `G` is the grid size.
+
+    grid: `torch.Tensor`
+        A `(N,G,G,G)` tensor with which grid spaces are not taken by a
+        node or are too close to a node.
+        `N` is the number of samples.
+        `G` is the grid size.
+        
+    x_indices: `torch.Tensor`
+        A `(N,)` tensor with the x index placements for each node.
+        `N` is the number of samples.
+
+    Returns: `tuple[torch.Tensor, torch.Tensor, torch.Tensor]`
+        A `(N,)` tensor with the y slot placements for each node.
+        `N` is the number of samples.
+        
+        A `(N,)` tensor with the y index placements for each node.
+        `N` is the number of samples.
+        
+        A `(N,)` tensor with the y coordinate placements for each node.
+        `N` is the number of samples.
+    """
+
+    # Stores convenient values for the function
+    samples_left = grid.shape[0]
+    sample_indices = torch.arange(samples_left, device=DEVICE)
+    grid_size = grid.shape[1]
+
+    # Stores which faces are empty
+    y0_empty, y1_empty = empty_slots[:,1], empty_slots[:,-2]
+
+    # Checks which faces are still open
+    y_probs = torch.cat([grid[sample_indices,x_indices,:1], grid[sample_indices,x_indices], grid[sample_indices,x_indices,-1:]], dim=1).any(dim=-1).to(torch.float32)
+
+    # Disables y=(0,1) when y=(1,0) must happen, and scales the probability
+    y_probs[:, 0] *= grid_size*torch.logical_not(torch.logical_and(y1_empty, nodes_left == 1))
+    y_probs[:,-1] *= grid_size*torch.logical_not(torch.logical_and(y0_empty, nodes_left == 1))
+
+    # Disables the free choices affecting y=(0,1) when y=(0,1) is still empty
+    y_probs[:,[ 1, 2]] *= 1-y0_empty.unsqueeze(-1)
+    y_probs[:,[-3,-2]] *= 1-y1_empty.unsqueeze(-1)
+
+    # Disables free choices when a face must be chosen
+    y_probs[:,1:-1] *= (nodes_left > (y0_empty+y1_empty)).unsqueeze(-1)
+
+    # Chooses the placements
+    y_placements = torch.multinomial(y_probs, 1).squeeze(1)
+    y0_placement = y_placements == 0
+    y1_placement = y_placements == grid_size+1
+    y_free_placement = torch.logical_not(torch.logical_or(y0_placement, y1_placement))
+
+    # Computes the indices/coordinates due to the placements (y=0 is automatically 0)
+    y_indices = (
+        y_free_placement * (y_placements-1) +
+        y1_placement * (grid_size-1)
+    )
+    y_coords = (
+        y_free_placement * ((y_placements-1 + torch.rand((samples_left,), device=DEVICE)) / grid_size) +
+        y1_placement.to(torch.float32)
+    )
+
+    return y_placements, y_indices, y_coords
+
+
+def choose_node_z_placements(nodes_left: torch.Tensor, empty_slots: torch.Tensor, grid: torch.Tensor, x_indices: torch.Tensor, y_indices: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    """
+    Chooses the placement of the next node for each sample along the z dimension.
+
+    nodes_left: `torch.Tensor`
+        A `(N,)` tensor with the number of nodes left for each sample.
+        `N` is the number of samples.
+
+    empty_slots: `torch.Tensor`
+        A `(N,3G+6)` tensor with a 1 when a particular node placement has not
+        been made before, and 0 otherwise.
+        `N` is the number of samples.
+        `G` is the grid size.
+
+    grid: `torch.Tensor`
+        A `(N,G,G,G)` tensor with which grid spaces are not taken by a
+        node or are too close to a node.
+        `N` is the number of samples.
+        `G` is the grid size.
+        
+    x_indices: `torch.Tensor`
+        A `(N,)` tensor with the x index placements for each node.
+        `N` is the number of samples.
+        
+    y_indices: `torch.Tensor`
+        A `(N,)` tensor with the y index placements for each node.
+        `N` is the number of samples.
+
+    Returns: `tuple[torch.Tensor, torch.Tensor, torch.Tensor]`
+        A `(N,)` tensor with the z slot placements for each node.
+        `N` is the number of samples.
+        
+        A `(N,)` tensor with the z index placements for each node.
+        `N` is the number of samples.
+        
+        A `(N,)` tensor with the z coordinate placements for each node.
+        `N` is the number of samples.
+    """
+
+    # Stores convenient values for the function
+    samples_left = grid.shape[0]
+    sample_indices = torch.arange(samples_left, device=DEVICE)
+    grid_size = grid.shape[1]
+
+    # Stores which faces are empty
+    z0_empty, z1_empty = empty_slots[:,2], empty_slots[:,-1]
+
+    # Checks which faces are still open
+    z_probs = torch.cat([grid[sample_indices,x_indices,y_indices,:1], grid[sample_indices,x_indices,y_indices], grid[sample_indices,x_indices,y_indices,-1:]], dim=1).to(torch.float32)
+
+    # Disables z=(0,1) when z=(1,0) must happen, and scales the probability
+    z_probs[:, 0] *= grid_size*torch.logical_not(torch.logical_and(z1_empty, nodes_left == 1))
+    z_probs[:,-1] *= grid_size*torch.logical_not(torch.logical_and(z0_empty, nodes_left == 1))
+
+    # Disables the free choices affecting z=(0,1) when z=(0,1) is still empty
+    z_probs[:,[ 1, 2]] *= 1-z0_empty.unsqueeze(-1)
+    z_probs[:,[-3,-2]] *= 1-z1_empty.unsqueeze(-1)
+
+    # Disables free choices when a face must be chosen
+    z_probs[:,1:-1] *= (nodes_left > (z0_empty+z1_empty)).unsqueeze(-1)
+    
+    # Chooses the placements
+    z_placements = torch.multinomial(z_probs, 1).squeeze(1)
+    z0_placement = z_placements == 0
+    z1_placement = z_placements == grid_size+1
+    z_free_placement = torch.logical_not(torch.logical_or(z0_placement, z1_placement))
+
+    # Computes the indices/coordinates due to the placements (z=0 is automatically 0)
+    z_indices = (
+        z_free_placement * (z_placements-1) +
+        z1_placement * (grid_size-1)
+    )
+    z_coords = (
+        z_free_placement * ((z_placements-1 + torch.rand((samples_left,), device=DEVICE)) / grid_size) +
+        z1_placement.to(torch.float32)
+    )
+
+    return z_placements, z_indices, z_coords
 
 
 def generate_node_positions(num_nodes: torch.Tensor) -> torch.Tensor:
@@ -119,7 +342,6 @@ def generate_node_positions(num_nodes: torch.Tensor) -> torch.Tensor:
 
     # Stores the grid offset indices
     grid_offsets = torch.stack(torch.meshgrid([torch.tensor([-1, 0, 1], device=DEVICE)]*3, indexing="ij")).reshape((3,-1)).unsqueeze(0)
-    prob_indices = torch.tensor([0] + [i for i in range(grid_size)] + [grid_size-1], dtype=torch.int32, device=DEVICE)
 
     # Will store the random node Euclidean coordinates
     node_coords = torch.full((num_samples,NUM_NODES,3), 0.5, device=DEVICE)
@@ -156,105 +378,20 @@ def generate_node_positions(num_nodes: torch.Tensor) -> torch.Tensor:
             old_indices = old_indices[sample_indices]
             sample_indices = torch.arange(samples_left, device=DEVICE)
 
-
-            ### X FACES
-
-            # Stores which faces are empty
-            x0_empty, x1_empty = empty_faces[:,0], empty_faces[:,-3]
-
-            # Computes the x face probabilities
-            x_probs = grid[:,prob_indices].any(dim=(-2,-1)).to(torch.float32) # Checks which faces are still open
-            x_probs[:, 0] *= grid_size*torch.logical_not(torch.logical_and(x1_empty, nodes_left == 1)) # Disables x=0 when x=1 must happen, and scales the prob
-            x_probs[:,-1] *= grid_size*torch.logical_not(torch.logical_and(x0_empty, nodes_left == 1)) # Disables x=1 when x=0 must happen, and scales the prob
-            x_probs[:,[ 1, 2]] *= 1-x0_empty.unsqueeze(-1) # Disables the free choices affecting x=0 when x=0 is still empty
-            x_probs[:,[-3,-2]] *= 1-x1_empty.unsqueeze(-1) # Disables the free choices affecting x=1 when x=1 is still empty
-            x_probs[:,1:-1] *= (nodes_left > (x0_empty+x1_empty)).unsqueeze(-1) # Disables free choices when a face must be chosen
-
-            # Chooses the placements
-            x_placements = torch.multinomial(x_probs, 1).squeeze(1)
-            x0_placement = x_placements == 0
-            x1_placement = x_placements == grid_size+1
-            x_free_placement = torch.logical_not(torch.logical_or(x0_placement, x1_placement))
-
-            # Computes the indices/coordinates due to the placements (x=0 is automatically 0)
-            x_indices = (
-                x_free_placement * (x_placements-1) +
-                x1_placement * (grid_size-1)
-            )
-            x_coords = (
-                x_free_placement * ((x_placements-1 + torch.rand((samples_left,), device=DEVICE)) / grid_size) +
-                x1_placement.to(torch.float32)
-            )
-
-
-            ### Y FACES
-
-            # Stores which faces are empty
-            y0_empty, y1_empty = empty_faces[:,1], empty_faces[:,-2]
-
-            # Computes the y face probabilities
-            y_probs = torch.cat([grid[sample_indices,x_indices,:1], grid[sample_indices,x_indices], grid[sample_indices,x_indices,-1:]], dim=1).any(dim=-1).to(torch.float32) # Checks which faces are still open
-            y_probs[:, 0] *= grid_size*torch.logical_not(torch.logical_and(y1_empty, nodes_left == 1)) # Disables y=0 when y=1 must happen, and scales the prob
-            y_probs[:,-1] *= grid_size*torch.logical_not(torch.logical_and(y0_empty, nodes_left == 1)) # Disables y=1 when y=0 must happen, and scales the prob
-            y_probs[:,[ 1, 2]] *= 1-y0_empty.unsqueeze(-1) # Disables the free choices affecting y=0 when y=0 is still empty
-            y_probs[:,[-3,-2]] *= 1-y1_empty.unsqueeze(-1) # Disables the free choices affecting y=1 when y=1 is still empty
-            y_probs[:,1:-1] *= (nodes_left > (y0_empty+y1_empty)).unsqueeze(-1) # Disables free choices when a face must be chosen
-
-            # Chooses the placements
-            y_placements = torch.multinomial(y_probs, 1).squeeze(1)
-            y0_placement = y_placements == 0
-            y1_placement = y_placements == grid_size+1
-            y_free_placement = torch.logical_not(torch.logical_or(y0_placement, y1_placement))
-
-            # Computes the indices/coordinates due to the placements (y=0 is automatically 0)
-            y_indices = (
-                y_free_placement * (y_placements-1) +
-                y1_placement * (grid_size-1)
-            )
-            y_coords = (
-                y_free_placement * ((y_placements-1 + torch.rand((samples_left,), device=DEVICE)) / grid_size) +
-                y1_placement.to(torch.float32)
-            )
-
-
-            ### Z FACES
-
-            # Stores which faces are empty
-            z0_empty, z1_empty = empty_faces[:,2], empty_faces[:,-1]
-
-            # Computes the z face probabilities
-            z_probs = torch.cat([grid[sample_indices,x_indices,y_indices,:1], grid[sample_indices,x_indices,y_indices], grid[sample_indices,x_indices,y_indices,-1:]], dim=1).to(torch.float32) # Checks which faces are still open
-            z_probs[:, 0] *= grid_size*torch.logical_not(torch.logical_and(z1_empty, nodes_left == 1)) # Disables z=0 when z=1 must happen, and scales the prob
-            z_probs[:,-1] *= grid_size*torch.logical_not(torch.logical_and(z0_empty, nodes_left == 1)) # Disables z=1 when z=0 must happen, and scales the prob
-            z_probs[:,[ 1, 2]] *= 1-z0_empty.unsqueeze(-1) # Disables the free choices affecting z=0 when z=0 is still empty
-            z_probs[:,[-3,-2]] *= 1-z1_empty.unsqueeze(-1) # Disables the free choices affecting z=1 when z=1 is still empty
-            z_probs[:,1:-1] *= (nodes_left > (z0_empty+z1_empty)).unsqueeze(-1) # Disables free choices when a face must be chosen
-            
-            # Chooses the placements
-            z_placements = torch.multinomial(z_probs, 1).squeeze(1)
-            z0_placement = z_placements == 0
-            z1_placement = z_placements == grid_size+1
-            z_free_placement = torch.logical_not(torch.logical_or(z0_placement, z1_placement))
-
-            # Computes the indices/coordinates due to the placements (z=0 is automatically 0)
-            z_indices = (
-                z_free_placement * (z_placements-1) +
-                z1_placement * (grid_size-1)
-            )
-            z_coords = (
-                z_free_placement * ((z_placements-1 + torch.rand((samples_left,), device=DEVICE)) / grid_size) +
-                z1_placement.to(torch.float32)
-            )
-
+            # Chooses the node placements
+            x_placements, x_indices, x_coords = choose_node_x_placements(nodes_left, empty_faces, grid)
+            y_placements, y_indices, y_coords = choose_node_y_placements(nodes_left, empty_faces, grid, x_indices)
+            z_placements, z_indices, z_coords = choose_node_z_placements(nodes_left, empty_faces, grid, x_indices, y_indices)
 
             # Updates the empty faces
-            empty_faces[sample_indices,   x_placements*3] = torch.clamp(empty_faces[sample_indices,   x_placements*3]-1, min=0)
-            empty_faces[sample_indices, 1+y_placements*3] = torch.clamp(empty_faces[sample_indices, 1+y_placements*3]-1, min=0)
-            empty_faces[sample_indices, 2+z_placements*3] = torch.clamp(empty_faces[sample_indices, 2+z_placements*3]-1, min=0)
+            empty_faces[sample_indices,   x_placements*3] = empty_faces[sample_indices,   x_placements*3]-1
+            empty_faces[sample_indices, 1+y_placements*3] = empty_faces[sample_indices, 1+y_placements*3]-1
+            empty_faces[sample_indices, 2+z_placements*3] = empty_faces[sample_indices, 2+z_placements*3]-1
+            empty_faces.clamp_(min=0)
 
             # Updates the grid
-            base_indices = torch.stack([x_indices, y_indices, z_indices], dim=-1).unsqueeze(-1)
-            grid_indices = torch.clamp(grid_offsets + base_indices, min=0, max=grid_size-1)
+            grid_indices = torch.stack([x_indices, y_indices, z_indices], dim=-1).unsqueeze(-1) + grid_offsets
+            grid_indices.clamp_(min=0, max=grid_size-1)
             grid[sample_indices.unsqueeze(-1), grid_indices[:,0], grid_indices[:,1], grid_indices[:,2]] = False
 
             # Updates the node coordinates
