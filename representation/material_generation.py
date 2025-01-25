@@ -65,6 +65,11 @@ def generate_random_ints(max_values: torch.Tensor, min_values: torch.Tensor=0) -
     return torch.floor(torch.rand(max_values.shape[0], device=DEVICE) * (max_values - min_values) + min_values).to(torch.int32)
 
 
+def compute_node_x_probabilities() -> torch.Tensor:
+    """
+    """
+
+
 def generate_node_positions(num_nodes: torch.Tensor) -> torch.Tensor:
     """
     Generates random node position samples, where the
@@ -114,15 +119,18 @@ def generate_node_positions(num_nodes: torch.Tensor) -> torch.Tensor:
 
     # Stores the grid offset indices
     grid_offsets = torch.stack(torch.meshgrid([torch.tensor([-1, 0, 1], device=DEVICE)]*3, indexing="ij")).reshape((3,-1)).unsqueeze(0)
-    prob_indices = torch.tensor([[0] + [i for i in range(grid_size)] + [grid_size-1]], dtype=torch.int32, device=DEVICE)
+    prob_indices = torch.tensor([0] + [i for i in range(grid_size)] + [grid_size-1], dtype=torch.int32, device=DEVICE)
 
     # Will store the random node Euclidean coordinates
     node_coords = torch.full((num_samples,NUM_NODES,3), 0.5, device=DEVICE)
 
     # Runs through each sample group
     for sample in range(0, num_samples, samples_per_group):
+
+        # Stores values for the sample group
         end_sample = min(num_samples, sample+samples_per_group)
         group_size = end_sample-sample
+        old_indices = torch.arange(group_size, device=DEVICE)
 
         # Constructs the possible places to put points
         grid = torch.ones((group_size, *([grid_size]*3)), dtype=torch.bool, device=DEVICE)
@@ -141,19 +149,26 @@ def generate_node_positions(num_nodes: torch.Tensor) -> torch.Tensor:
             sample_indices = torch.nonzero(nodes_left > 0).squeeze(1)
             samples_left = sample_indices.shape[0]
 
+            # Updates the data structures according to which samples are left
+            nodes_left = nodes_left[sample_indices]
+            empty_faces = empty_faces[sample_indices]
+            grid = grid[sample_indices]
+            old_indices = old_indices[sample_indices]
+            sample_indices = torch.arange(samples_left, device=DEVICE)
+
 
             ### X FACES
 
             # Stores which faces are empty
-            x0_empty, x1_empty = empty_faces[sample_indices,0], empty_faces[sample_indices,-3]
+            x0_empty, x1_empty = empty_faces[:,0], empty_faces[:,-3]
 
             # Computes the x face probabilities
-            x_probs = grid[sample_indices.unsqueeze(-1),prob_indices].any(dim=(-2,-1)).to(torch.float32) # Checks which faces are still open
-            x_probs[:, 0] *= grid_size*torch.logical_not(torch.logical_and(x1_empty, nodes_left[sample_indices] == 1)) # Disables x=0 when x=1 must happen, and scales the prob
-            x_probs[:,-1] *= grid_size*torch.logical_not(torch.logical_and(x0_empty, nodes_left[sample_indices] == 1)) # Disables x=1 when x=0 must happen, and scales the prob
+            x_probs = grid[:,prob_indices].any(dim=(-2,-1)).to(torch.float32) # Checks which faces are still open
+            x_probs[:, 0] *= grid_size*torch.logical_not(torch.logical_and(x1_empty, nodes_left == 1)) # Disables x=0 when x=1 must happen, and scales the prob
+            x_probs[:,-1] *= grid_size*torch.logical_not(torch.logical_and(x0_empty, nodes_left == 1)) # Disables x=1 when x=0 must happen, and scales the prob
             x_probs[:,[ 1, 2]] *= 1-x0_empty.unsqueeze(-1) # Disables the free choices affecting x=0 when x=0 is still empty
             x_probs[:,[-3,-2]] *= 1-x1_empty.unsqueeze(-1) # Disables the free choices affecting x=1 when x=1 is still empty
-            x_probs[:,1:-1] *= (nodes_left[sample_indices] > (x0_empty+x1_empty)).unsqueeze(-1) # Disables free choices when a face must be chosen
+            x_probs[:,1:-1] *= (nodes_left > (x0_empty+x1_empty)).unsqueeze(-1) # Disables free choices when a face must be chosen
 
             # Chooses the placements
             x_placements = torch.multinomial(x_probs, 1).squeeze(1)
@@ -175,15 +190,15 @@ def generate_node_positions(num_nodes: torch.Tensor) -> torch.Tensor:
             ### Y FACES
 
             # Stores which faces are empty
-            y0_empty, y1_empty = empty_faces[sample_indices,1], empty_faces[sample_indices,-2]
+            y0_empty, y1_empty = empty_faces[:,1], empty_faces[:,-2]
 
             # Computes the y face probabilities
             y_probs = torch.cat([grid[sample_indices,x_indices,:1], grid[sample_indices,x_indices], grid[sample_indices,x_indices,-1:]], dim=1).any(dim=-1).to(torch.float32) # Checks which faces are still open
-            y_probs[:, 0] *= grid_size*torch.logical_not(torch.logical_and(y1_empty, nodes_left[sample_indices] == 1)) # Disables y=0 when y=1 must happen, and scales the prob
-            y_probs[:,-1] *= grid_size*torch.logical_not(torch.logical_and(y0_empty, nodes_left[sample_indices] == 1)) # Disables y=1 when y=0 must happen, and scales the prob
+            y_probs[:, 0] *= grid_size*torch.logical_not(torch.logical_and(y1_empty, nodes_left == 1)) # Disables y=0 when y=1 must happen, and scales the prob
+            y_probs[:,-1] *= grid_size*torch.logical_not(torch.logical_and(y0_empty, nodes_left == 1)) # Disables y=1 when y=0 must happen, and scales the prob
             y_probs[:,[ 1, 2]] *= 1-y0_empty.unsqueeze(-1) # Disables the free choices affecting y=0 when y=0 is still empty
             y_probs[:,[-3,-2]] *= 1-y1_empty.unsqueeze(-1) # Disables the free choices affecting y=1 when y=1 is still empty
-            y_probs[:,1:-1] *= (nodes_left[sample_indices] > (y0_empty+y1_empty)).unsqueeze(-1) # Disables free choices when a face must be chosen
+            y_probs[:,1:-1] *= (nodes_left > (y0_empty+y1_empty)).unsqueeze(-1) # Disables free choices when a face must be chosen
 
             # Chooses the placements
             y_placements = torch.multinomial(y_probs, 1).squeeze(1)
@@ -205,15 +220,15 @@ def generate_node_positions(num_nodes: torch.Tensor) -> torch.Tensor:
             ### Z FACES
 
             # Stores which faces are empty
-            z0_empty, z1_empty = empty_faces[sample_indices,2], empty_faces[sample_indices,-1]
+            z0_empty, z1_empty = empty_faces[:,2], empty_faces[:,-1]
 
             # Computes the z face probabilities
             z_probs = torch.cat([grid[sample_indices,x_indices,y_indices,:1], grid[sample_indices,x_indices,y_indices], grid[sample_indices,x_indices,y_indices,-1:]], dim=1).to(torch.float32) # Checks which faces are still open
-            z_probs[:, 0] *= grid_size*torch.logical_not(torch.logical_and(z1_empty, nodes_left[sample_indices] == 1)) # Disables z=0 when z=1 must happen, and scales the prob
-            z_probs[:,-1] *= grid_size*torch.logical_not(torch.logical_and(z0_empty, nodes_left[sample_indices] == 1)) # Disables z=1 when z=0 must happen, and scales the prob
+            z_probs[:, 0] *= grid_size*torch.logical_not(torch.logical_and(z1_empty, nodes_left == 1)) # Disables z=0 when z=1 must happen, and scales the prob
+            z_probs[:,-1] *= grid_size*torch.logical_not(torch.logical_and(z0_empty, nodes_left == 1)) # Disables z=1 when z=0 must happen, and scales the prob
             z_probs[:,[ 1, 2]] *= 1-z0_empty.unsqueeze(-1) # Disables the free choices affecting z=0 when z=0 is still empty
             z_probs[:,[-3,-2]] *= 1-z1_empty.unsqueeze(-1) # Disables the free choices affecting z=1 when z=1 is still empty
-            z_probs[:,1:-1] *= (nodes_left[sample_indices] > (z0_empty+z1_empty)).unsqueeze(-1) # Disables free choices when a face must be chosen
+            z_probs[:,1:-1] *= (nodes_left > (z0_empty+z1_empty)).unsqueeze(-1) # Disables free choices when a face must be chosen
             
             # Chooses the placements
             z_placements = torch.multinomial(z_probs, 1).squeeze(1)
@@ -243,7 +258,7 @@ def generate_node_positions(num_nodes: torch.Tensor) -> torch.Tensor:
             grid[sample_indices.unsqueeze(-1), grid_indices[:,0], grid_indices[:,1], grid_indices[:,2]] = False
 
             # Updates the node coordinates
-            node_coords[sample_indices+sample,node] = torch.stack([x_coords, y_coords, z_coords], dim=-1)
+            node_coords[old_indices+sample,node] = torch.stack([x_coords, y_coords, z_coords], dim=-1)
 
             # Updates the number of nodes left
             nodes_left -= 1
