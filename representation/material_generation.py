@@ -1,5 +1,6 @@
 import torch
 from representation.rep_utils import *
+from line_profiler import profile
 
 # Stores the device on which operations will be done
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
@@ -33,6 +34,13 @@ NODES_TO_FACE = torch.tensor([[[
             for n2 in range(NUM_NODES)]
                 for n3 in range(NUM_NODES)
 ], device=DEVICE)
+
+# Stores the face indices that corresponds to each edge, ordered by edge ID
+FACE_EDGE_INDICES = torch.tensor([
+    [face_adj_index(n1,n2,n3) for n3 in range(NUM_NODES) if n3 != n1 and n3 != n2]
+        for n1 in range(NUM_NODES)
+            for n2 in range(n1+1, NUM_NODES)
+])
 
 
 def generate_random_permutations(max_values: torch.Tensor) -> torch.Tensor:
@@ -70,32 +78,32 @@ def choose_node_x_placements(nodes_left: torch.Tensor, empty_slots: torch.Tensor
     Chooses the placement of the next node for each sample along the x dimension.
 
     nodes_left: `torch.Tensor`
-        A `(N,)` tensor with the number of nodes left for each sample.
+        A `(N,)` int tensor with the number of nodes left for each sample.
         Does NOT mutate.
         `N` is the number of samples.
 
     empty_slots: `torch.Tensor`
-        A `(N,3G+6)` tensor with a 1 when a particular node placement has not
+        A `(N,3G+6)` int tensor with a 1 when a particular node placement has not
         been made before, and 0 otherwise.
         Does NOT mutate.
         `N` is the number of samples.
         `G` is the grid size.
 
     grid: `torch.Tensor`
-        A `(N,G,G,G)` tensor with which grid spaces are not taken by a
+        A `(N,G,G,G)` bool tensor with which grid spaces are not taken by a
         node or are too close to a node.
         Does NOT mutate.
         `N` is the number of samples.
         `G` is the grid size.
 
     Returns: `tuple[torch.Tensor, torch.Tensor, torch.Tensor]`
-        A `(N,)` tensor with the x slot placements for each node.
+        A `(N,)` int tensor with the x slot placements for each node.
         `N` is the number of samples.
         
-        A `(N,)` tensor with the x index placements for each node.
+        A `(N,)` int tensor with the x index placements for each node.
         `N` is the number of samples.
         
-        A `(N,)` tensor with the x coordinate placements for each node.
+        A `(N,)` float tensor with the x coordinate placements for each node.
         `N` is the number of samples.
     """
 
@@ -145,37 +153,37 @@ def choose_node_y_placements(nodes_left: torch.Tensor, empty_slots: torch.Tensor
     Chooses the placement of the next node for each sample along the y dimension.
 
     nodes_left: `torch.Tensor`
-        A `(N,)` tensor with the number of nodes left for each sample.
+        A `(N,)` int tensor with the number of nodes left for each sample.
         Does NOT mutate.
         `N` is the number of samples.
 
     empty_slots: `torch.Tensor`
-        A `(N,3G+6)` tensor with a 1 when a particular node placement has not
+        A `(N,3G+6)` int tensor with a 1 when a particular node placement has not
         been made before, and 0 otherwise.
         Does NOT mutate.
         `N` is the number of samples.
         `G` is the grid size.
 
     grid: `torch.Tensor`
-        A `(N,G,G,G)` tensor with which grid spaces are not taken by a
+        A `(N,G,G,G)` bool tensor with which grid spaces are not taken by a
         node or are too close to a node.
         Does NOT mutate.
         `N` is the number of samples.
         `G` is the grid size.
         
     x_indices: `torch.Tensor`
-        A `(N,)` tensor with the x index placements for each node.
+        A `(N,)` int tensor with the x index placements for each node.
         Does NOT mutate.
         `N` is the number of samples.
 
     Returns: `tuple[torch.Tensor, torch.Tensor, torch.Tensor]`
-        A `(N,)` tensor with the y slot placements for each node.
+        A `(N,)` int tensor with the y slot placements for each node.
         `N` is the number of samples.
         
-        A `(N,)` tensor with the y index placements for each node.
+        A `(N,)` int tensor with the y index placements for each node.
         `N` is the number of samples.
         
-        A `(N,)` tensor with the y coordinate placements for each node.
+        A `(N,)` float tensor with the y coordinate placements for each node.
         `N` is the number of samples.
     """
 
@@ -225,42 +233,42 @@ def choose_node_z_placements(nodes_left: torch.Tensor, empty_slots: torch.Tensor
     Chooses the placement of the next node for each sample along the z dimension.
 
     nodes_left: `torch.Tensor`
-        A `(N,)` tensor with the number of nodes left for each sample.
+        A `(N,)` int tensor with the number of nodes left for each sample.
         Does NOT mutate.
         `N` is the number of samples.
 
     empty_slots: `torch.Tensor`
-        A `(N,3G+6)` tensor with a 1 when a particular node placement has not
+        A `(N,3G+6)` int tensor with a 1 when a particular node placement has not
         been made before, and 0 otherwise.
         Does NOT mutate.
         `N` is the number of samples.
         `G` is the grid size.
 
     grid: `torch.Tensor`
-        A `(N,G,G,G)` tensor with which grid spaces are not taken by a
+        A `(N,G,G,G)` bool tensor with which grid spaces are not taken by a
         node or are too close to a node.
         Does NOT mutate.
         `N` is the number of samples.
         `G` is the grid size.
         
     x_indices: `torch.Tensor`
-        A `(N,)` tensor with the x index placements for each node.
+        A `(N,)` int tensor with the x index placements for each node.
         Does NOT mutate.
         `N` is the number of samples.
         
     y_indices: `torch.Tensor`
-        A `(N,)` tensor with the y index placements for each node.
+        A `(N,)` int tensor with the y index placements for each node.
         Does NOT mutate.
         `N` is the number of samples.
 
     Returns: `tuple[torch.Tensor, torch.Tensor, torch.Tensor]`
-        A `(N,)` tensor with the z slot placements for each node.
+        A `(N,)` int tensor with the z slot placements for each node.
         `N` is the number of samples.
         
-        A `(N,)` tensor with the z index placements for each node.
+        A `(N,)` int tensor with the z index placements for each node.
         `N` is the number of samples.
         
-        A `(N,)` tensor with the z coordinate placements for each node.
+        A `(N,)` float tensor with the z coordinate placements for each node.
         `N` is the number of samples.
     """
 
@@ -319,8 +327,8 @@ def generate_node_positions(num_nodes: torch.Tensor) -> torch.Tensor:
         4. All extra nodes are placed at the unit cube center.
 
     num_nodes: `torch.Tensor`
-        A `(N,)` int tensor with the number of nodes for each node position
-        sample. Each value must be at least 2, and at most `NUM_NODES`.
+        A `(N,)` int tensor with the number of nodes for each sample.
+        Each value must be at least 2, and at most `NUM_NODES`.
         `N` is the number of samples.
 
     Returns: `tuple[torch.Tensor, torch.Tensor]`
@@ -429,42 +437,42 @@ def add_edges(edge_adj: torch.Tensor, actions: torch.Tensor, old_indices: torch.
     Adds a new edge in-place between two nodes to connect the material's topology.
 
     edge_adj: `torch.Tensor`
-        A `(N,R)` tensor with each sample's edge adjacency, as constructed for
+        A `(N,R)` float tensor with each sample's edge adjacency, as constructed for
         the Metamaterial representation.
         DOES mutate.
         `N` is the number of samples.
         `R` is the size of the edge adjacency array in the Metamaterial representation.
 
     actions: `torch.Tensor`
-        A `(N,)` tensor with the actions taken for the current nodes.
+        A `(N,)` int tensor with the actions taken for the current nodes.
         This function's action is taken at values of `0`.
         Does NOT mutate.
         `N` is the number of samples.
 
     old_indices: `torch.Tensor`
-        A `(N,)` tensor with the original sample index for each sample in the
+        A `(N,)` int tensor with the original sample index for each sample in the
         current sample group.
         Does NOT mutate.
         `N` is the number of samples.
 
     current_node: `torch.Tensor`
-        A `(N,)` tensor with the current node for connecting in each sample.
+        A `(N,)` int tensor with the current node for connecting in each sample.
         Does NOT mutate.
         `N` is the number of samples.
 
     node_orderings: `torch.Tensor`
-        A `(N,M)` tensor with the way in which each sample's nodes are permuted.
+        A `(N,M)` int tensor with the way in which each sample's nodes are permuted.
         Does NOT mutate.
         `N` is the number of samples.
         `M` is the number of maximum nodes samples.
 
     nodes_left: `torch.Tensor`
-        A `(N,)` tensor with the number of nodes left to connect for each sample.
+        A `(N,)` int tensor with the number of nodes left to connect for each sample.
         DOES mutate.
         `N` is the number of samples.
 
     edges_left: `torch.Tensor`
-        A `(N,)` tensor with the number of edges left to add for each sample.
+        A `(N,)` int tensor with the number of edges left to add for each sample.
         DOES mutate.
         `N` is the number of samples.
     """
@@ -491,42 +499,42 @@ def add_two_node_faces(face_adj: torch.Tensor, actions: torch.Tensor, old_indice
     Adds a new face in-place at two new nodes to connect the material's topology.
 
     face_adj: `torch.Tensor`
-        A `(N,R)` tensor with each sample's face adjacency, as constructed for
+        A `(N,R)` float tensor with each sample's face adjacency, as constructed for
         the Metamaterial representation.
         DOES mutate.
         `N` is the number of samples.
         `R` is the size of the face adjacency array in the Metamaterial representation.
 
     actions: `torch.Tensor`
-        A `(N,)` tensor with the actions taken for the current nodes.
+        A `(N,)` int tensor with the actions taken for the current nodes.
         This function's action is taken at values of `2`.
         Does NOT mutate.
         `N` is the number of samples.
 
     old_indices: `torch.Tensor`
-        A `(N,)` tensor with the original sample index for each sample in the
+        A `(N,)` int tensor with the original sample index for each sample in the
         current sample group.
         Does NOT mutate.
         `N` is the number of samples.
 
     current_node: `torch.Tensor`
-        A `(N,)` tensor with the current node for connecting in each sample.
+        A `(N,)` int tensor with the current node for connecting in each sample.
         Does NOT mutate.
         `N` is the number of samples.
 
     node_orderings: `torch.Tensor`
-        A `(N,M)` tensor with the way in which each sample's nodes are permuted.
+        A `(N,M)` int tensor with the way in which each sample's nodes are permuted.
         Does NOT mutate.
         `N` is the number of samples.
         `M` is the number of maximum nodes samples.
 
     nodes_left: `torch.Tensor`
-        A `(N,)` tensor with the number of nodes left to connect for each sample.
+        A `(N,)` int tensor with the number of nodes left to connect for each sample.
         DOES mutate.
         `N` is the number of samples.
 
     faces_left: `torch.Tensor`
-        A `(N,)` tensor with the number of faces left to add for each sample.
+        A `(N,)` int tensor with the number of faces left to add for each sample.
         DOES mutate.
         `N` is the number of samples.
     """
@@ -554,42 +562,42 @@ def add_one_node_faces(face_adj: torch.Tensor, actions: torch.Tensor, old_indice
     Adds a new face in-place at one new node to connect the material's topology.
 
     face_adj: `torch.Tensor`
-        A `(N,R)` tensor with each sample's face adjacency, as constructed for
+        A `(N,R)` float tensor with each sample's face adjacency, as constructed for
         the Metamaterial representation.
         DOES mutate.
         `N` is the number of samples.
         `R` is the size of the face adjacency array in the Metamaterial representation.
 
     actions: `torch.Tensor`
-        A `(N,)` tensor with the actions taken for the current nodes.
+        A `(N,)` int tensor with the actions taken for the current nodes.
         This function's action is taken at values of `1`.
         Does NOT mutate.
         `N` is the number of samples.
 
     old_indices: `torch.Tensor`
-        A `(N,)` tensor with the original sample index for each sample in the
+        A `(N,)` int tensor with the original sample index for each sample in the
         current sample group.
         Does NOT mutate.
         `N` is the number of samples.
 
     current_node: `torch.Tensor`
-        A `(N,)` tensor with the current node for connecting in each sample.
+        A `(N,)` int tensor with the current node for connecting in each sample.
         Does NOT mutate.
         `N` is the number of samples.
 
     node_orderings: `torch.Tensor`
-        A `(N,M)` tensor with the way in which each sample's nodes are permuted.
+        A `(N,M)` int tensor with the way in which each sample's nodes are permuted.
         Does NOT mutate.
         `N` is the number of samples.
         `M` is the number of maximum nodes samples.
 
     nodes_left: `torch.Tensor`
-        A `(N,)` tensor with the number of nodes left to connect for each sample.
+        A `(N,)` int tensor with the number of nodes left to connect for each sample.
         DOES mutate.
         `N` is the number of samples.
 
     faces_left: `torch.Tensor`
-        A `(N,)` tensor with the number of faces left to add for each sample.
+        A `(N,)` int tensor with the number of faces left to add for each sample.
         DOES mutate.
         `N` is the number of samples.
     """
@@ -617,19 +625,19 @@ def fill_in_faces(face_adj: torch.Tensor, num_faces: torch.Tensor, max_faces: to
     Fills in the remaining faces for each sample in-place.
 
     face_adj: `torch.Tensor`
-        A `(N,R)` tensor with each sample's face adjacency, as constructed for
+        A `(N,R)` float tensor with each sample's face adjacency, as constructed for
         the Metamaterial representation.
         DOES mutate, but does not normalize.
         `N` is the number of samples.
         `R` is the size of the face adjacency array in the Metamaterial representation.
 
     num_faces: `torch.Tensor`
-        A `(N,)` tensor with the total number of faces to use in each sample.
+        A `(N,)` int tensor with the total number of faces to use in each sample.
         Does NOT mutate.
         `N` is the number of samples.
 
     max_faces: `torch.Tensor`
-        A `(N,)` tensor with the maximum number of faces each sample can have.
+        A `(N,)` int tensor with the maximum number of faces each sample can have.
         Does NOT mutate.
         `N` is the number of samples.
 
@@ -642,7 +650,7 @@ def fill_in_faces(face_adj: torch.Tensor, num_faces: torch.Tensor, max_faces: to
 
     # Stores convenient values for the function
     num_samples = face_adj.shape[0]
-    base_indices = torch.arange(num_samples, device=DEVICE)
+    sample_indices = torch.arange(num_samples, device=DEVICE)
     faces_left = num_faces-face_adj.sum(dim=-1)
 
     # Stores the face adjacency indices in order increasing largest node, but shuffled
@@ -656,60 +664,31 @@ def fill_in_faces(face_adj: torch.Tensor, num_faces: torch.Tensor, max_faces: to
     # Fills in the rest of the faces
     for face in range(num_faces.max().item()):
         face_index = face_adj_indices[:,face]
-        no_face = torch.logical_not(face_adj[base_indices, face_index])
-        face_adj[base_indices, face_index] += faces_left
+        no_face = torch.logical_not(face_adj[sample_indices, face_index])
+        face_adj[sample_indices, face_index] += faces_left
         faces_left.sub_(no_face.to(torch.float32)).clamp_(min=0)
 
     return (face_adj > 0).to(torch.float32)
 
 
-def find_face_edges(face_adj: torch.Tensor, max_nodes: int) -> torch.Tensor:
+def find_face_edges(face_adj: torch.Tensor) -> torch.Tensor:
     """
     Finds the edges that are being used to construct a face in each sample.
 
     face_adj: `torch.Tensor`
-        A `(N,R)` tensor with each sample's face adjacency, as constructed for
+        A `(N,R)` float tensor with each sample's face adjacency, as constructed for
         the Metamaterial representation.
         DOES mutate.
         `N` is the number of samples.
         `R` is the size of the face adjacency array in the Metamaterial representation.
 
-    max_nodes: `int`
-        The maximum number of nodes any of the samples has.
-
     Returns: `torch.Tensor`
-        A `(N,R)` tensor with each sample's face-edge adjacency, constructed like
+        A `(N,R)` float tensor with each sample's face-edge adjacency, constructed like
         a typical edge adjacency matrix from the Metamaterial representation.
         `N` is the number of samples.
         `R` is the size of the edge adjacency array in the Metamaterial representation.
     """
-
-    # Stores convenient values for the function
-    face_adj = face_adj.to(torch.bool)
-
-    # Will store the face edge indices
-    face_edge_indices = torch.zeros((EDGE_ADJ_SIZE,NUM_NODES-2), dtype=torch.int32)
-
-    # Runs through each face with a particular edge
-    edge_index = 0
-    for n1 in range(max_nodes):
-        for n2 in range(n1+1, max_nodes):
-
-            # Runs through the remaining nodes
-            i = 0
-            for n3 in range(max_nodes):
-                if n3 == n1 or n3 == n2:
-                    continue
-
-                # Stores the face index
-                face_edge_indices[edge_index,i] = face_adj_index(n1,n2,n3)
-                i += 1
-
-            # Updates the edge index
-            edge_index += 1
-
-    # Computes the face edges
-    return face_adj[:,face_edge_indices].any(dim=-1).to(torch.float32)
+    return face_adj[:,FACE_EDGE_INDICES].any(dim=-1).to(torch.float32)
 
 
 def fill_in_edges(edge_adj: torch.Tensor, face_edges: torch.Tensor, num_edges: torch.Tensor, max_edges: torch.Tensor, max_nodes: int) -> torch.Tensor:
@@ -717,26 +696,26 @@ def fill_in_edges(edge_adj: torch.Tensor, face_edges: torch.Tensor, num_edges: t
     Fills in the remaining edges for each sample in-place.
 
     edge_adj: `torch.Tensor`
-        A `(N,R)` tensor with each sample's edge adjacency, as constructed for
+        A `(N,R)` float tensor with each sample's edge adjacency, as constructed for
         the Metamaterial representation.
         DOES mutate, but does not normalize.
         `N` is the number of samples.
         `R` is the size of the edge adjacency array in the Metamaterial representation.
 
     face_edges: `torch.Tensor`
-        A `(N,R)` tensor with each sample's face-edge adjacency, constructed like
+        A `(N,R)` int tensor with each sample's face-edge adjacency, constructed like
         a typical edge adjacency matrix from the Metamaterial representation.
         Does NOT mutate.
         `N` is the number of samples.
         `R` is the size of the edge adjacency array in the Metamaterial representation.
 
     num_edges: `torch.Tensor`
-        A `(N,)` tensor with the total number of edges to use in each sample.
+        A `(N,)` int tensor with the total number of edges to use in each sample.
         Does NOT mutate.
         `N` is the number of samples.
 
     max_edges: `torch.Tensor`
-        A `(N,)` tensor with the maximum number of edges each sample can have.
+        A `(N,)` int tensor with the maximum number of edges each sample can have.
         Does NOT mutate.
         `N` is the number of samples.
 
@@ -749,7 +728,7 @@ def fill_in_edges(edge_adj: torch.Tensor, face_edges: torch.Tensor, num_edges: t
 
     # Stores convenient values for the function
     num_samples = edge_adj.shape[0]
-    base_indices = torch.arange(num_samples, device=DEVICE)
+    sample_indices = torch.arange(num_samples, device=DEVICE)
 
     # Accounts for the face-edges
     edge_offset = face_edges.sum(dim=-1)
@@ -767,8 +746,8 @@ def fill_in_edges(edge_adj: torch.Tensor, face_edges: torch.Tensor, num_edges: t
     edge_cutoff = min(max_edges.max().item(), (num_edges+edge_offset).max().item())
     for edge in range(edge_cutoff):
         edge_index = edge_adj_indices[:,edge]
-        no_edge = torch.logical_not(edge_adj[base_indices, edge_index])
-        edge_adj[base_indices, edge_index] += edges_left
+        no_edge = torch.logical_not(edge_adj[sample_indices, edge_index])
+        edge_adj[sample_indices, edge_index] += edges_left
         edges_left.sub_(no_edge.to(torch.float32)).clamp_(min=0)
 
     return (edge_adj > 0).to(torch.float32)
@@ -796,12 +775,12 @@ def generate_adjacencies(num_nodes: torch.Tensor, num_edges: torch.Tensor, num_f
         `N` is the number of samples.
 
     Returns: `tuple[torch.Tensor, torch.Tensor]`
-        A `(N,R)` tensor with the samples' edge adjacencies.
+        A `(N,R)` float tensor with the samples' edge adjacencies.
         `N` is the number of samples.
         `R` is the size of the edge adjacency array in the
         Metamaterial representation.
         
-        A `(N,R)` tensor with the samples' face adjacencies.
+        A `(N,R)` float tensor with the samples' face adjacencies.
         `N` is the number of samples.
         `R` is the size of the face adjacency array in the
         Metamaterial representation.
@@ -864,9 +843,9 @@ def generate_adjacencies(num_nodes: torch.Tensor, num_edges: torch.Tensor, num_f
         current_node = num_nodes[old_indices]-nodes_left
 
         # Stores the probability of each action
-        # - 0: new edge at an existing node
+        # - 0: new edge
         # - 1: new face with one new node
-        # - 2: new face with two new node
+        # - 2: new face with two new nodes
         actions_pdf = torch.stack([
             edges_left,
             faces_left * (nodes_left < faces_left*2 + edges_left) * (current_node > 1),
@@ -883,11 +862,420 @@ def generate_adjacencies(num_nodes: torch.Tensor, num_edges: torch.Tensor, num_f
 
     # Fills in the remaining edges and faces
     face_adj = fill_in_faces(face_adj, num_faces, max_faces, max_nodes)
-    face_edges = find_face_edges(face_adj, max_nodes)
+    face_edges = find_face_edges(face_adj)
     edge_adj = fill_in_edges(edge_adj, face_edges, num_edges, max_edges, max_nodes)
 
     return edge_adj, face_adj
 
+
+def flat_face_parameters(node_coords: torch.Tensor, face_adj: torch.Tensor) -> torch.Tensor:
+    """
+    Computes the face parameters for flat faces for
+    the given samples' node coordinates.
+
+    node_coords: `torch.Tensor`
+        A `(N,R//3,3)` float tensor with the samples' node positions
+        transformed into Euclidean coordinates.
+        `N` is the number of samples.
+        `R` is the size of the node position array in the
+        Metamaterial representation.
+
+    face_adj: `torch.Tensor`
+        A `(N,R)` float tensor with the samples' face adjacencies.
+        `N` is the number of samples.
+        `R` is the size of the face adjacency array in the
+        Metamaterial representation.
+
+    Returns: `torch.Tensor`
+        A `(N,R,B)` float tensor with the flat face parameters.
+        Contains only face parameters for the given active faces.
+        All other face parameters are 0.
+        `N` is the number of samples.
+        `R` is the size of the face adjacency array in the
+        `B` is the number of Bezier coordinates that define faces.
+        Metamaterial representation.
+    """
+
+    # Stores the face parameters that make a flat face
+    face_params = node_coords[:, FACE_TO_NODES].sum(dim=2) / 3 - node_coords[:, FACE_TO_NODES[:,0]]
+    face_params *= face_adj.unsqueeze(-1)
+
+    return face_params
+
+
+def base_face_parameters(node_coords: torch.Tensor, face_adj: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+    """
+    Computes the base face parameters for the given samples.
+
+    node_coords: `torch.Tensor`
+        A `(N,R//3,3)` float tensor with the samples' node positions
+        transformed into Euclidean coordinates.
+        `N` is the number of samples.
+        `R` is the size of the node position array in the
+        Metamaterial representation.
+
+    face_adj: `torch.Tensor`
+        A `(N,R)` float tensor with the samples' face adjacencies.
+        `N` is the number of samples.
+        `R` is the size of the face adjacency array in the
+        Metamaterial representation.
+
+    Returns: `tuple[torch.Tensor]`
+        A `(N,R,B)` float tensor with the samples' corresponding
+        flat face parameters.
+
+        A `(N,R,B)` float tensor with the samples' corresponding
+        curved face parameters.
+
+        `N` is the number of samples.
+        `R` is the size of the face adjacency array in the
+        Metamaterial representation.
+        `B` is the number of Bezier coordinates that define faces.
+        The face parameters of non-existent faces are 0.
+    """
+
+    # Stores convenient values for the function
+    num_samples = node_coords.shape[0]
+
+    # Stores the general shape of the face parameter arrays
+    face_params_shape = (num_samples, FACE_ADJ_SIZE, FACE_BEZIER_COORDS)
+
+    # Computes the flat/curved face parameters
+    flat_face_params = flat_face_parameters(node_coords, face_adj)
+    curved_face_params = torch.rand(face_params_shape, device=DEVICE)
+
+    # Makes each curved face parameter not go beyond the unit cube
+    curved_face_params -= node_coords[:, FACE_TO_NODES[:,0]].repeat(1,1,FACE_BEZIER_POINTS)
+
+    # Keeps only active faces' parameters
+    curved_face_params *= face_adj.unsqueeze(-1)
+
+    return flat_face_params, curved_face_params
+
+
+def choose_flat_and_curved_faces(num_curved_faces: torch.Tensor, face_adj: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+    """
+    Chooses which faces will correspond to flat/curved faces
+    in the given samples.
+
+    num_curved_faces: `torch.Tensor`
+        A `(N,)` tensor with the number of curved faces to use in each sample.
+        `N` is the number of samples.
+
+    face_adj: `torch.Tensor`
+        A `(N,R)` tensor with the samples' face adjacencies.
+        `N` is the number of samples.
+        `R` is the size of the face adjacency array in the Metamaterial representation.
+
+    Returns: `tuple[torch.Tensor]`
+        A `(N,R)` tensor with the samples' face adjacencies
+        just for the chosen flat faces.
+        
+        A `(N,R)` tensor with the samples' face adjacencies
+        just for the chosen curved faces.
+
+        `N` is the number of samples.
+        `R` is the size of the face adjacency array in the Metamaterial representation.
+    """
+
+    # Stores convenient values for the function
+    num_samples = face_adj.shape[0]
+    sample_indices = torch.arange(num_samples, device=DEVICE)
+    face_adj = face_adj.to(torch.int32)
+
+    # Stores a shuffling for the faces
+    face_shuffle = torch.rand(face_adj.shape, device=DEVICE).argsort(dim=-1)
+
+    # Will store the curved faces
+    curved_faces = torch.zeros(face_adj.shape, device=DEVICE)
+    faces_left = num_curved_faces.clone()
+
+    # Chooses the curved faces
+    for face in range(FACE_ADJ_SIZE):
+        face_index = face_shuffle[:,face]
+        faces = face_adj[sample_indices, face_index]
+        curved_faces[sample_indices, face_index] += faces * faces_left
+        faces_left -= faces
+    curved_faces = (curved_faces > 0).to(torch.float32)
+
+    # Chooses the flat faces
+    flat_faces = face_adj - curved_faces
+
+    return flat_faces, curved_faces
+
+
+def flat_edge_parameters(node_coords: torch.Tensor, edge_adj: torch.Tensor) -> torch.Tensor:
+    """
+    Computes the edge parameters for flat edges for
+    the given samples' node coordinates.
+
+    node_coords: `torch.Tensor`
+        A `(N,R//3,3)` float tensor with the samples' node positions
+        transformed into Euclidean coordinates.
+        `N` is the number of samples.
+        `R` is the size of the node position array in the
+        Metamaterial representation.
+
+    edge_adj: `torch.Tensor`
+        A `(N,R)` float tensor with the samples' edge adjacencies.
+        `N` is the number of samples.
+        `R` is the size of the edge adjacency array in the
+        Metamaterial representation.
+
+    Returns: `torch.Tensor`
+        A `(N,R,B)` float tensor with the flat edge parameters.
+        Contains only edge parameters for the given active edge.
+        All other edge parameters are 0.
+        `N` is the number of samples.
+        `R` is the size of the edge adjacency array in the
+        `B` is the number of Bezier coordinates that define edges.
+        Metamaterial representation.
+    """
+
+    # Computes the vector describing each edge
+    edge_vectors = node_coords[:,EDGE_TO_NODES[:,1]] - node_coords[:,EDGE_TO_NODES[:,0]]
+
+    # Computes the amount which the edge vector is scaled for each Bezier point
+    vector_scales = torch.arange(EDGE_BEZIER_POINTS, dtype=torch.float32).reshape((1,1,-1)).repeat_interleave(3,dim=2) + 1
+    vector_scales /= EDGE_BEZIER_POINTS + 1
+
+    # Computes the edge parameters that make a flat edge
+    edge_params = edge_vectors.repeat(1,1,EDGE_BEZIER_POINTS) * vector_scales
+    edge_params *= edge_adj.unsqueeze(-1)
+
+    return edge_params
+
+
+def base_edge_parameters(node_coords: torch.Tensor, edge_adj: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+    """
+    Computes the base edge parameters for the given samples.
+
+    node_coords: `torch.Tensor`
+        A `(N,R//3,3)` float tensor with the samples' node positions
+        transformed into Euclidean coordinates.
+        `N` is the number of samples.
+        `R` is the size of the node position array in the
+        Metamaterial representation.
+
+    edge_adj: `torch.Tensor`
+        A `(N,R)` float tensor with the samples' edge adjacencies.
+        `N` is the number of samples.
+        `R` is the size of the edge adjacency array in the
+        Metamaterial representation.
+
+    Returns: `tuple[torch.Tensor]`
+        A `(N,R,B)` float tensor with the samples' corresponding
+        flat edge parameters.
+
+        A `(N,R,B)` float tensor with the samples' corresponding
+        curved edge parameters.
+
+        `N` is the number of samples.
+        `R` is the size of the edge adjacency array in the
+        Metamaterial representation.
+        `B` is the number of Bezier coordinates that define edges.
+        The edge parameters of non-existent edges are 0.
+    """
+
+    # Stores convenient values for the function
+    num_samples = node_coords.shape[0]
+
+    # Stores the general shape of the edge parameter arrays
+    edge_params_shape = (num_samples, EDGE_ADJ_SIZE, EDGE_BEZIER_COORDS)
+
+    # Computes the flat/curved edge parameters
+    flat_edge_params = flat_edge_parameters(node_coords, edge_adj)
+    curved_edge_params = torch.rand(edge_params_shape, device=DEVICE)
+
+    # Makes each curved edge parameter not go beyond the unit cube
+    curved_edge_params -= node_coords[:, EDGE_TO_NODES[:,0]].repeat(1,1,EDGE_BEZIER_POINTS)
+
+    # Keeps only active edges' parameters
+    curved_edge_params *= edge_adj.unsqueeze(-1)
+
+    return flat_edge_params, curved_edge_params
+
+
+def find_flat_and_curved_face_edges(flat_faces: torch.Tensor, curved_faces: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+    """
+    Finds the flat/curved edge adjacencies that correspond to edges
+    tied to an active face. Deals with edges that are tied to both
+    an active flat face and curved face randomly.
+
+    flat_faces: torch.Tensor
+        A `(N,R)` float tensor with the samples' face adjacencies
+        just for the chosen flat faces.
+        `N` is the number of samples.
+        `R` is the size of the face adjacency array in the
+        Metamaterial representation.
+        
+    curved_faces: torch.Tensor
+        A `(N,R)` float tensor with the samples' face adjacencies
+        just for the chosen curved faces.
+        `N` is the number of samples.
+        `R` is the size of the face adjacency array in the
+        Metamaterial representation.
+
+    Returns: `torch.Tensor`
+        A `(N,R)` float tensor with the samples' edge adjacencies
+        that correspond to edges tied to active flat faces.
+        `N` is the number of samples.
+        `R` is the size of the edge adjacency array in the
+        Metamaterial representation.
+
+        A `(N,R)` float tensor with the samples' edge adjacencies
+        that correspond to edges tied to active curved faces.
+        `N` is the number of samples.
+        `R` is the size of the edge adjacency array in the
+        Metamaterial representation.
+    """
+
+    # Computes the flat/curved edges from existing faces
+    flat_edges = find_face_edges(flat_faces)
+    curved_edges = find_face_edges(curved_faces)
+
+    # Randomly deals with intersections, where an edge is connected to a flat and curved face
+    intersections = flat_edges * curved_edges
+    keep_flat_edges = (torch.rand(intersections.shape, device=DEVICE) < 0.5).to(torch.float32)
+
+    # Removes intersections
+    flat_edges -= intersections * (1-keep_flat_edges)
+    curved_edges -= intersections * keep_flat_edges
+
+    return flat_edges, curved_edges
+
+
+def choose_flat_and_curved_edges(num_nodes: torch.Tensor, num_curved_edges: torch.Tensor, edge_adj: torch.Tensor, flat_faces: torch.Tensor, curved_faces: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+    """
+    Chooses which edges will correspond to flat/curved edges
+    in the given samples.
+
+    num_nodes: `torch.Tensor`
+        A `(N,)` int tensor with the number of active nodes to use in each sample.
+        `N` is the number of samples.
+
+    num_curved_edges: `torch.Tensor`
+        A `(N,)` tensor with the number of curved edges to use in each sample.
+        `N` is the number of samples.
+
+    edge_adj: `torch.Tensor`
+        A `(N,R)` float tensor with the samples' edge adjacencies.
+        `N` is the number of samples.
+        `R` is the size of the edge adjacency array in the
+        Metamaterial representation.
+
+    flat_faces: torch.Tensor
+        A `(N,R)` float tensor with the samples' face adjacencies
+        just for the chosen flat faces.
+        `N` is the number of samples.
+        `R` is the size of the face adjacency array in the
+        Metamaterial representation.
+        
+    curved_faces: torch.Tensor
+        A `(N,R)` float tensor with the samples' face adjacencies
+        just for the chosen curved faces.
+        `N` is the number of samples.
+        `R` is the size of the face adjacency array in the
+        Metamaterial representation.
+
+    Returns: `tuple[torch.Tensor]`
+        A `(N,R)` float tensor with the samples' edge adjacencies
+        just for the chosen flat edges.
+        `N` is the number of samples.
+        `R` is the size of the edge adjacency array in the
+        Metamaterial representation.
+        
+        A `(N,R)` float tensor with the samples' edge adjacencies
+        just for the chosen curved edges.
+        `N` is the number of samples.
+        `R` is the size of the edge adjacency array in the
+        Metamaterial representation.
+    """
+
+    # Stores relevant values for the function
+    max_nodes = num_nodes.max().item()
+    max_edges = num_nodes * (num_nodes-1) // 2
+
+    # Stores the indices of active non-face/face edges
+    flat_edges, curved_edges = find_flat_and_curved_face_edges(flat_faces, curved_faces)
+    non_face_edges = ((edge_adj - flat_edges - curved_edges) > 0).to(torch.float32)
+
+    # Computes the curved and flat edges
+    curved_edges = fill_in_edges(curved_edges, curved_edges, num_curved_edges, max_edges, max_nodes)
+    flat_edges = non_face_edges - curved_edges
+
+    return flat_edges, curved_edges
+
+
+def generate_edge_and_face_parameters(num_nodes: torch.Tensor, num_curved_edges: torch.Tensor, num_curved_faces: torch.Tensor, node_coords: torch.Tensor, edge_adj: torch.Tensor, face_adj: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+    """
+    Generates random edge and face parameters according
+    to the given sample specifications.
+
+    num_nodes: `torch.Tensor`
+        A `(N,)` int tensor with the number of active nodes to use in each sample.
+        `N` is the number of samples.
+
+    num_curved_edges: `torch.Tensor`
+        A `(N,)` int tensor with the number of non-face curved edges to use in each sample.
+
+    num_curved_edges: `torch.Tensor`
+        A `(N,)` int tensor with the number of curved faces to use in each sample.
+
+    node_coords: `torch.Tensor`
+        A `(N,R//3,3)` float tensor with the Euclidean coordinates of each node, ordered
+        in the second dimension by node ID.
+        `N` is the number of samples.
+        `R` is the size of the node position array in the Metamaterial representation.
+
+    edge_adj: `torch.Tensor`
+        A `(N,R)` float tensor with the samples' edge adjacencies.
+        `N` is the number of samples.
+        `R` is the size of the edge adjacency array in the Metamaterial representation.
+        
+    face_adj: `torch.Tensor`
+        A `(N,R)` float tensor with the samples' face adjacencies.
+        `N` is the number of samples.
+        `R` is the size of the face adjacency array in the Metamaterial representation.
+
+    Returns: `tuple[torch.Tensor, torch.Tensor]`
+        A `(N,R)` float tensor with the generated edge parameters.
+        Contains only edge parameters for the given active edges.
+        All other edge parameters are 0.
+        `N` is the number of samples.
+        `R` is the size of the edge parameters array in the Metamaterial representation.
+        
+        A `(N,R)` float tensor with the generated face parameters.
+        Contains only face parameters for the given active faces.
+        All other face parameters are 0.
+        `N` is the number of samples.
+        `R` is the size of the face parameters array in the Metamaterial representation.
+    """
+
+    # Computes the base face parameters
+    flat_face_params, curved_face_params = base_face_parameters(node_coords, face_adj)
+
+    # Stores which faces are to be flat/curved
+    flat_faces, curved_faces = choose_flat_and_curved_faces(num_curved_faces, face_adj)
+
+    # Computes the face parameters by combining only the target flat/curved face parameters
+    face_params = flat_face_params * flat_faces.unsqueeze(-1) + curved_face_params * curved_faces.unsqueeze(-1)
+
+    # Computes the base edge parameters
+    flat_edge_params, curved_edge_params = base_edge_parameters(node_coords, edge_adj)
+
+    # Stores which edges are to be flat/curved
+    flat_edges, curved_edges = choose_flat_and_curved_edges(num_nodes, num_curved_edges, edge_adj, flat_faces, curved_faces)
+
+    # Computes the edge parameters by combining only the target flat/curved edge parameters
+    edge_params = flat_edge_params * (flat_edges.unsqueeze(-1)) + curved_edge_params * (curved_edges.unsqueeze(-1))
+
+    # Resizes the parameters to match the requirement for the metamaterial representation
+    num_samples = edge_params.shape[0]
+    edge_params = edge_params.reshape((num_samples, -1))
+    face_params = face_params.reshape((num_samples, -1))
+
+    return edge_params, face_params
 
 
 
