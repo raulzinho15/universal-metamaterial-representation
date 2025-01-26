@@ -1196,13 +1196,12 @@ def choose_flat_and_curved_edges(num_nodes: torch.Tensor, num_curved_edges: torc
     max_nodes = num_nodes.max().item()
     max_edges = num_nodes * (num_nodes-1) // 2
 
-    # Stores the indices of active non-face/face edges
+    # Computes the curved and flat face-edges
     flat_edges, curved_edges = find_flat_and_curved_face_edges(flat_faces, curved_faces)
-    non_face_edges = ((edge_adj - flat_edges - curved_edges) > 0).to(torch.float32)
 
-    # Computes the curved and flat edges
+    # Fill in the missing curved and flat edges
     curved_edges = fill_in_edges(curved_edges, curved_edges, num_curved_edges, max_edges, max_nodes)
-    flat_edges = non_face_edges - curved_edges
+    flat_edges = edge_adj - curved_edges
 
     return flat_edges, curved_edges
 
@@ -1218,9 +1217,11 @@ def generate_edge_and_face_parameters(num_nodes: torch.Tensor, num_curved_edges:
 
     num_curved_edges: `torch.Tensor`
         A `(N,)` int tensor with the number of non-face curved edges to use in each sample.
+        `N` is the number of samples.
 
-    num_curved_edges: `torch.Tensor`
+    num_curved_faces: `torch.Tensor`
         A `(N,)` int tensor with the number of curved faces to use in each sample.
+        `N` is the number of samples.
 
     node_coords: `torch.Tensor`
         A `(N,R//3,3)` float tensor with the Euclidean coordinates of each node, ordered
@@ -1268,7 +1269,7 @@ def generate_edge_and_face_parameters(num_nodes: torch.Tensor, num_curved_edges:
     flat_edges, curved_edges = choose_flat_and_curved_edges(num_nodes, num_curved_edges, edge_adj, flat_faces, curved_faces)
 
     # Computes the edge parameters by combining only the target flat/curved edge parameters
-    edge_params = flat_edge_params * (flat_edges.unsqueeze(-1)) + curved_edge_params * (curved_edges.unsqueeze(-1))
+    edge_params = flat_edge_params * flat_edges.unsqueeze(-1) + curved_edge_params * curved_edges.unsqueeze(-1)
 
     # Resizes the parameters to match the requirement for the metamaterial representation
     num_samples = edge_params.shape[0]
@@ -1278,4 +1279,59 @@ def generate_edge_and_face_parameters(num_nodes: torch.Tensor, num_curved_edges:
     return edge_params, face_params
 
 
+def random_metamaterials(num_nodes: int, num_edges: int, num_curved_edges: int, num_faces: int, num_curved_faces: int) -> torch.Tensor:
+    """
+    Generates random metamaterials based on the given attributes.
+    The metamaterials satisfy the following properties:
+
+    1) There are no disconnected components.
+    2) Every face in the unit cube has at least one node.
+    3) All nodes are on at most three faces of the unit cube.
+
+    num_nodes: `torch.Tensor`
+        A `(N,)` int tensor with the number of active nodes to use in each sample.
+        `N` is the number of samples.
+
+    num_edges: `torch.Tensor`
+        A `(N,)` int tensor with the maximum number of non-face edges to use in
+        each sample. The number is the maximum as the choice of faces is prioritized.
+        If the choice of faces allows for this many non-face edges, then there will
+        be this many edges. Otherwise, the maximum number of edges with the generated
+        face arrangement will be chosen. There will always be at least this many edges.
+        `N` is the number of samples.
+
+    num_curved_edges: `torch.Tensor`
+        A `(N,)` int tensor with the number of non-face curved edges to use in each sample.
+        `N` is the number of samples.
+
+    num_faces: `torch.Tensor`
+        A `(N,)` int tensor with the total number of faces to use in each sample.
+        `N` is the number of samples.
+
+    num_curved_faces: `torch.Tensor`
+        A `(N,)` int tensor with the number of curved faces to use in each sample.
+        `N` is the number of samples.
+
+    Returns: `torch.Tensor`
+        A `(N,R)` tensor with the random samples of metamaterials.
+        `N` is the number of samples.
+        `R` is the Metamaterial representation size.
+    """
+
+    # Stores convenient values for the function
+    num_samples = num_nodes.shape[0]
+
+    # Stores the node positions
+    node_pos, node_coords = generate_node_positions(num_nodes)
+
+    # Computes the edge/face adjacencies
+    edge_adj, face_adj = generate_adjacencies(num_nodes, num_edges, num_faces)
+
+    # Computes the edge/face parameters
+    edge_params, face_params = generate_edge_and_face_parameters(num_nodes, num_curved_edges, num_curved_faces, node_coords, edge_adj, face_adj)
+
+    # Stores the other parameters
+    global_params = torch.clamp(torch.randn((num_samples,1))/10 + 0.5, min=0.4, max=0.6) # Thickness
+
+    return torch.cat([node_pos, edge_adj, edge_params, face_adj, face_params, global_params], dim=1)
 
