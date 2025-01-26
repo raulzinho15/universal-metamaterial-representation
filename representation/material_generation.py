@@ -731,8 +731,8 @@ def fill_in_edges(edge_adj: torch.Tensor, face_edges: torch.Tensor, num_edges: t
     sample_indices = torch.arange(num_samples, device=DEVICE)
 
     # Accounts for the face-edges
-    edge_offset = face_edges.sum(dim=-1)
-    edge_adj = ((edge_adj + face_edges) > 0).to(torch.float32)
+    edge_offset = face_edges.sum(dim=-1).to(torch.int32)
+    edge_adj = ((edge_adj + face_edges) > 0).to(torch.int32)
     edges_left = num_edges + edge_offset - edge_adj.sum(dim=-1)
 
     # Stores the edge adjacency indices in order increasing largest node, but shuffled
@@ -746,9 +746,9 @@ def fill_in_edges(edge_adj: torch.Tensor, face_edges: torch.Tensor, num_edges: t
     edge_cutoff = min(max_edges.max().item(), (num_edges+edge_offset).max().item())
     for edge in range(edge_cutoff):
         edge_index = edge_adj_indices[:,edge]
-        no_edge = torch.logical_not(edge_adj[sample_indices, edge_index])
+        no_edge = 1-edge_adj[sample_indices, edge_index]
         edge_adj[sample_indices, edge_index] += edges_left
-        edges_left.sub_(no_edge.to(torch.float32)).clamp_(min=0)
+        edges_left.sub_(no_edge).clamp_(min=0)
 
     return (edge_adj > 0).to(torch.float32)
 
@@ -1279,7 +1279,7 @@ def generate_edge_and_face_parameters(num_nodes: torch.Tensor, num_curved_edges:
     return edge_params, face_params
 
 
-def random_metamaterials(num_nodes: int, num_edges: int, num_curved_edges: int, num_faces: int, num_curved_faces: int) -> torch.Tensor:
+def random_metamaterials(num_nodes: torch.Tensor, num_edges: torch.Tensor, num_curved_edges: torch.Tensor, num_faces: torch.Tensor, num_curved_faces: torch.Tensor) -> torch.Tensor:
     """
     Generates random metamaterials based on the given attributes.
     The metamaterials satisfy the following properties:
