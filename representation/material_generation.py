@@ -1,6 +1,5 @@
 import torch
 from representation.rep_utils import *
-from line_profiler import profile
 
 # Stores the device on which operations will be done
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
@@ -612,7 +611,7 @@ def add_one_node_faces(face_adj: torch.Tensor, actions: torch.Tensor, old_indice
         # Adds the face
         face_adj[old_indices[material_indices], NODES_TO_FACE[node1, node2, node3]] = 1
 
-@profile
+
 def fill_in_faces(face_adj: torch.Tensor, num_faces: torch.Tensor, max_faces: torch.Tensor, max_nodes: int) -> torch.Tensor:
     """
     Fills in the remaining faces for each sample in-place.
@@ -644,25 +643,23 @@ def fill_in_faces(face_adj: torch.Tensor, num_faces: torch.Tensor, max_faces: to
     # Stores convenient values for the function
     num_samples = face_adj.shape[0]
     base_indices = torch.arange(num_samples, device=DEVICE)
+    faces_left = num_faces-face_adj.sum(dim=-1)
 
-    # Stores the face adjacency indices in order increasing largest node
+    # Stores the face adjacency indices in order increasing largest node, but shuffled
     face_adj_indices = torch.tensor([
         face_adj_index(n1,n2,n3)
             for n3 in range(max_nodes)
                 for n2 in range(n3-1, -1, -1)
                     for n1 in range(n2-1, -1, -1)
-    ], device=DEVICE)
-
-    # Stores a shuffling of the faces
-    face_shuffle = generate_random_permutations(max_faces)
+    ], device=DEVICE)[generate_random_permutations(max_faces)]
 
     # Fills in the rest of the faces
     for face in range(num_faces.max().item()):
-        face_adj[base_indices, face_adj_indices[face_shuffle[:,face]]] += (
-            (face_adj > 0)
-                .sum(dim=1)
-                    < num_faces
-        )
+        face_index = face_adj_indices[:,face]
+        no_face = torch.logical_not(face_adj[base_indices, face_index])
+        face_adj[base_indices, face_index] += faces_left
+        faces_left.sub_(no_face.to(torch.float32)).clamp_(min=0)
+
     return (face_adj > 0).to(torch.float32)
 
 
@@ -755,25 +752,25 @@ def fill_in_edges(edge_adj: torch.Tensor, face_edges: torch.Tensor, num_edges: t
     base_indices = torch.arange(num_samples, device=DEVICE)
 
     # Accounts for the face-edges
-    edge_offset = face_edges.sum(dim=1).to(torch.int32)
-    edge_adj = ((edge_adj + face_edges) > 0).to(torch.int32)
+    edge_offset = face_edges.sum(dim=-1)
+    edge_adj = ((edge_adj + face_edges) > 0).to(torch.float32)
+    edges_left = num_edges + edge_offset - edge_adj.sum(dim=-1)
 
-    # Stores the edge adjacency indices in order increasing largest node
+    # Stores the edge adjacency indices in order increasing largest node, but shuffled
     edge_adj_indices = torch.tensor([
         edge_adj_index(n1,n2)
             for n2 in range(max_nodes)
                 for n1 in range(n2-1, -1, -1)
-    ], device=DEVICE)
-
-    # Stores a shuffling of the edges
-    edge_shuffle = generate_random_permutations(max_edges)
+    ], device=DEVICE)[generate_random_permutations(max_edges)]
 
     # Fills in the rest of the edges
     edge_cutoff = min(max_edges.max().item(), (num_edges+edge_offset).max().item())
     for edge in range(edge_cutoff):
-        edge_adj[base_indices, edge_adj_indices[edge_shuffle[:,edge]]] += (
-            (edge_adj > 0).sum(dim=1) < (num_edges + edge_offset)
-        )
+        edge_index = edge_adj_indices[:,edge]
+        no_edge = torch.logical_not(edge_adj[base_indices, edge_index])
+        edge_adj[base_indices, edge_index] += edges_left
+        edges_left.sub_(no_edge.to(torch.float32)).clamp_(min=0)
+
     return (edge_adj > 0).to(torch.float32)
 
 
