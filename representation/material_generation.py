@@ -1317,6 +1317,10 @@ def random_metamaterials(num_nodes: torch.Tensor, num_edges: torch.Tensor, num_c
         `R` is the Metamaterial representation size.
     """
 
+    # Performs safety checks
+    assert torch.all(num_edges >= num_curved_edges).item(), "Cannot have more non-face curved edges than non-face edges."
+    assert torch.all(num_faces >= num_curved_faces).item(), "Cannot have more curved faces than faces."
+
     # Stores convenient values for the function
     num_samples = num_nodes.shape[0]
 
