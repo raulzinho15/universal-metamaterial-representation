@@ -1,6 +1,5 @@
 import torch
 from representation.rep_utils import *
-from line_profiler import profile
 
 # Stores the device on which operations will be done
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
