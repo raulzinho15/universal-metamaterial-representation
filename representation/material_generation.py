@@ -55,7 +55,7 @@ def generate_random_permutations(max_values: torch.Tensor) -> torch.Tensor:
     all_perms = torch.rand((num_samples, max_values.max().item()), device=DEVICE).argsort(dim=-1)+1
 
     # Masks the values above the threshold
-    mask = all_perms <= flat_max_values.unsqueeze(-1)
+    mask = (all_perms <= flat_max_values.unsqueeze(-1)).to(torch.int32)
 
     # Computes the permutations
     draws = flat_max_values.max().item()
@@ -1035,7 +1035,7 @@ def flat_edge_parameters(node_coords: torch.Tensor, edge_adj: torch.Tensor) -> t
     edge_vectors = node_coords[:,EDGE_TO_NODES[:,1]] - node_coords[:,EDGE_TO_NODES[:,0]]
 
     # Computes the amount which the edge vector is scaled for each Bezier point
-    vector_scales = torch.arange(EDGE_BEZIER_POINTS, dtype=torch.float32).reshape((1,1,-1)).repeat_interleave(3,dim=2) + 1
+    vector_scales = torch.arange(EDGE_BEZIER_POINTS, dtype=torch.float32, device=DEVICE).reshape((1,1,-1)).repeat_interleave(3,dim=2) + 1
     vector_scales /= EDGE_BEZIER_POINTS + 1
 
     # Computes the edge parameters that make a flat edge
@@ -1330,7 +1330,7 @@ def random_metamaterials(num_nodes: torch.Tensor, num_edges: torch.Tensor, num_c
     edge_params, face_params = generate_edge_and_face_parameters(num_nodes, num_curved_edges, num_curved_faces, node_coords, edge_adj, face_adj)
 
     # Stores the other parameters
-    global_params = torch.clamp(torch.randn((num_samples,1))/10 + 0.5, min=0.4, max=0.6) # Thickness
+    global_params = torch.clamp(torch.randn((num_samples,1), device=DEVICE)/10 + 0.5, min=0.4, max=0.6) # Thickness
 
     return torch.cat([node_pos, edge_adj, edge_params, face_adj, face_params, global_params], dim=1)
 
