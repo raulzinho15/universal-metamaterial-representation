@@ -1,31 +1,6 @@
 import torch
 from representation.rep_utils import *
 
-# Stores the device on which operations will be done
-DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
-
-# Computes the node IDs corresponding to each edge, in order of edge IDs
-EDGE_TO_NODES = torch.tensor([
-    [n1, n2]
-        for n1 in range(NUM_NODES)
-            for n2 in range(n1+1, NUM_NODES)
-], device=DEVICE)
-
-# Computes the node IDs corresponding to each face, in order of face IDs
-FACE_TO_NODES = torch.tensor([
-    [n1, n2, n3]
-        for n1 in range(NUM_NODES)
-            for n2 in range(n1+1, NUM_NODES)
-                for n3 in range(n2+1, NUM_NODES)
-], device=DEVICE)
-
-# Computes the edge IDs corresponding to each node pair
-NODES_TO_EDGE = torch.tensor([[
-    edge_adj_index(n1,n2)
-        for n1 in range(NUM_NODES)]
-            for n2 in range(NUM_NODES)
-], device=DEVICE)
-
 # Computes the face IDs corresponding to each node triplet
 NODES_TO_FACE = torch.tensor([[[
     face_adj_index(n1,n2,n3)

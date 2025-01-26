@@ -1,4 +1,5 @@
 import numpy as np
+import torch
 
 
 def greedy_topology_match(start_adj_matrix: np.ndarray, target_adj_matrix: np.ndarray) -> tuple[np.ndarray, list[tuple[int]]]:
@@ -95,6 +96,45 @@ def find_line_normals(point1: np.ndarray, point2: np.ndarray) -> tuple[np.ndarra
     # Finds the second normal
     normal2 = np.cross(vector1, normal1)
     normal2 /= np.linalg.norm(normal2)
+
+    return normal1, normal2
+
+
+NON_COLINEAR_POINT_TENSOR = torch.from_numpy(NON_COLINEAR_POINT).to(torch.float32).unsqueeze(0)
+def find_line_normals_torch(points1: torch.Tensor, points2: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+    """
+    Finds consistent normals for the given line. Finds these deterministically for any
+    given line, assuming point1 and point2 are ordered consistently.
+
+    points1: `torch.Tensor`
+        A `(N,3)` float tensor with the start points on the lines.
+        Assumes in the unit cube.
+        `N` is the number of points.
+
+    point2: `torch.Tensor`
+        A `(N,3)` float tensor with the end points on the lines.
+        Assumes in the unit cube.
+        `N` is the number of points.
+
+    Returns: tuple[torch.Tensor, torch.Tensor]
+        A `(N,3)` float tensor with first normal vector.
+        
+        A `(N,3)` float tensor with second normal vector.
+
+        `N` is the number of points.
+    """
+
+    # Finds the plane vectors
+    vector1 = points2 - points1
+    vector2 = NON_COLINEAR_POINT_TENSOR - points1
+
+    # Finds the plane normal
+    normal1 = torch.cross(vector1, vector2, dim=-1)
+    normal1 /= normal1.norm(p=2, dim=-1, keepdim=True)
+
+    # Finds the second normal
+    normal2 = torch.cross(vector1, normal1, dim=-1)
+    normal2 /= normal2.norm(p=2, dim=-1, keepdim=True)
 
     return normal1, normal2
 

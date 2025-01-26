@@ -173,6 +173,25 @@ class Metamaterial:
 
         return np.array([self.get_node_position(node) for node in range(NUM_NODES)])
     
+    
+    def get_active_node_positions(self) -> torch.Tensor:
+        """
+        Computes the position of all active nodes.
+
+        Returns: `torch.Tensor`
+            A `(N,3)` float tensor with the Euclidean positions of all the
+            active nodes in this metamaterial.
+            `N` is the number of active nodes in this metamaterial.
+        """
+
+        # Stores the active nodes
+        active_nodes = torch.tensor(sorted(list(self.active_nodes())))
+
+        # Stores the active node positions
+        node_pos = torch.from_numpy(self.node_pos).reshape((-1,3))[active_nodes]
+
+        return pseudo_spherical_to_euclidean_torch(node_pos)
+
 
     def angle_score(self, node: int) -> float:
         """
@@ -526,6 +545,36 @@ class Metamaterial:
                             for n2 in range(NUM_NODES)]).astype(float)
     
 
+    def compute_many_edge_points(self, edges: torch.Tensor) -> torch.Tensor:
+        """
+        Computes the edge points for multiple edges.
+
+        edges: `torch.Tensor`
+            A `(N,)` int tensor with edges for which the edge points will be computed.
+            `N` is the number of edges to be targeted.
+
+        Returns: `torch.Tensor`
+            A `(N,E+1,3)` float tensor with the edge points for each target edge.
+            `N` is the number of edges to be targeted.
+            `E` is the number of edge segments used for edge meshing.
+        """
+
+        # Computes the target node positions
+        node_pos = torch.from_numpy(self.node_pos).reshape((-1,3))
+        node1_coords = pseudo_spherical_to_euclidean_torch(node_pos)[EDGE_TO_NODES[edges,0].reshape((-1,1))]
+        node2_coords = pseudo_spherical_to_euclidean_torch(node_pos)[EDGE_TO_NODES[edges,1].reshape((-1,1))]
+
+        # Computes the transformed edge parameters
+        edge_params = torch.from_numpy(self.edge_params).reshape((EDGE_ADJ_SIZE,EDGE_BEZIER_POINTS,3))
+        edge_params = edge_params[edges] + node1_coords
+
+        # Computes the Bezier parameters
+        bezier_params = torch.cat([node1_coords, edge_params, node2_coords], dim=1).to(torch.float64)
+
+        # Computes the edge points
+        return (BEZIER_CURVE_COEFFICIENTS_TENSOR.unsqueeze(0) @ bezier_params).to(torch.float32)
+
+
     def compute_edge_points(self, node1: int, node2: int, being_painted=False):
         """
         Computes the coordinates of the points that make up an edge.
@@ -656,6 +705,53 @@ class Metamaterial:
                         for n1 in range(NUM_NODES)]
                             for n2 in range(NUM_NODES)]
                                 for n3 in range(NUM_NODES)]).astype(float)
+    
+
+    def compute_many_face_points(self, faces: torch.Tensor) -> torch.Tensor:
+        """
+        Computes the face points for multiple faces.
+
+        faces: `torch.Tensor`
+            A `(N,)` int tensor with faces for which the face points will be computed.
+            `N` is the number of faces to be targeted.
+
+        Returns: `torch.Tensor`
+            A `(N,F,3)` float tensor with the face points for each target face.
+            `N` is the number of faces to be targeted.
+            `F` is the number of face segments used for face meshing.
+        """
+
+        # Computes the target node positions
+        node_pos = torch.from_numpy(self.node_pos).reshape((-1,3))
+        node1 = FACE_TO_NODES[faces,0]
+        node2 = FACE_TO_NODES[faces,1]
+        node3 = FACE_TO_NODES[faces,2]
+        node1_coords = pseudo_spherical_to_euclidean_torch(node_pos)[node1.reshape((-1,1))]
+        node2_coords = pseudo_spherical_to_euclidean_torch(node_pos)[node2.reshape((-1,1))]
+        node3_coords = pseudo_spherical_to_euclidean_torch(node_pos)[node3.reshape((-1,1))]
+
+        # Computes the transformed edge parameters
+        edges1 = NODES_TO_EDGE[node1, node2]
+        edges2 = NODES_TO_EDGE[node1, node3]
+        edges3 = NODES_TO_EDGE[node2, node3]
+        edge_params = torch.from_numpy(self.edge_params).reshape((EDGE_ADJ_SIZE,EDGE_BEZIER_POINTS,3))
+        edge1_params = edge_params[edges1] + node1_coords
+        edge2_params = edge_params[edges2] + node1_coords
+        edge3_params = edge_params[edges3] + node2_coords
+
+        # Computes the transformed face parameters
+        face_params = torch.from_numpy(self.face_params).reshape((FACE_ADJ_SIZE,FACE_BEZIER_POINTS,3))
+        face_params = face_params[faces] + node1_coords
+
+        # Computes the Bezier parameters
+        bezier_params = torch.cat([
+            node1_coords, node2_coords, node3_coords,
+            edge1_params, edge2_params, edge3_params,
+            face_params
+        ], dim=1).to(torch.float64)
+
+        # Computes the edge points
+        return (BEZIER_TRIANGLE_COEFFICIENTS_TENSOR.unsqueeze(0) @ bezier_params).to(torch.float32)
     
 
     def compute_face_points(self, node1: int, node2: int, node3: int, being_painted=False):

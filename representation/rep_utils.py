@@ -7,8 +7,7 @@ NUM_NODES = 10 # Non-center nodes plus the single center node
 EDGE_BEZIER_POINTS = 2 # The number of points to describe curved edges
 EDGE_SEGMENTS = 32 # The number of segments to use to mesh edges/faces
 CUBE_CENTER = np.ones(3)/2 # The center of the metamaterial cube
-# SCALE = 1
-THICKNESS = 0.1 # The thickness of the metamaterial
+THICKNESS = 0.1 # The thickness scale of metamaterials
 
 # Automatically-chosen properties
 NODE_POS_SIZE = NUM_NODES * 3 # The number of parameters in the node position array
@@ -21,6 +20,24 @@ FACE_BEZIER_COORDS = FACE_BEZIER_POINTS * 3 # The number of face curvature param
 FACE_PARAMS_SIZE = FACE_ADJ_SIZE * FACE_BEZIER_COORDS # The total number of face curvature parameters
 GLOBAL_PARAMS_SIZE = 1
 REP_SIZE = NODE_POS_SIZE + EDGE_ADJ_SIZE + EDGE_PARAMS_SIZE + FACE_ADJ_SIZE + FACE_PARAMS_SIZE + GLOBAL_PARAMS_SIZE # The total number of parameters in the representation
+
+# The device on which tensor computations will be done
+DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
+
+# Computes the node IDs corresponding to each edge, in order of edge IDs
+EDGE_TO_NODES = torch.tensor([
+    [n1, n2]
+        for n1 in range(NUM_NODES)
+            for n2 in range(n1+1, NUM_NODES)
+], device=DEVICE)
+
+# Computes the node IDs corresponding to each face, in order of face IDs
+FACE_TO_NODES = torch.tensor([
+    [n1, n2, n3]
+        for n1 in range(NUM_NODES)
+            for n2 in range(n1+1, NUM_NODES)
+                for n3 in range(n2+1, NUM_NODES)
+], device=DEVICE)
 
 
 def euclidean_to_pseudo_spherical(points: np.ndarray) -> np.ndarray:
@@ -210,27 +227,25 @@ def pseudo_spherical_to_euclidean_torch(points: torch.Tensor) -> torch.Tensor:
     """
 
     # Stores the pseudo-spherical coordinate values
-    radius = points[:,:,0:1]
-    theta = points[:,:,1] * np.pi
-    phi = points[:,:,2] * 2*np.pi
+    radius = points[..., [0]]
+    theta =  points[..., 1] * np.pi
+    phi =    points[..., 2] * 2*np.pi
 
     # Computes the Euclidian coordinates on the unit sphere
     euclidean_points: torch.Tensor = torch.stack([
         torch.sin(theta) * torch.cos(phi),
         torch.sin(theta) * torch.sin(phi),
         torch.cos(theta),
-    ], dim=2)
+    ], dim=-1)
 
     # Projects the unit sphere onto the unit cube
-    euclidean_points /= torch.abs(euclidean_points).max(dim=2, keepdim=True)[0]
+    euclidean_points /= torch.abs(euclidean_points).max(dim=-1, keepdim=True)[0]
 
     # Normalizes the points within the cube based on the pseudo-radius
     euclidean_points *= radius
 
     # Transforms the points to be within the unit cube
-    euclidean_points = (euclidean_points+1)/2
-
-    return euclidean_points
+    return (euclidean_points+1)/2
 
 
 def edge_adj_index(node1: int, node2: int) -> int:
@@ -268,6 +283,14 @@ def edge_adj_index(node1: int, node2: int) -> int:
     # determines which column of the upper triangle is being inspected.
 
     return offset2d + offset1d
+
+
+# Computes the edge IDs corresponding to each node pair
+NODES_TO_EDGE = torch.tensor([[
+    edge_adj_index(n1,n2)
+        for n1 in range(NUM_NODES)]
+            for n2 in range(NUM_NODES)
+], device=DEVICE)
 
 
 def to_edge_adj_rep(edge_adj_matrix: np.ndarray) -> np.ndarray:
@@ -612,13 +635,13 @@ def bezier_triangle_index(s: int, t: int) -> int:
 BEZIER_TRIANGLE_PARAMETERS = np.array([
     [s, t, EDGE_SEGMENTS-s-t] for s in range(EDGE_SEGMENTS+1) for t in range(EDGE_SEGMENTS+1-s)
 ])
-BEZIER_CURVE_COEFFICIENTS_TENSOR = torch.from_numpy(BEZIER_CURVE_COEFFICIENTS).unsqueeze(0).unsqueeze(0)
+BEZIER_CURVE_COEFFICIENTS_TENSOR = torch.from_numpy(BEZIER_CURVE_COEFFICIENTS).to(DEVICE)
 
 # Computes the general coefficients for a Bezier triangle
 BEZIER_TRIANGLE_COEFFICIENTS = np.concatenate([
     bezier_triangle_coefficients(s, t) for s,t,u in BEZIER_TRIANGLE_PARAMETERS
 ], axis=0)
-BEZIER_TRIANGLE_COEFFICIENTS_TENSOR = torch.from_numpy(BEZIER_TRIANGLE_COEFFICIENTS).unsqueeze(0).unsqueeze(0)
+BEZIER_TRIANGLE_COEFFICIENTS_TENSOR = torch.from_numpy(BEZIER_TRIANGLE_COEFFICIENTS).to(DEVICE)
 
 FACE_VERTEX_INDICES_LIST = []
 # Runs through each bottom face
