@@ -3,7 +3,6 @@ import trimesh
 from representation.rep_class import *
 from representation.generation import *
 from representation.rep_utils import *
-from line_profiler import profile
 
 
 def generate_base_node_mesh() -> tuple[torch.Tensor, np.ndarray]:
@@ -572,11 +571,11 @@ def estimate_volumes(materials: torch.Tensor) -> float:
     node2_coords = node_coords[:,EDGE_TO_NODES[:,1]]
     
     # Stores the Bezier parameters for edges
-    edge_bezier_params = torch.cat([node1_coords, edge_params, node2_coords], dim=2)
+    edge_bezier_params = torch.cat([node1_coords, edge_params, node2_coords], dim=2).to(torch.float64)
 
     # Computes the edges' points
     # Shape: (num_materials, num_edges, edge_segments_vertices, 3)
-    edge_points = BEZIER_CURVE_COEFFICIENTS_TENSOR.unsqueeze(0).unsqueeze(0) @ edge_bezier_params
+    edge_points = (BEZIER_CURVE_COEFFICIENTS_TENSOR.unsqueeze(0).unsqueeze(0) @ edge_bezier_params).to(torch.float32)
 
     # Masks the edge points to only include active edges' points
     edge_points *= edge_adj.unsqueeze(-1).unsqueeze(-1)
@@ -611,11 +610,11 @@ def estimate_volumes(materials: torch.Tensor) -> float:
         node1_coords, node2_coords, node3_coords,
         edge1_params, edge2_params, edge3_params,
         face_params
-    ], dim=2)
+    ], dim=2).to(torch.float64)
 
     # Computes the faces' points
     # Shape: (num_materials, num_face, face_segments_vertices, 3)
-    face_points = BEZIER_TRIANGLE_COEFFICIENTS_TENSOR.unsqueeze(0).unsqueeze(0) @ face_bezier_params
+    face_points = (BEZIER_TRIANGLE_COEFFICIENTS_TENSOR.unsqueeze(0).unsqueeze(0) @ face_bezier_params).to(torch.float32)
 
     # Masks the face points to only include active faces' points
     face_points *= face_adj.unsqueeze(-1).unsqueeze(-1)
