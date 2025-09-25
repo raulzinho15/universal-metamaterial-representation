@@ -99,6 +99,10 @@ class Metamaterial:
         return (self.translations + (1-points)*self.mirrors + points*(1-self.mirrors)).flatten()
     
 
+    def transform_points_matrix(self, points: np.ndarray) -> np.ndarray:
+        return self.transform_points(points.flatten()).reshape((-1,3))
+    
+
     def set_boundaries(self, boundaries: np.ndarray):
         """
         Sets this material's boundaries.
@@ -573,6 +577,33 @@ class Metamaterial:
 
         # Computes the edge points
         return (BEZIER_CURVE_COEFFICIENTS_TENSOR.unsqueeze(0) @ bezier_params).to(torch.float32)
+    
+    
+    def get_edge_bezier_points(self, node1: int, node2: int):
+
+        # Computes the edge's nodes' positions
+        node1, node2 = sorted((node1, node2))
+        node1_pos = self.get_node_position(node1, transform=False)[np.newaxis,:]
+        node2_pos = self.get_node_position(node2, transform=False)[np.newaxis,:]
+        
+        # Retrieves the edge parameters
+        edge_params = self.get_edge_params(node1, node2, transform=False).reshape((EDGE_BEZIER_POINTS,3)) + node1_pos
+
+        # Appropriately structures all parameters for the Bezier curve
+        bezier_params = np.concatenate((node1_pos, edge_params, node2_pos), axis=0)
+
+        return bezier_params
+
+
+    def get_active_edge_bezier_points(self):
+        if self.edge_adj.sum() == 0:
+            return np.zeros((0,EDGE_BEZIER_POINTS+2,3))
+        return np.stack([
+            self.transform_points_matrix(self.get_edge_bezier_points(n1,n2))
+                for n1 in range(NUM_NODES)
+                    for n2 in range(n1+1, NUM_NODES)
+                        if self.has_edge(n1,n2)
+        ])
 
 
     def compute_edge_points(self, node1: int, node2: int, being_painted=False):
@@ -593,17 +624,7 @@ class Metamaterial:
             A function giving the coordinate of the edge point for a given t
             along on the Bezier curve. If no edge exists, returns None.
         """
-
-        # Computes the edge's nodes' positions
-        node1, node2 = sorted((node1, node2))
-        node1_pos = self.get_node_position(node1, transform=False)[np.newaxis,:]
-        node2_pos = self.get_node_position(node2, transform=False)[np.newaxis,:]
-        
-        # Retrieves the edge parameters
-        edge_params = self.get_edge_params(node1, node2, transform=False).reshape((EDGE_BEZIER_POINTS,3)) + node1_pos
-
-        # Appropriately structures all parameters for the Bezier curve
-        bezier_params = np.concatenate((node1_pos, edge_params, node2_pos), axis=0)
+        bezier_params = self.get_edge_bezier_points(node1, node2)
 
         # Creates the function to compute the edge points
         def bezier(t: int) -> np.ndarray:
@@ -753,6 +774,44 @@ class Metamaterial:
         # Computes the edge points
         return (BEZIER_TRIANGLE_COEFFICIENTS_TENSOR.unsqueeze(0) @ bezier_params).to(torch.float32)
     
+    
+    def get_face_bezier_points(self, node1: int, node2: int, node3: int):
+
+        # Stores the node positions
+        node1, node2, node3 = sorted((node1, node2, node3))
+        node1_pos = self.get_node_position(node1, transform=False)[np.newaxis, :]
+        node2_pos = self.get_node_position(node2, transform=False)[np.newaxis, :]
+        node3_pos = self.get_node_position(node3, transform=False)[np.newaxis, :]
+
+        # Stores the edge parameters
+        edge1_params = self.get_edge_params(node1, node2, transform=False).reshape((EDGE_BEZIER_POINTS, 3)) + node1_pos
+        edge2_params = self.get_edge_params(node1, node3, transform=False).reshape((EDGE_BEZIER_POINTS, 3)) + node1_pos
+        edge3_params = self.get_edge_params(node2, node3, transform=False).reshape((EDGE_BEZIER_POINTS, 3)) + node2_pos
+        
+        # Stores the face parameters
+        face_params = self.get_face_params(node1, node2, node3, transform=False).reshape((FACE_BEZIER_POINTS, 3)) + node1_pos
+
+        # Appropriately structures all parameters for the Bezier curve
+        bezier_params = np.concatenate([
+            node1_pos, node2_pos, node3_pos,
+            edge1_params, edge2_params, edge3_params,
+            face_params
+        ], axis=0)
+
+        return bezier_params
+
+
+    def get_active_face_bezier_points(self):
+        if self.face_adj.sum() == 0:
+            return np.full((1,FACE_BEZIER_POINTS+EDGE_BEZIER_POINTS*3+3,3), 999_999)
+        return np.stack([
+            self.transform_points_matrix(self.get_face_bezier_points(n1,n2,n3))
+                for n1 in range(NUM_NODES)
+                    for n2 in range(n1+1, NUM_NODES)
+                        for n3 in range(n2+1, NUM_NODES)
+                            if self.has_face(n1,n2,n3)
+        ])
+    
 
     def compute_face_points(self, node1: int, node2: int, node3: int, being_painted=False):
         """
@@ -781,25 +840,7 @@ class Metamaterial:
             return None
 
         # Stores the node positions
-        node1, node2, node3 = sorted((node1, node2, node3))
-        node1_pos = self.get_node_position(node1, transform=False)[np.newaxis, :]
-        node2_pos = self.get_node_position(node2, transform=False)[np.newaxis, :]
-        node3_pos = self.get_node_position(node3, transform=False)[np.newaxis, :]
-
-        # Stores the edge parameters
-        edge1_params = self.get_edge_params(node1, node2, transform=False).reshape((EDGE_BEZIER_POINTS, 3)) + node1_pos
-        edge2_params = self.get_edge_params(node1, node3, transform=False).reshape((EDGE_BEZIER_POINTS, 3)) + node1_pos
-        edge3_params = self.get_edge_params(node2, node3, transform=False).reshape((EDGE_BEZIER_POINTS, 3)) + node2_pos
-        
-        # Stores the face parameters
-        face_params = self.get_face_params(node1, node2, node3, transform=False).reshape((FACE_BEZIER_POINTS, 3)) + node1_pos
-
-        # Appropriately structures all parameters for the Bezier curve
-        bezier_params = np.concatenate([
-            node1_pos, node2_pos, node3_pos,
-            edge1_params, edge2_params, edge3_params,
-            face_params
-        ], axis=0)
+        bezier_params = self.get_face_bezier_points(node1, node2, node3)
 
         # Creates the function to compute the face points
         def bezier(s: int, t: int) -> np.ndarray:
@@ -986,7 +1027,8 @@ class Metamaterial:
         """
         
         # Stores the reordered node positions
-        reordered_node_pos = np.concatenate([self.node_pos[3*node_order[i]:3*node_order[i]+3] for i in range(self.node_pos.shape[0]//3)])
+        reordered_node_pos = np.concatenate([self.node_pos[3*node_order[i]:3*node_order[i]+3] for i in range(NUM_NODES)])
+        reordered_node_coords = pseudo_spherical_to_euclidean(reordered_node_pos.reshape((-1,3)))
 
         # Stores the reordered edge adjacencies
         reordered_edge_adj = np.zeros(EDGE_ADJ_SIZE)
@@ -998,9 +1040,25 @@ class Metamaterial:
         reordered_edge_params = np.zeros(EDGE_PARAMS_SIZE)
         for n1 in range(NUM_NODES):
             for n2 in range(n1+1, NUM_NODES):
+
+                # Stores relevant indices
                 reordered_index = edge_adj_index(n1, n2) * EDGE_BEZIER_COORDS
-                old_index = edge_adj_index(node_order[n1], node_order[n2]) * EDGE_BEZIER_COORDS
-                reordered_edge_params[reordered_index:reordered_index+EDGE_BEZIER_COORDS] = self.edge_params[old_index:old_index+EDGE_BEZIER_COORDS]
+                old_n1, old_n2 = sorted((node_order[n1], node_order[n2]))
+                old_index = edge_adj_index(old_n1, old_n2) * EDGE_BEZIER_COORDS
+
+                # Changes the node by which the parameters are offset
+                new_edge_params = (
+                    self.edge_params[old_index : old_index+EDGE_BEZIER_COORDS]
+                    + np.tile(self.get_node_position(old_n1), EDGE_BEZIER_POINTS)
+                    - np.tile(reordered_node_coords[n1], EDGE_BEZIER_POINTS)
+                )
+
+                # Reorders the parameters if the node offset changed
+                if node_order[n1] != old_n1:
+                    new_edge_params = new_edge_params.reshape((-1,3))[::-1].flatten()
+                
+                # Stores the new edge parameters
+                reordered_edge_params[reordered_index:reordered_index+EDGE_BEZIER_COORDS] = new_edge_params
 
         # Stores the reordered face adjacencies
         reordered_face_adj = np.zeros(FACE_ADJ_SIZE)
@@ -1014,57 +1072,54 @@ class Metamaterial:
         for n1 in range(NUM_NODES):
             for n2 in range(n1+1, NUM_NODES):
                 for n3 in range(n2+1, NUM_NODES):
+
+                    # Computes the relevant indices
                     reordered_index = face_adj_index(n1, n2, n3) * FACE_BEZIER_COORDS
-                    old_index = face_adj_index(node_order[n1], node_order[n2], node_order[n3]) * FACE_BEZIER_COORDS
-                    reordered_face_params[reordered_index:reordered_index+FACE_BEZIER_COORDS] = self.face_params[old_index:old_index+FACE_BEZIER_COORDS]
+                    old_n1, old_n2, old_n3 = sorted((node_order[n1], node_order[n2], node_order[n3]))
+                    old_index = face_adj_index(old_n1, old_n2, old_n3) * FACE_BEZIER_COORDS
+
+                    # Changes the node by which the parameters are offset
+                    new_face_params = (
+                        self.face_params[old_index : old_index+FACE_BEZIER_COORDS]
+                        + np.tile(self.get_node_position(old_n1), FACE_BEZIER_POINTS)
+                        - np.tile(reordered_node_coords[n1], FACE_BEZIER_POINTS)
+                    )
+                    
+                    ########### IF MORE THAN ONE BEZIER FACE POINT IS USED, MUST CONSIDER HOW TO RE-PERMUTE THE PARAMETERS
+
+                    # Stores the new face parameters
+                    reordered_face_params[reordered_index:reordered_index+FACE_BEZIER_COORDS] = new_face_params
 
         # Computes the inverse node mapping (maps old node # to new node #)
         inverse_mapping = [0] * NUM_NODES
         for node in range(NUM_NODES):
             inverse_mapping[node_order[node]] = node
 
-        # Flips any necessary edge parameters
-        for n1 in range(NUM_NODES):
-            for n2 in range(n1+1, NUM_NODES):
+        # # Flips any necessary face parameters
+        # for n1 in range(NUM_NODES):
+        #     for n2 in range(n1+1, NUM_NODES):
+        #         for n3 in range(n2+1, NUM_NODES):
 
-                # Skips if a flip is not needed
-                if inverse_mapping[n1] < inverse_mapping[n2]:
-                    continue
+        #             # Skips if a flip is not needed
+        #             if inverse_mapping[n1] == min(inverse_mapping[n] for n in [n1,n2,n3]):
+        #                 continue
 
-                # Computes the flip
-                global_edge_params = self.get_edge_params(n1,n2).reshape((-1,3)) + self.get_node_position(n1)[np.newaxis,:]
-                flipped_edge_params = global_edge_params - self.get_node_position(n2)[np.newaxis,:]
-                flipped_edge_params = flipped_edge_params[::-1].flatten()
+        #             # Computes the flip
+        #             global_face_params = self.get_face_params(n1,n2,n3).reshape((-1,3)) + self.get_node_position(n1)[np.newaxis,:]
+        #             if inverse_mapping[n2] < inverse_mapping[n3]:
+        #                 flipped_face_params = global_face_params - self.get_node_position(n2)[np.newaxis,:]
+        #             else:
+        #                 flipped_face_params = global_face_params - self.get_node_position(n3)[np.newaxis,:]
+        #             ########### IF MORE THAN ONE BEZIER FACE POINT IS USED, MUST CONSIDER HOW TO RE-PERMUTE THE PARAMETERS
 
-                # Stores the flipped edge parameters
-                edge_index = edge_adj_index(inverse_mapping[n1], inverse_mapping[n2]) * EDGE_BEZIER_COORDS
-                reordered_edge_params[edge_index : edge_index+EDGE_BEZIER_COORDS] = flipped_edge_params
-
-        # Flips any necessary face parameters
-        for n1 in range(NUM_NODES):
-            for n2 in range(n1+1, NUM_NODES):
-                for n3 in range(n2+1, NUM_NODES):
-
-                    # Skips if a flip is not needed
-                    if inverse_mapping[n1] == min(inverse_mapping[n] for n in [n1,n2,n3]):
-                        continue
-
-                    # Computes the flip
-                    global_face_params = self.get_face_params(n1,n2,n3).reshape((-1,3)) + self.get_node_position(n1)[np.newaxis,:]
-                    if inverse_mapping[n2] < inverse_mapping[n3]:
-                        flipped_face_params = global_face_params - self.get_node_position(n2)[np.newaxis,:]
-                    else:
-                        flipped_face_params = global_face_params - self.get_node_position(n3)[np.newaxis,:]
-                    ########### IF MORE THAN ONE BEZIER FACE POINT IS USED, MUST CONSIDER HOW TO RE-PERMUTE THE PARAMETERS
-
-                    # Stores the flipped face parameters
-                    face_index = face_adj_index(inverse_mapping[n1], inverse_mapping[n2], inverse_mapping[n3]) * FACE_BEZIER_COORDS
-                    reordered_face_params[face_index : face_index+FACE_BEZIER_COORDS] = flipped_face_params
+        #             # Stores the flipped face parameters
+        #             face_index = face_adj_index(inverse_mapping[n1], inverse_mapping[n2], inverse_mapping[n3]) * FACE_BEZIER_COORDS
+        #             reordered_face_params[face_index : face_index+FACE_BEZIER_COORDS] = flipped_face_params
 
         # Creates the new metamaterial
         new_material = self.copy()
         new_material.node_pos = reordered_node_pos
-        new_material.edge_adj = reordered_edge_adj
+        new_material.edge_adj = reordered_edge_adj.flatten()
         new_material.edge_params = reordered_edge_params
         new_material.face_adj = reordered_face_adj
         new_material.face_params = reordered_face_params
@@ -1088,6 +1143,45 @@ class Metamaterial:
         sorted_node_indices.append(NUM_NODES-1) # Includes the center node as last node
 
         return self.reorder_nodes(sorted_node_indices)
+    
+    
+    def best_node_match2(self, mat2) -> list[int]:
+        """
+        Computes the best matching between the first nodes of the given materials.
+
+        mat2: Metamaterial
+            The second metamaterial for the best node matching.
+
+        Returns: list[int]
+            The best matching of each selected node in this metamaterial to nodes
+            in mat2. For each output[i] = j, it means this material's node i should map to
+            mat2's node j. Thus, if this list is used to reorder a metamaterial,
+            it should be used on mat2's reorder_nodes() function, not this material's.
+        """
+        max_nodes = max(len(self.active_nodes()), len(mat2.active_nodes()))
+
+        # Computes the node pairs and distances
+        node_pairs = []
+        node_distances = []
+        for i in range(max_nodes):
+            for j in range(max_nodes):
+                node_pairs.append((i,j))
+                displacement = self.get_node_position(i) - mat2.get_node_position(j)
+                node_distances.append(np.linalg.norm(displacement))
+            
+        # Orders the node pairs by distance
+        node_pairs = sorted(node_pairs, key=lambda p: node_distances[node_pairs.index(p)])
+
+        # Computes the greedy matching
+        matching = [i for i in range(NUM_NODES)]
+        used_mat1_nodes, used_mat2_nodes = set(), set()
+        for n1,n2 in node_pairs:
+            if n1 not in used_mat1_nodes and n2 not in used_mat2_nodes:
+                used_mat1_nodes.add(n1)
+                used_mat2_nodes.add(n2)
+                matching[n1] = n2
+
+        return matching
 
 
     def best_node_match(self, mat2, nodes1: int, nodes2: int) -> list[int]:
@@ -1273,6 +1367,16 @@ class Metamaterial:
         face_adj = (numpy_rep[NODE_POS_SIZE + EDGE_ADJ_SIZE + EDGE_PARAMS_SIZE : NODE_POS_SIZE + EDGE_ADJ_SIZE + EDGE_PARAMS_SIZE + FACE_ADJ_SIZE] > 0.5).astype(float)
         face_params = numpy_rep[NODE_POS_SIZE + EDGE_ADJ_SIZE + EDGE_PARAMS_SIZE + FACE_ADJ_SIZE : -1]
         thickness = numpy_rep[-1]
+
+        # Ensures there are edges everywhere there is a face
+        for n1 in range(NUM_NODES):
+            for n2 in range(n1+1, NUM_NODES):
+                for n3 in range(n2+1, NUM_NODES):
+                    if not face_adj[face_adj_index(n1,n2,n3)]:
+                        continue
+                    edge_adj[edge_adj_index(n1,n2)] = 1
+                    edge_adj[edge_adj_index(n1,n3)] = 1
+                    edge_adj[edge_adj_index(n2,n3)] = 1
 
         return Metamaterial(node_pos, edge_adj, edge_params, face_adj, face_params, thickness=thickness)
     

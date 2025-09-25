@@ -641,9 +641,9 @@ def smooth_interpolation(material1: Metamaterial, material2: Metamaterial):
 
     # Computes the intermediate node positions and edge/face parameters
     node_positions = np.concatenate([
-        np.array([mat1_node_pos] * switch_index),
+        (np.array([mat1_node_pos] * switch_index) if switch_index > 0 else np.zeros((0,changed_node_positions.shape[1]))),
         changed_node_positions,
-        np.array([adjusted_mat2_node_pos] * (len(part_change_groups)-switch_index))
+        (np.array([adjusted_mat2_node_pos] * (len(part_change_groups)-switch_index)) if (len(part_change_groups)-switch_index) > 0 else np.zeros((0,changed_node_positions.shape[1])))
     ], axis=0)
     edge_params = np.stack([mat1_edge_params * (1-alpha) + mat2_edge_params * alpha for alpha in alpha_gen(len(part_change_groups)+2)], axis=0)[1:]
     face_params = np.stack([mat1_face_params * (1-alpha) + mat2_face_params * alpha for alpha in alpha_gen(len(part_change_groups)+2)], axis=0)[1:]

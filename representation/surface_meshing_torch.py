@@ -206,6 +206,10 @@ def generate_edge_surface_meshes(material: Metamaterial) -> tuple[list[np.ndarra
     active_edges = torch.nonzero(torch.from_numpy(material.edge_adj)).squeeze(1)
     num_edges = active_edges.shape[0]
 
+    # Checks if there are any edges
+    if num_edges == 0:
+        return [], []
+
     # Computes the edge points
     edge_points = material.compute_many_edge_points(active_edges)
 
@@ -392,6 +396,10 @@ def generate_face_surface_meshes(material: Metamaterial) -> tuple[list[np.ndarra
     active_faces = torch.nonzero(torch.from_numpy(material.face_adj)).squeeze(1)
     num_faces = active_faces.shape[0]
 
+    # Checks if there are any faces
+    if num_faces == 0:
+        return [], []
+
     # Computes the face points
     face_points = material.compute_many_face_points(active_faces)
 
@@ -432,7 +440,14 @@ def generate_metamaterial_surface_mesh(material: Metamaterial) -> tuple[list[np.
     edge_vertices, edge_faces = generate_edge_surface_meshes(material)
     face_vertices, face_faces = generate_face_surface_meshes(material)
 
-    return node_vertices + edge_vertices + face_vertices, node_faces + edge_faces + face_faces
+    # Applies the transformations
+    vertices = [
+        vertex_group[i] * (1-material.mirrors) + (1-vertex_group[i]) * material.mirrors + material.translations
+            for vertex_group in [node_vertices, edge_vertices, face_vertices]
+                for i in range(len(vertex_group))
+    ]
+
+    return vertices, node_faces + edge_faces + face_faces
 
 
 def generate_metamaterial_grid_surface_mesh(metamaterial: Metamaterial, shape=(1,1,1)) -> tuple[list[np.ndarray], list[np.ndarray]]:

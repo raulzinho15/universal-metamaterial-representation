@@ -47,9 +47,19 @@ faces_nodes = [
 for n1, n2, n3 in faces_nodes:
 
     # Sets up the edge indices
-    edge1_index = edge_adj_index(n1, n2) * EDGE_BEZIER_COORDS
-    edge2_index = edge_adj_index(n1, n3) * EDGE_BEZIER_COORDS
-    edge3_index = edge_adj_index(n2, n3) * EDGE_BEZIER_COORDS
+    edge1_index = edge_adj_index(n1, n2)
+    edge2_index = edge_adj_index(n1, n3)
+    edge3_index = edge_adj_index(n2, n3)
+
+    # Sets up the edge adjacency
+    edge_adj[edge1_index] = 1
+    edge_adj[edge2_index] = 1
+    edge_adj[edge3_index] = 1
+
+    # Rescales the edge indices
+    edge1_index *= EDGE_BEZIER_COORDS
+    edge2_index *= EDGE_BEZIER_COORDS
+    edge3_index *= EDGE_BEZIER_COORDS
 
     # Sets up the face adjacency
     face_index = face_adj_index(n1, n2, n3)
