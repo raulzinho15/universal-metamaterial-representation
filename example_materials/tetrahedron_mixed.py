@@ -41,4 +41,4 @@ face_index = face_adj_index(0,1,3)
 face_adj[face_index] = 1
 
 # Creates the metamaterial
-TETRAHEDRON_MIXED = Metamaterial(node_pos, edge_adj, edge_params, face_adj, face_params, thickness=0.4)
+TETRAHEDRON_MIXED = Metamaterial(node_pos, edge_adj, edge_params, face_adj, face_params, thickness=0.5)
