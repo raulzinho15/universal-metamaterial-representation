@@ -511,7 +511,7 @@ def save_material_obj(vertices: list[np.ndarray], faces: list[np.ndarray], filep
 
     # Tells the user the saving is beginning
     if verbose:
-        print("Saving:", filepath[filepath.rindex("/")+1:])
+        print("Saving:", filepath)
 
     # Places all components into the trimesh scene
     scene = trimesh.Scene()
